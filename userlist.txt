@@ -1,0 +1,22 @@
+"email":"admin.rinku@gmail.com",
+"password":"admin@123",
+
+"email": "vender.manoj1@gmail.com",
+"password": "Manoj@123",
+
+"email":"yashi1@gmail.com",
+"password":"Yashi@123",
+
+"email":"Pulkit1@gmail.com",
+"password":"Pulki@123",
+
+"email":"Priyanka1@gmail.com",
+"password":"Priyanka@123",
+
+"email":"Rajkumar1@gmail.com",
+"password":"Rajkumar@123",
+
+"email":"superadmin.nitin1@gmail.com",
+"password":"Nitin@123",
+
+
