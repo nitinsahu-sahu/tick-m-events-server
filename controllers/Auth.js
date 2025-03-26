@@ -78,7 +78,7 @@ exports.login = async (req, res) => {
             const token = generateToken(secureInfo);
 
             // Set cookie expiry to 30 minutes (in milliseconds)
-            const cookieExpiry = 30 * 60 * 1000; // 30 minutes
+            const cookieExpiry = 2 * 60 * 60 * 1000; // 2 hours
 
             // Sending JWT token in the response cookies
             res.cookie('token', token, {
