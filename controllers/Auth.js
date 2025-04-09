@@ -12,7 +12,6 @@ const cloudinary = require('cloudinary').v2;
 exports.signup = async (req, res) => {
     const { name, email, password, gender, number } = req.body;
     const { avatar } = req.files;
-
     try {
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -32,8 +31,6 @@ exports.signup = async (req, res) => {
             width: 150,
             crop: "scale",
         });
-
-        console.log('myCloud', myCloud);
 
         // Save user to database with Cloudinary URL
         const newUser = new User({
@@ -92,13 +89,14 @@ exports.login = async (req, res) => {
             return res.status(200).json({
                 user: sanitizeUser(existingUser),
                 token: token, // Include the token in the response
-                expiresIn: cookieExpiry // Send the expiry time to the frontend
+                expiresIn: cookieExpiry, // Send the expiry time to the frontend
+                message:"Signin successfully"
             });
         }
 
         // Clear the token cookie if credentials are invalid
         res.clearCookie('token');
-        return res.status(404).json({ message: "Invalid Credentials" });
+        return res.status(400).json({ message: "Invalid credentials" });
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: 'Some error occurred while logging in, please try again later' });

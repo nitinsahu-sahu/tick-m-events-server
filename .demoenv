@@ -1,0 +1,38 @@
+# MY CREDENTIALS MONGO
+USERnAME =  polydabra12
+PASSWORD = Rf4fxbJ9gb6NW4jH
+# MongoDB connection string
+MONGO_URI="mongodb+srv://polydabra12:Rf4fxbJ9gb6NW4jH@trandcraft.cukr8.mongodb.net/adminDB"
+# MONGO_URI="mongodb+srv://polydabra12:Rf4fxbJ9gb6NW4jH@trandcraft.cukr8.mongodb.net/new_ecom"
+# Frontend URL (adjust if needed)
+ORIGIN="http://localhost:3000"
+ADMIN_ORIGIN="http://localhost:3039"
+
+# Email credentials for sending password resets and OTPs
+EMAIL=""
+PASSWORD=""
+
+# Token and cookie expiration settings
+LOGIN_TOKEN_EXPIRATION="30d"  # Days
+OTP_EXPIRATION_TIME="120000"  # Milliseconds
+PASSWORD_RESET_TOKEN_EXPIRATION="2m"  # Minutes
+COOKIE_EXPIRATION_DAYS="30"    # Days
+
+# Secret key for jwt security
+SECRET_KEY="nitinjobkrtahaigbhincodm"
+
+# Environment (production/development)
+PRODUCTION="false" # Initially set to false for development
+
+# MY 
+SENDGRID_API_KEY=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
+SENDGRID_API_KEY=SG.apikey
+SENDGRID_MAIL=nitin.s@gbhin.com
+SENDGRID_RESET_TEMPLATEID=6a53882d-5263-4912-ae5d-c315187d21f0
+SENDGRID_ORDER_TEMPLATEID=d-sf5sf7s1g5ff8fd87df48df51eg
+
+# Cloudinary Credentials
+CLOUDINARY_NAME=dm624gcgg
+CLOUDINARY_API_KEY=814717214434784
+CLOUDINARY_API_SECRET=TycCjkSZ4Hz5dq1-TM_d1uNNVJY
+API_ENV_VERIABLE=CLOUDINARY_URL=cloudinary://814717214434784:TycCjkSZ4Hz5dq1-TM_d1uNNVJY@dm624gcgg

@@ -39,8 +39,6 @@ server.use(cors(
     })
 )
 
-
-
 // Dynamically register routes
 for (const [prefix, router] of Object.entries(routesLists)) {
     server.use(prefix, router);
