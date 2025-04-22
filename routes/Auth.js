@@ -4,9 +4,9 @@ const authController = require("../controllers/Auth")
 const { verifyToken } = require('../middleware/VerifyToken')
 const { signupValidation, loginValidation } = require('../validators/authValidator')
 const validate = require('../middleware/validateRequest')
-
+// validate(signupValidation),
 router
-    .post("/signup", validate(signupValidation), authController.signup)
+    .post("/signup",  authController.signup)
     .post('/login', validate(loginValidation), authController.login)
     .post("/verify-otp", authController.verifyOtp)
     .post("/resend-otp", authController.resendOtp)

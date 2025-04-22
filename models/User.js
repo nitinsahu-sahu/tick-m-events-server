@@ -1,5 +1,6 @@
 const mongoose = require("mongoose")
 const { Schema } = mongoose
+const bcrypt = require("bcryptjs");
 
 const userSchema = new Schema({
     name: {
@@ -14,13 +15,16 @@ const userSchema = new Schema({
     gender: {
         type: String,
         enum: ['Male', 'Female', 'Other'],
+        required: [true, "Please Enter Your Gender"],
     },
     number: {
         type: String,
         trim: true,
         max: 10,
         unique: true,
-        default: "XXXXX XXXXX"
+        default: "XXXXX XXXXX",
+        required: [true, "Please Enter Your Number"],
+
     },
     password: {
         type: String,
@@ -47,7 +51,7 @@ const userSchema = new Schema({
     },
     role: {
         type: String,
-        enum: ['organizer', 'admin', 'participant', 'service provider'],
+        enum: ['organizer', 'admin', 'participant', 'provider'],
         default: 'participant'
     },
     status: {
@@ -57,5 +61,19 @@ const userSchema = new Schema({
     },
     createdAt: { type: Date, default: Date.now },
 }, { timestamps: true })
+
+// Hash password before saving
+userSchema.pre("save", async function(next) {
+    if (!this.isModified("password")) {
+        return next();
+    }
+    this.password = await bcrypt.hash(this.password, 10);
+    next();
+});
+
+// Method to compare passwords
+userSchema.methods.comparePassword = async function(enteredPassword) {
+    return await bcrypt.compare(enteredPassword, this.password);
+};
 
 module.exports = mongoose.model("User", userSchema)

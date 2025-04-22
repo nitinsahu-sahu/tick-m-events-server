@@ -10,7 +10,7 @@ const cloudinary = require('cloudinary').v2;
 
 //register controller
 exports.signup = async (req, res) => {
-    const { name, email, password, gender, number } = req.body;
+    const { name, email, password, gender, number, role } = req.body;
     const { avatar } = req.files;
     try {
         // Check if user already exists
@@ -39,6 +39,7 @@ exports.signup = async (req, res) => {
             password,
             gender,
             number,
+            role,
             avatar: {
                 public_id: myCloud.public_id,
                 url: myCloud.secure_url,
@@ -49,11 +50,9 @@ exports.signup = async (req, res) => {
 
         res.status(201).json({
             message: "User registered successfully",
-            user: newUser,
         });
 
     } catch (error) {
-        console.error('Error during signup:', error);
         res.status(500).json({
             message: "Error occurred during signup, please try again later",
             error: error.message,
@@ -90,7 +89,7 @@ exports.login = async (req, res) => {
                 user: sanitizeUser(existingUser),
                 token: token, // Include the token in the response
                 expiresIn: cookieExpiry, // Send the expiry time to the frontend
-                message:"Signin successfully"
+                message: "Signin successfully"
             });
         }
 
