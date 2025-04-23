@@ -12,6 +12,7 @@ router
     .post("/reset-password", authController.resetPassword)
     .get("/check-auth", verifyToken, authController.checkAuth)
     .get('/logout', authController.logout)
+    .get('/test')
 
 
 module.exports = router
