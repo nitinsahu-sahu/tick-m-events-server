@@ -67,15 +67,13 @@ exports.getPromotionById = async (req, res) => {
 
 // Update Promotion
 exports.updatePromotion = async (req, res) => {
-    console.log(req.body);
-    
-    // try {
-    //     const updated = await Promotion.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    //     if (!updated) return res.status(404).json({ success: false, message: 'Promotion not found' });
-    //     res.status(200).json({ success: true, message: 'Promotion updated successfully', data: updated });
-    // } catch (error) {
-    //     res.status(500).json({ success: false, message: error.message });
-    // }
+    try {
+        const updated = await Promotion.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!updated) return res.status(404).json({ success: false, message: 'Promotion not found' });
+        res.status(200).json({ success: true, message: 'Promotion updated successfully', data: updated });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 };
 
 // Delete Promotion

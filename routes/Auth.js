@@ -7,6 +7,7 @@ const validate = require('../middleware/validateRequest')
 // validate(signupValidation),
 router
     .post("/signup",  authController.signup)
+    .patch("/:id",  authController.updateUser)
     .post('/login', validate(loginValidation), authController.login)
     .post("/verify-otp", authController.verifyOtp)
     .post("/resend-otp", authController.resendOtp)

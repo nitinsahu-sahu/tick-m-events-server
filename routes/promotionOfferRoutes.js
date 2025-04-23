@@ -7,6 +7,6 @@ router
     .post('/', verifyToken, promotionController.createPromotion)
     .get('/', promotionController.getAllPromotions)
     .get('/:id', promotionController.getPromotionById)
-    .put('/:id', promotionController.updatePromotion)
+    .patch('/:id', promotionController.updatePromotion)
     .delete('/:id', promotionController.deletePromotion)
 module.exports = router

@@ -102,6 +102,44 @@ exports.login = async (req, res) => {
     }
 };
 
+// Update user info
+exports.updateUser = async (req, res) => {
+
+    try {
+        const { id } = req.params;
+        // Exclude password if not being updated
+        const updateData = { ...req.body };
+        if (!updateData.password) {
+            delete updateData.password;
+        }
+
+        // If password exists, hash it
+        if (updateData.password) {
+            updateData.password = await bcrypt.hash(updateData.password, 10);
+        }
+        if (updateData.socialLinks) {
+            updateData.socialLinks = JSON.parse(req.body.socialLinks);
+        }
+        const updatedUser = await User.findByIdAndUpdate(id, updateData, {
+            new: true,
+            runValidators: true,
+        });
+
+        if (!updatedUser) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Successfully updated.",
+            user: updatedUser,
+        });
+    } catch (error) {
+        console.error("Update error:", error.message);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 exports.verifyOtp = async (req, res) => {
     try {
         // checks if user id is existing in the user collection

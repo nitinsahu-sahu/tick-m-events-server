@@ -2,7 +2,27 @@ const mongoose = require("mongoose")
 const { Schema } = mongoose
 const bcrypt = require("bcryptjs");
 
+
+const SocialLinksSchema = new mongoose.Schema({
+    instagram: {
+        type: String,
+    },
+    facebook: {
+        type: String,
+    },
+    linkedin: {
+        type: String,
+    },
+    tiktok: {
+        type: String,
+    },
+});
+
 const userSchema = new Schema({
+    socialLinks: SocialLinksSchema,
+    username: {
+        type: String,
+    },
     name: {
         type: String,
         required: [true, "Please Enter Your Name"],
@@ -10,7 +30,6 @@ const userSchema = new Schema({
     email: {
         type: String,
         unique: true,
-        required: [true, "Please Enter Your Email"],
     },
     gender: {
         type: String,
@@ -31,6 +50,15 @@ const userSchema = new Schema({
         required: [true, "Please Enter Your Password"],
         minLength: [8, "Password should have atleast 8 chars"],
     },
+    experience: {
+        type: String,
+    },
+    address: {
+        type: String,
+    },
+    website: {
+        type: String,
+    },
     avatar: {
         public_id: {
             type: String,
@@ -39,6 +67,16 @@ const userSchema = new Schema({
         url: {
             type: String,
             default: "https://res.cloudinary.com/dm624gcgg/image/upload/w_1000,c_fill,ar_1:1,g_auto,r_max,bo_5px_solid_red,b_rgb:262c35/v1728997240/avatars/pmqlhyz1ehcipviw3ren.jpg",  // Default avatar URL
+        }
+    },
+    cover: {
+        public_id: {
+            type: String,
+            default: "cover/profile-cover",  // Set default Cloudinary public_id
+        },
+        url: {
+            type: String,
+            default: "https://res.cloudinary.com/dm624gcgg/image/upload/v1745399695/a33ffade6c44792172af87c950e914099ba87c45_dg1rab.png",  // Default avatar URL
         }
     },
     isVerified: {
@@ -63,7 +101,7 @@ const userSchema = new Schema({
 }, { timestamps: true })
 
 // Hash password before saving
-userSchema.pre("save", async function(next) {
+userSchema.pre("save", async function (next) {
     if (!this.isModified("password")) {
         return next();
     }
@@ -72,7 +110,7 @@ userSchema.pre("save", async function(next) {
 });
 
 // Method to compare passwords
-userSchema.methods.comparePassword = async function(enteredPassword) {
+userSchema.methods.comparePassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
 

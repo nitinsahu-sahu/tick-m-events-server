@@ -6,12 +6,14 @@ const salesPointRoutes = require("../routes/salesPointRoutes")
 const ticketRoutes = require("../routes/ticketRoutes")
 const visibilityRoutes = require("../routes/visibilityRoutes")
 const promotionOfferRoutes = require("../routes/promotionOfferRoutes")
+const serviceRequestRoutes = require("../routes/serviceRequestRoutes")
 
 // Define route configuration
 exports.routesLists = {
     '/api/v1/auth': authRoutes,
     '/api/v1/tickets': ticketTypeRoutes,
     '/api/v1/event': eventRoutes,
+    '/api/v1/service-request': serviceRequestRoutes,
     // '/api/v1/event': customizationRoutes,
     // '/api/v1/event': organizerRoutes,
     '/api/v1/promotion': promotionOfferRoutes,
