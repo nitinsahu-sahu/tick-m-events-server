@@ -6,6 +6,7 @@ const Otp = require("../models/OTP");
 const { sanitizeUser } = require("../utils/SanitizeUser");
 const { generateToken } = require("../utils/GenerateToken");
 const PasswordResetToken = require("../models/PasswordResetToken");
+const UserServiceRequest = require("../models/profile-service-maagement/add-service");
 const cloudinary = require('cloudinary').v2;
 
 //register controller
@@ -99,6 +100,30 @@ exports.login = async (req, res) => {
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: 'Some error occurred while logging in, please try again later' });
+    }
+};
+
+// Get user details by ID (excluding password and createdAt)
+exports.getUserProfile = async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        const user = await User.findById(userId).select('-password -createdAt');
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        const services = await UserServiceRequest.find({ createdBy: user._id }).select('-createdAt -updatedAt');
+
+        res.status(200).json({
+            success: true,
+            message: "Profile fetch successfully.",
+            user,
+            services
+        });
+    } catch (error) {
+        console.error("Error fetching user details:", error.message);
+        res.status(500).json({ success: false, message: "Server Error" });
     }
 };
 

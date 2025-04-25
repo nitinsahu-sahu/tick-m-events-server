@@ -51,3 +51,6 @@ server.get("/", (req, res) => {
 server.listen(8000, () => {
     console.log('server [STARTED] ~ http://localhost:8000');
 })
+
+require("./schedulers/reminderScheduler");
+require("./schedulers/reminderScheduler");
