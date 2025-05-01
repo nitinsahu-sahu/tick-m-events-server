@@ -8,9 +8,6 @@ const RefundPolicySchema = new mongoose.Schema({
   },
   fullRefundDaysBefore: {
     type: String,
-    required: function () {
-      return this.fullRefund === true;
-    },
   },
   partialRefund: {
     type: Boolean,
@@ -18,9 +15,9 @@ const RefundPolicySchema = new mongoose.Schema({
   },
   partialRefundPercent: {
     type: String,
-    required: function () {
-      return this.partialRefund === true;
-    },
+    // required: function () {
+    //   return this.partialRefund === true;
+    // },
   },
   noRefundAfterDate: {
     type: Boolean,
@@ -28,9 +25,9 @@ const RefundPolicySchema = new mongoose.Schema({
   },
   noRefundDate: {
     type: Date,
-    required: function () {
-      return this.noRefundAfterDate === true;
-    },
+    // required: function () {
+    //   return this.noRefundAfterDate === true;
+    // },
   },
 });
 

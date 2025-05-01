@@ -3,19 +3,38 @@ const ErrorResponse = require('../../utils/errorHandler');
 
 
 // Create Visibility Options
-exports.createVisibility = async (req, res, next) => {
+exports.createPublicationVisibility = async (req, res, next) => {
+
   try {
-    // Add eventId to req.body
-    req.body.eventId = req.params.eventId;
-    
-    const visibility = await Visibility.create(req.body);
+    const { autoShareOnSocialMedia, status, customUrl, publicEvent, privateEvent, homepageHighlighting } = req.body
+    const { eventId, ticketCustomId, eventCustomizationId } = req.params
+
+    await Visibility.create({
+      eventId,
+      ticketCustomId,
+      eventCustomizationId,
+      status,
+      customUrl,
+      promotionAndHighlight: {
+        homepageHighlighting,
+        autoShareOnSocialMedia
+      },
+      visibilitySettings: {
+        publicEvent,
+        privateEvent
+      }
+    });
 
     res.status(201).json({
       success: true,
-      data: visibility
+      message: status === "draft" ? 'Event created as a draft successfully' : 'Event created successfully',
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    });
   }
 };
 
@@ -47,8 +66,8 @@ exports.updateVisibility = async (req, res, next) => {
     }
 
     visibility = await Visibility.findOneAndUpdate(
-      { eventId: req.params.eventId }, 
-      req.body, 
+      { eventId: req.params.eventId },
+      req.body,
       { new: true, runValidators: true }
     );
 

@@ -1,13 +1,13 @@
-"email":"admin.rinku@gmail.com",
+"email":"admin.james@gmail.com",
 "password":"admin@123",
 
-"email": "organizer.manoj1@gmail.com",
+"email": "organizer.robert@gmail.com",
 "password": "Manoj@123",
 
 "email":"participant.yashi1@gmail.com",
 "password":"Yashi@123",
 
-"email":"provider.pulkit@gmail.com",
+"email":"provider.robert@gmail.com",
 "password":"Pulki@123",
 
 

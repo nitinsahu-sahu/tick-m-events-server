@@ -10,7 +10,7 @@ const bodyParser = require('body-parser');
 const fileUpload = require('express-fileupload');
 const initReminderScheduler = require("./schedulers/reminderScheduler")
 // const cron = require("./schedulers/reminderScheduler");
-
+const port = process.env.PORT || 3000;
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -50,8 +50,9 @@ server.get("/", (req, res) => {
     res.status(200).json({ message: 'running' })
 })
 
-server.listen(8000, () => {
-    console.log('server [STARTED] ~ http://localhost:8000');
-})
+
+server.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
 
 initReminderScheduler();

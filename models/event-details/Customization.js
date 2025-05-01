@@ -2,15 +2,16 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const customizationSchema = new Schema({
-  eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
-  themeColor: { type: String, required: true },
-  logo: { 
+  eventId: { type: String, required: true },
+  ticketCustomId: { type: String, required: true },
+  themeColor: { type: String },
+  customColor: { type: String },
+  eventLogo: {
     public_id: { type: String, required: true },
     url: { type: String, required: true }
   },
-  frame: { 
-    type: String, 
-    required: true,
+  frame: {
+    type: String,
     enum: ['circle', 'square', 'rounded']
   }
 }, { timestamps: true });

@@ -19,6 +19,7 @@ exports.createTicketConfiguration = async (req, res) => {
   } = req.body
   try {
     const { eventId } = req.params
+    const ticketList = JSON.parse(tickets)
     const refundPolicy= {
       fullRefund: fullRefundCheck,
       fullRefundDaysBefore: fullRefundDaysBefore,
@@ -29,7 +30,7 @@ exports.createTicketConfiguration = async (req, res) => {
     }
     const newConfig = new TicketConfiguration({
       eventId,
-      tickets,
+      tickets:ticketList,
       purchaseDeadline:purchaseDeadlineDate,
       isPurchaseDeadlineEnabled,
       paymentMethods,
@@ -42,7 +43,7 @@ exports.createTicketConfiguration = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Ticket configuration created successfully',
-      data: newConfig,
+      ticketConfigId: newConfig._id,
     });
   } catch (error) {
     console.error('Error creating ticket configuration:', error);

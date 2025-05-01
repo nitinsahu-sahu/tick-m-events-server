@@ -7,7 +7,7 @@ const Organizer = require('../../models/event-details/Organizer');
 exports.createEvent = async (req, res, next) => {
     try {
         const { eventName, date, time, category, eventType, location, format, description,
-            name, number, email, website,whatsapp,linkedin,facebook,tiktok } = req.body;
+            name, number, email, website, whatsapp, linkedin, facebook, tiktok } = req.body;
         const { coverImage } = req.files;
 
         // Check if file was uploaded
@@ -61,7 +61,7 @@ exports.createEvent = async (req, res, next) => {
         res.status(201).json({
             success: true,
             message: "Event created successfully",
-            event
+            eventId: event._id
         });
 
     } catch (error) {
