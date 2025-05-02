@@ -2,6 +2,7 @@ const Event = require('../../models/event-details/Event');
 const ErrorResponse = require('../../utils/errorHandler');
 const cloudinary = require('cloudinary').v2;
 const Organizer = require('../../models/event-details/Organizer');
+const moment = require('moment');
 
 // Create Event
 exports.createEvent = async (req, res, next) => {
@@ -74,17 +75,45 @@ exports.createEvent = async (req, res, next) => {
     }
 };
 
+// This api get only specific detail 
+
+exports.getAllEventBasicDetails = async (req, res) => {
+    try {
+        const events = await Event.find({}, 'eventName date time'); // only select these fields
+
+        res.status(200).json({
+            success: true,
+            message: 'Event list fetched successfully',
+            data: events,
+        });
+    } catch (error) {
+        console.error('Error fetching events:', error.message);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+
 // Get all events
 exports.getEvents = async (req, res, next) => {
     try {
         const events = await Event.find().populate('createdBy', 'name email');
+        // Create a separate array with only specific fields
+        const basicDetails = events.map(event => ({
+            _id: event._id,
+            eventName: event.eventName,
+            date: event.date,
+            time: event.time
+        }));
+
         res.status(200).json({
             success: true,
-            count: events.length,
-            data: events
+            message: "Event fetch successfully.",
+            fullData: events,        // Full data with populated fields
+            basicDetails: basicDetails // Separate simplified object
         });
-    } catch (err) {
-        next(err);
+    } catch (error) {
+        console.error('Error fetching events:', error.message);
+        res.status(500).json({ success: false, message: 'Server Error' });
     }
 };
 
@@ -109,46 +138,46 @@ exports.getEvent = async (req, res, next) => {
 // Update event
 exports.updateEvent = async (req, res, next) => {
     try {
-        let event = await Event.findById(req.params.id);
+        const { eventName, date, time, category, eventType, coverImage, location, format, description } = req.body;
 
-        if (!event) {
-            return next(new ErrorResponse(`Event not found with id of ${req.params.id}`, 404));
-        }
+        // Convert date if provided
+        dateOnly = moment(date).format('YYYY-MM-DD');
 
-        // Check if user is event owner
-        if (event.createdBy.toString() !== req.user.id) {
-            return next(new ErrorResponse(`User ${req.user.id} is not authorized to update this event`, 401));
-        }
+        const updatedEvent = await Event.findByIdAndUpdate(
+            req.params.id,
+            {
+                eventName,
+                date: dateOnly,
+                time,
+                category,
+                eventType,
+                coverImage,
+                location,
+                format,
+                description
+            },
+            {
+                new: true,
+                runValidators: true
+            }
+        );
 
-        // If image is being updated
-        if (req.file) {
-            // First delete previous image
-            await cloudinary.uploader.destroy(event.coverImage.public_id);
-
-            // Upload new image
-            const result = await cloudinary.uploader.upload(req.file.path, {
-                folder: 'event_cover_images',
-                width: 1500,
-                crop: "scale"
+        if (!updatedEvent) {
+            return res.status(404).json({
+                status: 'fail',
+                message: 'No event found with that ID'
             });
-
-            req.body.coverImage = {
-                public_id: result.public_id,
-                url: result.secure_url
-            };
         }
-
-        event = await Event.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true
-        });
 
         res.status(200).json({
-            success: true,
-            data: event
+            status: true,
+            message: "Event reschedule successfully"
         });
     } catch (err) {
-        next(err);
+        res.status(400).json({
+            status: false,
+            message: err.message
+        });
     }
 };
 

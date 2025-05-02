@@ -12,7 +12,7 @@ const customizationSchema = new Schema({
   },
   frame: {
     type: String,
-    enum: ['circle', 'square', 'rounded']
+    enum: ['circle', 'square', 'rounded','triangle']
   }
 }, { timestamps: true });
 

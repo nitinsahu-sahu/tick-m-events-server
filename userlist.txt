@@ -1,7 +1,7 @@
 "email":"admin.james@gmail.com",
 "password":"admin@123",
 
-"email": "organizer.robert@gmail.com",
+"email": "organizer.William1@gmail.com",
 "password": "Manoj@123",
 
 "email":"participant.yashi1@gmail.com",
