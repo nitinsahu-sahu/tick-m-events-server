@@ -1,7 +1,10 @@
-const Event = require('../../models/event-details/Event');
 const ErrorResponse = require('../../utils/errorHandler');
 const cloudinary = require('cloudinary').v2;
+const Event = require('../../models/event-details/Event');
 const Organizer = require('../../models/event-details/Organizer');
+const Customization = require('../../models/event-details/Customization');
+const Ticket = require('../../models/event-details/Ticket');
+const Visibility = require('../../models/event-details/Visibility');
 const moment = require('moment');
 
 // Create Event
@@ -75,29 +78,15 @@ exports.createEvent = async (req, res, next) => {
     }
 };
 
-// This api get only specific detail 
-
-exports.getAllEventBasicDetails = async (req, res) => {
-    try {
-        const events = await Event.find({}, 'eventName date time'); // only select these fields
-
-        res.status(200).json({
-            success: true,
-            message: 'Event list fetched successfully',
-            data: events,
-        });
-    } catch (error) {
-        console.error('Error fetching events:', error.message);
-        res.status(500).json({ success: false, message: 'Server Error' });
-    }
-};
-
-
 // Get all events
 exports.getEvents = async (req, res, next) => {
     try {
-        const events = await Event.find().populate('createdBy', 'name email');
-        // Create a separate array with only specific fields
+        // Get all events that aren't deleted
+        const events = await Event.find({ isDelete: { $ne: true } })
+            .select('-createdBy -createdAt -updatedAt -isDelete -__v')
+            .lean(); // Convert to plain JavaScript objects
+        
+        // Create array for basic details
         const basicDetails = events.map(event => ({
             _id: event._id,
             eventName: event.eventName,
@@ -105,11 +94,29 @@ exports.getEvents = async (req, res, next) => {
             time: event.time
         }));
 
+        // Get all related data for each event
+        const eventsWithDetails = await Promise.all(events.map(async (event) => {
+            const [organizer, customization, tickets, visibility] = await Promise.all([
+                Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+                Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+                Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+                Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean()
+            ]);
+
+            return {
+                ...event,
+                organizer,
+                customization,
+                tickets,
+                visibility
+            };
+        }));
+
         res.status(200).json({
             success: true,
             message: "Event fetch successfully.",
-            fullData: events,        // Full data with populated fields
-            basicDetails: basicDetails // Separate simplified object
+            fullData: eventsWithDetails, // Full data with all related information
+            basicDetails: basicDetails   // Separate simplified object
         });
     } catch (error) {
         console.error('Error fetching events:', error.message);
@@ -138,8 +145,7 @@ exports.getEvent = async (req, res, next) => {
 // Update event
 exports.updateEvent = async (req, res, next) => {
     try {
-        const { eventName, date, time, category, eventType, coverImage, location, format, description } = req.body;
-
+        const { isDelete, eventName, date, time, category, eventType, coverImage, location, format, description } = req.body;
         // Convert date if provided
         dateOnly = moment(date).format('YYYY-MM-DD');
 
@@ -154,7 +160,8 @@ exports.updateEvent = async (req, res, next) => {
                 coverImage,
                 location,
                 format,
-                description
+                description,
+                isDelete
             },
             {
                 new: true,
@@ -171,7 +178,7 @@ exports.updateEvent = async (req, res, next) => {
 
         res.status(200).json({
             status: true,
-            message: "Event reschedule successfully"
+            message: isDelete ? "Event deleted successfully" : "Event reschedule successfully"
         });
     } catch (err) {
         res.status(400).json({

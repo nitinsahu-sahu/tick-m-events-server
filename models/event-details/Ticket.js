@@ -45,6 +45,11 @@ const TicketTypeSchema = new mongoose.Schema({
 const TicketConfigurationSchema = new mongoose.Schema({
   eventId: { type: String, required: true },
   tickets: [TicketTypeSchema],
+  payStatus: {
+    type: String,
+    enum: ['free', 'paid'],
+    default: "paid",
+  },
   purchaseDeadlineDate: { type: Date },
   isPurchaseDeadlineEnabled: { type: Boolean, default: true },
   paymentMethods: {

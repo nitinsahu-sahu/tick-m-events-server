@@ -129,7 +129,6 @@ exports.getUserProfile = async (req, res) => {
 
 // Update user info
 exports.updateUser = async (req, res) => {
-
     try {
         const { id } = req.params;
         // Exclude password if not being updated

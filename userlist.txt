@@ -4,7 +4,7 @@
 "email": "organizer.William1@gmail.com",
 "password": "Manoj@123",
 
-"email":"participant.yashi1@gmail.com",
+"email":"participant.Christopher1@gmail.com",
 "password":"Yashi@123",
 
 "email":"provider.robert@gmail.com",

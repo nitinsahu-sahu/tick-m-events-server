@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createEvent, getEvents, getEvent, updateEvent, deleteEvent, getAllEventBasicDetails } = require('../controllers/event-details/eventController');
+const { createEvent, getEvents, getEvent, updateEvent, deleteEvent } = require('../controllers/event-details/eventController');
 const { verifyToken } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
 const { createEventCustomization } = require('../controllers/event-details/customizationController');

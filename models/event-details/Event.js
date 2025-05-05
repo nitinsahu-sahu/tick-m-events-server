@@ -1,3 +1,4 @@
+const { types } = require('joi');
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
@@ -27,6 +28,11 @@ const eventSchema = new Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
+  },
+  
+  isDelete: {
+    type: Boolean,
+    default: false
   },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
