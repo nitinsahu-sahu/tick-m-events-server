@@ -10,4 +10,16 @@
 "email":"provider.robert@gmail.com",
 "password":"Pulki@123",
 
+Forgine Credential
 
+"email": "organizer.jos1@gmail.com",
+"password": "John@123",
+
+"email": "participant.sam2@gmail.com",
+"password": "SamCurran@123",
+
+"email": "admin.jofra1@gmail.com",
+"password": "Jofra@123",
+
+"email": "provider.harry2@gmail.com",
+"password": "Harry@123",
