@@ -8,8 +8,9 @@ const { routesLists } = require("./utils/routerList")
 const cloudinary = require('cloudinary').v2;
 const bodyParser = require('body-parser');
 const fileUpload = require('express-fileupload');
-
-
+const initReminderScheduler = require("./schedulers/reminderScheduler")
+// const cron = require("./schedulers/reminderScheduler");
+const port = process.env.PORT || 3000;
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -21,6 +22,7 @@ const server = express()
 
 // database connection
 connectToDB()
+// server.use(cron)
 server.use(express.json())
 server.use(cookieParser())
 server.use(morgan("tiny"))
@@ -39,8 +41,6 @@ server.use(cors(
     })
 )
 
-
-
 // Dynamically register routes
 for (const [prefix, router] of Object.entries(routesLists)) {
     server.use(prefix, router);
@@ -50,6 +50,9 @@ server.get("/", (req, res) => {
     res.status(200).json({ message: 'running' })
 })
 
-server.listen(8000, () => {
-    console.log('server [STARTED] ~ http://localhost:8000');
-})
+
+server.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
+
+initReminderScheduler();

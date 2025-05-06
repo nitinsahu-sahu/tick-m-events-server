@@ -1,6 +1,20 @@
 const authRoutes = require("../routes/Auth")
+const ticketTypeRoutes = require("../routes/ticketTypeRoutes")
+const eventRoutes = require("../routes/eventRoutes")
+const salesPointRoutes = require("../routes/salesPointRoutes")
+const promotionOfferRoutes = require("../routes/promotionOfferRoutes")
+const serviceRequestRoutes = require("../routes/serviceRequestRoutes")
+const userServiceRequestRoutes = require("../routes/userServiceRequestRoutes")
+const reminderRoutes = require("../routes/reminders")
 
 // Define route configuration
 exports.routesLists = {
-    '/api/v1/auth': authRoutes
+    '/api/v1/auth': authRoutes,
+    '/api/v1/tickets': ticketTypeRoutes,
+    '/api/v1/event': eventRoutes,
+    '/api/v1/events/wishlist': eventRoutes,
+    '/api/v1/service-request': serviceRequestRoutes,
+    '/api/v1/user-service-request': userServiceRequestRoutes,
+    '/api/v1/reminder': reminderRoutes,
+    '/api/v1/promotion': promotionOfferRoutes,
 };

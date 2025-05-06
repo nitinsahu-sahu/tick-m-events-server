@@ -1,22 +1,25 @@
-"email":"admin.rinku@gmail.com",
+"email":"admin.james@gmail.com",
 "password":"admin@123",
 
-"email": "vender.manoj1@gmail.com",
+"email": "organizer.William1@gmail.com",
 "password": "Manoj@123",
 
-"email":"yashi1@gmail.com",
+"email":"participant.Christopher1@gmail.com",
 "password":"Yashi@123",
 
-"email":"Pulkit1@gmail.com",
+"email":"provider.robert@gmail.com",
 "password":"Pulki@123",
 
-"email":"Priyanka1@gmail.com",
-"password":"Priyanka@123",
+Forgine Credential
 
-"email":"Rajkumar1@gmail.com",
-"password":"Rajkumar@123",
+"email": "organizer.jos1@gmail.com",
+"password": "John@123",
 
-"email":"superadmin.nitin1@gmail.com",
-"password":"Nitin@123",
+"email": "participant.sam2@gmail.com",
+"password": "SamCurran@123",
 
+"email": "admin.jofra1@gmail.com",
+"password": "Jofra@123",
 
+"email": "provider.harry2@gmail.com",
+"password": "Harry@123",

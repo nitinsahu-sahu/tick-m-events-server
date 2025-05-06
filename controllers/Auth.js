@@ -6,60 +6,87 @@ const Otp = require("../models/OTP");
 const { sanitizeUser } = require("../utils/SanitizeUser");
 const { generateToken } = require("../utils/GenerateToken");
 const PasswordResetToken = require("../models/PasswordResetToken");
+const UserServiceRequest = require("../models/profile-service-maagement/add-service");
+const { generateUsername } = require("../utils/generate-username");
 const cloudinary = require('cloudinary').v2;
 
 //register controller
 exports.signup = async (req, res) => {
-    const { name, email, password, gender, number } = req.body;
+    const { name, email, password, gender, number, role } = req.body;
     const { avatar } = req.files;
 
+    // Input validation
+    if (!name || !email || !password || !gender || !number || !avatar) {
+        return res.status(400).json({
+            success: false,
+            message: "All fields are required including avatar"
+        });
+    }
+    const username =generateUsername(name, 5); 
     try {
-        // Check if user already exists
-        const existingUser = await User.findOne({ email });
-
-        if (existingUser) {
-            return res.status(400).json({ message: "User already exists" });
-        }
-
-        // Ensure avatar file is present
-        if (!avatar) {
-            return res.status(400).json({ message: "Avatar file is required" });
-        }
-
-        // Upload avatar to Cloudinary
-        const myCloud = await cloudinary.uploader.upload(avatar.tempFilePath, {
-            folder: "profile", // Optional: specify a folder in Cloudinary
-            width: 150,
-            crop: "scale",
+        // Check for existing user in a single query
+        const existingUser = await User.findOne({
+            $or: [{ email }, { number }]
         });
 
-        console.log('myCloud', myCloud);
+        if (existingUser) {
+            const message = existingUser.email === email 
+                ? "Email already registered" 
+                : "Phone number already registered";
+            return res.status(400).json({ success: false, message });
+        }
 
-        // Save user to database with Cloudinary URL
-        const newUser = new User({
+        // Optimized Cloudinary upload with error handling
+        let cloudinaryResult;
+        try {
+            cloudinaryResult = await cloudinary.uploader.upload(avatar.tempFilePath, {
+                folder: "profile",
+                width: 150,
+                crop: "scale",
+                resource_type: "auto"
+            });
+        } catch (uploadError) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to upload profile picture"
+            });
+        }
+
+        // Create and save user
+        const newUser = await User.create({
             name,
+            username,
             email,
-            password,
+            password, // Ensure password is hashed in pre-save hook
             gender,
             number,
             avatar: {
-                public_id: myCloud.public_id,
-                url: myCloud.secure_url,
-            },
+                public_id: cloudinaryResult.public_id,
+                url: cloudinaryResult.secure_url
+            }
         });
 
-        await newUser.save();
+        // Omit sensitive data in response
+        const userResponse = {
+            _id: newUser._id,
+            name: newUser.name,
+            email: newUser.email,
+            role: newUser.role,
+            avatar: newUser.avatar.url
+        };
 
-        res.status(201).json({
+        return res.status(201).json({
+            success: true,
             message: "User registered successfully",
-            user: newUser,
+            data: userResponse
         });
 
     } catch (error) {
-        console.error('Error during signup:', error);
-        res.status(500).json({
-            message: "Error occurred during signup, please try again later",
-            error: error.message,
+        console.error('Signup error:', error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error during registration"
+            // error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -92,16 +119,101 @@ exports.login = async (req, res) => {
             return res.status(200).json({
                 user: sanitizeUser(existingUser),
                 token: token, // Include the token in the response
-                expiresIn: cookieExpiry // Send the expiry time to the frontend
+                expiresIn: cookieExpiry, // Send the expiry time to the frontend
+                message: "Signin successfully"
             });
         }
 
         // Clear the token cookie if credentials are invalid
         res.clearCookie('token');
-        return res.status(404).json({ message: "Invalid Credentials" });
+        return res.status(400).json({ message: "Invalid credentials" });
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: 'Some error occurred while logging in, please try again later' });
+    }
+};
+
+// Get user details by ID (excluding password and createdAt)
+exports.getUserProfile = async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        const user = await User.findById(userId).select('-password -createdAt');
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        const services = await UserServiceRequest.find({ createdBy: user._id }).select('-createdAt -updatedAt');
+
+        res.status(200).json({
+            success: true,
+            message: "Profile fetch successfully.",
+            user,
+            services
+        });
+    } catch (error) {
+        console.error("Error fetching user details:", error.message);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+};
+
+// Update user info
+exports.updateUser = async (req, res) => {
+    
+    try {
+        const { id } = req.params;
+        let updateData = { ...req.body };
+        const {socialLinks} = updateData
+        const {instagram,facebook,linkedin,tiktok} = JSON.parse(socialLinks)
+
+        // Handle password update
+        if (updateData.password) {
+            updateData.password = await bcrypt.hash(updateData.password, 10);
+        } else {
+            delete updateData.password;
+        }
+
+        // Handle socialLinks - no need to parse if using proper middleware
+        if (updateData.socialLinks && typeof updateData.socialLinks === 'string') {
+            try {
+                updateData.socialLinks = {instagram,facebook,linkedin,tiktok};
+            } catch (e) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Invalid socialLinks format" 
+                });
+            }
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            id,
+            updateData,
+            {
+                new: true,
+                runValidators: true
+            }
+        ).select('-password'); // Exclude password from the returned user
+
+        if (!updatedUser) {
+            return res.status(404).json({ 
+                success: false, 
+                message: "User not found" 
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "User updated successfully",
+            user: updatedUser
+        });
+
+    } catch (error) {
+        console.error("Update error:", error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message,
+            error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 };
 
