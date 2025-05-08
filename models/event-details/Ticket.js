@@ -32,13 +32,13 @@ const RefundPolicySchema = new mongoose.Schema({
 });
 
 const TicketTypeSchema = new mongoose.Schema({
-  ticketType: { type: String},
+  ticketType: { type: String, required: true },
   id: { type: String },
-  price: { type: String },
-  totalTickets: { type: String },
+  price: { type: String, default: "0 XAF", },
+  totalTickets: { type: String, required: true },
   isUnlimitedSeat: { type: Boolean, default: false },
-  description: { type: String},
-  isLimitedSeat: { type: Boolean, default: true },   
+  description: { type: String ,required: true},
+  isLimitedSeat: { type: Boolean, default: true },
   isLinkPramotion: { type: Boolean, default: false },
 });
 

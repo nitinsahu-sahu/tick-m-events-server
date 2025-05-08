@@ -6,12 +6,12 @@ exports.addToWishlist = async (req, res) => {
     const { eventId } = req.body;
     const userId = req.user._id; // assuming you're using auth middleware
 
-    const exists = await Wishlist.findOne({ user: userId, event: eventId });
+    const exists = await Wishlist.findOne({ userId, eventId });
     if (exists) {
       return res.status(400).json({ success: false, message: "Event already in wishlist" });
     }
 
-    const wishlistItem = await Wishlist.create({ user: userId, event: eventId });
+    const wishlistItem = await Wishlist.create({ userId, eventId });
 
     res.status(201).json({ success: true, message: "Added to wishlist", wishlistItem });
   } catch (err) {
@@ -19,18 +19,31 @@ exports.addToWishlist = async (req, res) => {
   }
 };
 
-// Get all wishlist items for a user
+// Get all wishlist items for a user with event details
 exports.getWishlist = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const wishlist = await Wishlist.find({ userId: req.user._id })
+      .populate({
+        path: 'eventId',  // The field to populate
+        select: 'eventName date time coverImage description', // Fields you want from Event
+        model: 'Event'    // The model to populate from
+      });
 
-    const wishlist = await Wishlist.find({ user: userId }).populate('event', 'eventName date time coverImage');
-
-    res.status(200).json({ success: true, wishlist });
+    res.status(200).json({
+      success: true,
+      wishlist
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Server Error", error: err.message });
+    console.error('Error fetching wishlist:', err);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: err.message
+    });
   }
 };
+
+// const wishlist = await Wishlist.find({ userId: req.user._id }).populate('event', 'eventName date time coverImage');
 
 // Remove from wishlist
 exports.removeFromWishlist = async (req, res) => {
@@ -38,7 +51,7 @@ exports.removeFromWishlist = async (req, res) => {
     const userId = req.user._id;
     const { eventId } = req.params;
 
-    const deleted = await Wishlist.findOneAndDelete({ user: userId, event: eventId });
+    const deleted = await Wishlist.findOneAndDelete({ userId, eventId });
 
     if (!deleted) {
       return res.status(404).json({ success: false, message: "Event not found in wishlist" });
