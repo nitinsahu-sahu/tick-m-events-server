@@ -106,7 +106,7 @@ exports.login = async (req, res) => {
 
             // Set cookie expiry to 30 minutes (in milliseconds)
             const cookieExpiry = 2 * 60 * 60 * 1000; // 2 hours
-
+            // const cookieExpiry = 2 * 60 * 1000; // 2 min
             // Sending JWT token in the response cookies
             res.cookie('token', token, {
                 sameSite: process.env.PRODUCTION === 'true' ? "None" : 'Lax',

@@ -2,16 +2,12 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const wishlistSchema = new Schema({
-  user: {
+  userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  event: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Event',
-    required: true
-  },
+  eventId: { type: String, required: true },
   addedAt: {
     type: Date,
     default: Date.now

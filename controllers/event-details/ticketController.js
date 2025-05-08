@@ -6,6 +6,7 @@ exports.createTicketConfiguration = async (req, res) => {
 
   const {
     tickets,
+    payStatus,
     purchaseDeadlineDate,
     isPurchaseDeadlineEnabled,
     paymentMethods,
