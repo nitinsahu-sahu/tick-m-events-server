@@ -5,6 +5,7 @@ const Organizer = require('../../models/event-details/Organizer');
 const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
 const Visibility = require('../../models/event-details/Visibility');
+const eventReview = require('../../models/event-details/eventReview');
 const moment = require('moment');
 
 // Create Event
@@ -85,7 +86,7 @@ exports.getEvents = async (req, res, next) => {
         const events = await Event.find({ isDelete: { $ne: true } })
             .select('-createdBy -createdAt -updatedAt -isDelete -__v')
             .lean(); // Convert to plain JavaScript objects
-        
+
         // Create array for basic details
         const basicDetails = events.map(event => ({
             _id: event._id,
@@ -127,18 +128,52 @@ exports.getEvents = async (req, res, next) => {
 // Get single event
 exports.getEvent = async (req, res, next) => {
     try {
-        const event = await Event.findById(req.params.id).populate('createdBy', 'name email');
+        const eventId = req.params.id; // Extract event ID from URL params
+
+        // Get the event (if not deleted)
+        const event = await Event.findOne({
+            _id: eventId,
+            isDelete: { $ne: true }
+        }).select('-createdBy -createdAt -updatedAt -isDelete -__v').lean();
 
         if (!event) {
-            return next(new ErrorResponse(`Event not found with id of ${req.params.id}`, 404));
+            return res.status(404).json({
+                success: false,
+                message: "Event not found or deleted."
+            });
         }
+
+        // Fetch all related data in parallel
+        const [organizer, customization, tickets, visibility, review] = await Promise.all([
+            Organizer.findOne({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+            Customization.findOne({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+            Ticket.find({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+            Visibility.findOne({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+            eventReview.find({ eventId,status: "approved" }).select('-updatedAt -isDelete -__v').lean()
+        ]);
+
+        // Combine all data
+        const eventWithDetails = {
+            ...event,
+            organizer: organizer || null,
+            customization: customization || null,
+            tickets: tickets || [],
+            visibility: visibility || null,
+            review: review || []
+        };
 
         res.status(200).json({
             success: true,
-            data: event
+            message: "Event fetched successfully.",
+            eventWithDetails
         });
-    } catch (err) {
-        next(err);
+
+    } catch (error) {
+        console.error('Error fetching event:', error.message);
+        res.status(500).json({
+            success: false,
+            message: 'Server Error'
+        });
     }
 };
 

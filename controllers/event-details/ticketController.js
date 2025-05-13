@@ -18,6 +18,7 @@ exports.createTicketConfiguration = async (req, res) => {
     partialRefundPercent,
     noRefundDate
   } = req.body
+
   try {
     const { eventId } = req.params
     const ticketList = JSON.parse(tickets)
@@ -32,11 +33,12 @@ exports.createTicketConfiguration = async (req, res) => {
     const newConfig = new TicketConfiguration({
       eventId,
       tickets:ticketList,
-      purchaseDeadline:purchaseDeadlineDate,
+      purchaseDeadlineDate,
       isPurchaseDeadlineEnabled,
       paymentMethods,
       refundPolicy,
       isRefundPolicyEnabled,
+      payStatus
     });
 
     await newConfig.save();

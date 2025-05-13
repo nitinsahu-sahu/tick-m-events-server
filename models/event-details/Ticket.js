@@ -34,9 +34,8 @@ const RefundPolicySchema = new mongoose.Schema({
 const TicketTypeSchema = new mongoose.Schema({
   ticketType: { type: String, required: true },
   id: { type: String },
-  price: { type: String, default: "0 XAF", },
-  totalTickets: { type: String, required: true },
-  isUnlimitedSeat: { type: Boolean, default: false },
+  price: { type: String, default: "0 XAF" },
+  totalTickets: { type: String },
   description: { type: String ,required: true},
   isLimitedSeat: { type: Boolean, default: true },
   isLinkPramotion: { type: Boolean, default: false },
@@ -54,8 +53,6 @@ const TicketConfigurationSchema = new mongoose.Schema({
   isPurchaseDeadlineEnabled: { type: Boolean, default: true },
   paymentMethods: {
     type: String,
-    enum: ['Mobile Money', 'Credit Card', 'Cash', 'Bank Transfer'],
-    required: true,
   },
   refundPolicy: RefundPolicySchema,
   isRefundPolicyEnabled: { type: Boolean, default: false },

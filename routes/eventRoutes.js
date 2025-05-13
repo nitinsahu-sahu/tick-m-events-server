@@ -27,4 +27,5 @@ router.route('/tickets/ec/:eventId/:ticketCustomId')
 router.route('/tickets/pvo/:eventId/:ticketCustomId/:eventCustomizationId')
   .post(createPublicationVisibility)
 
+
 module.exports = router;
