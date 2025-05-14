@@ -2,6 +2,17 @@
 const mongoose = require("mongoose")
 const { Schema } = mongoose
 
+const addressSchema = new Schema({
+    name: { type: String, required: true, },
+    email: { type: String, required: true, },
+    number: { type: String, required: true, },
+    city: { type: String, required: true, },
+    gender: { type: String, required: true, },
+    age: { type: String, required: true, },
+    hearAboutEvent: { type: String },
+    eventSpacificInfo: { type: String },
+});
+
 const eventOrderSchema = new Schema({
     eventId: { type: String, required: true },
     userId: {
@@ -9,13 +20,13 @@ const eventOrderSchema = new Schema({
         ref: "User",
         required: true,
     },
+    orderAddress: addressSchema,
     tickets: [
         {
             ticketId: { type: String, required: true },
             ticketType: { type: String, required: true }, // "VIP", "Super"
             quantity: { type: Number, required: true },
             unitPrice: { type: Number, required: true },
-            subtotal: { type: Number, required: true }
         }
     ],
     totalAmount: {

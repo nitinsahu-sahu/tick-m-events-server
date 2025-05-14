@@ -6,22 +6,15 @@ const bcrypt = require("bcryptjs");
 const SocialLinksSchema = new mongoose.Schema({
     instagram: {
         type: String,
-       
     },
     facebook: {
         type: String,
-     
     },
     linkedin: {
         type: String,
-     
     },
     tiktok: {
         type: String,
-        // validate: {
-        //     validator: v => !v || validator.isURL(v),
-        //     message: 'Invalid URL'
-        // }
     },
 });
 
