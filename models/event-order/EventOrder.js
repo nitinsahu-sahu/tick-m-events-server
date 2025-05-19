@@ -47,6 +47,11 @@ const eventOrderSchema = new Schema({
         type: String,
         required: true
     },
+    verifyEntry: {
+        type: Boolean,
+        default: false,
+        required: true
+    },
     createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
