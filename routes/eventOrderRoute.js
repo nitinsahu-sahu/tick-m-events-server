@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createOrder, getOrdersByUser,downloadTicket } = require('../controllers/event-order/event-order-controller');
+const { createOrder, getOrdersByUser, downloadTicket, verifyTicket, getAllOrders, updateOrderVerifyEntryStatus } = require('../controllers/event-order/event-order-controller');
 const { verifyToken } = require('../middleware/VerifyToken');
 
 
@@ -16,11 +16,12 @@ router.get('/user/:userId', getOrdersByUser);
 
 // Generate and download ticket PDF
 router.get('/ticket/:orderId', downloadTicket);
-
+router.post('/verify-ticket', verifyTicket);
+router.patch('/verify-entry', updateOrderVerifyEntryStatus);
 // Update order status
 // router.patch('/:id/status', updateOrderStatus);
 
 // Get all orders (admin)
-// router.get('/', getAllOrders);
+router.get('/', getAllOrders);
 
 module.exports = router;

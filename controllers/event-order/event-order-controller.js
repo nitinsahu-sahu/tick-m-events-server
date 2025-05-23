@@ -7,18 +7,21 @@ const fontkit = require('@pdf-lib/fontkit'); // Required for proper font handlin
 const mongoose = require("mongoose");
 const { sendMail } = require('../../utils/Emails');
 const { createOrderEmailTemplate } = require('../../utils/Emails-template');
+const QRCode = require('qrcode');
 
 // Create a new order
 exports.createOrder = async (req, res) => {
   const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
+  const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
   const transactionId = uuidToNumeric(uuidv4());
+  const ticketCode = uuidToSixNumeric(uuidv4())
 
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod } = req.body;
     const ticketList = JSON.parse(tickets);
     const parsedOrderAddress = JSON.parse(orderAddress);
     const userEmail = parsedOrderAddress.email; // Extract email from order address
-
+    const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
     // Validate required fields
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -73,7 +76,9 @@ exports.createOrder = async (req, res) => {
         tickets: ticketList.tickets,
         totalAmount,
         paymentMethod,
-        transactionId
+        transactionId,
+        ticketCode,
+        qrCode: qrImage
       });
 
       const savedOrder = await newOrder.save({ session });
@@ -92,7 +97,6 @@ exports.createOrder = async (req, res) => {
           emailHtml
         );
 
-        console.log('Email sent successfully');
       } catch (emailError) {
         console.error('Failed to send confirmation email:', emailError);
         // Don't fail the order if email fails
@@ -121,6 +125,7 @@ exports.createOrder = async (req, res) => {
 
 // Get order by ID
 exports.getOrderById = async (req, res) => {
+
   try {
     const { id } = req.params;
 
@@ -141,23 +146,40 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// Get orders by user ID
 exports.getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'Invalid user ID' });
+      return res.status(400).json({ message: "Invalid user ID" });
     }
 
+    // 1. Get all orders for the user
     const orders = await EventOrder.find({ userId }).sort({ createdAt: -1 });
-    res.json(orders);
+
+    // 2. Extract all unique eventIds
+    const eventIds = [...new Set(orders.map(order => order.eventId))];
+
+    // 3. Fetch all corresponding events
+    const events = await Event.find({ _id: { $in: eventIds } });
+
+    // 4. Create a map for fast lookup
+    const eventMap = {};
+    events.forEach(event => {
+      eventMap[event._id.toString()] = event;
+    });
+
+    // 5. Attach event details to each order
+    const enrichedOrders = orders.map(order => ({
+      ...order.toObject(),
+      eventDetails: eventMap[order.eventId] || null
+    }));
+
+    res.status(200).json(enrichedOrders);
   } catch (error) {
-    console.error('Error fetching user orders:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 
 const generateTicketPDF = async ({ order, event }) => {
   const { eventName, date, time, category, location, description } = event
@@ -560,22 +582,132 @@ exports.updateOrderStatus = async (req, res) => {
 // Get all orders (admin only)
 exports.getAllOrders = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
-    const orders = await EventOrder.find()
-      .sort({ createdAt: -1 })
-      .limit(Number(limit))
-      .skip((Number(page) - 1) * Number(limit))
-      .populate('userId', 'name email');
+    // Get all orders with all fields
+    const allOrders = await EventOrder.find();
 
-    const count = await EventOrder.countDocuments();
+    // Get only verified orders with specific fields
+    const verifiedOrders = await EventOrder.find({ verifyEntry: true })
+      .populate('userId', 'name')
+      .lean(); // Convert to plain JavaScript object
+    const filteredOrders = verifiedOrders.map(order => ({
+      name: order.userId.name,
+      ticketType: order.tickets[0]?.ticketType || 'N/A',
+      entryTime: order.entryTime || null,
+      verifyEntry: order.verifyEntry
+    }));
+    res.status(200).json({
+      success: true,
+      allOrders,
+      verifiedOrders: filteredOrders,
+    });
 
-    res.json({
-      orders,
-      totalPages: Math.ceil(count / Number(limit)),
-      currentPage: Number(page)
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+
+//verify event
+exports.verifyTicket = async (req, res) => {
+  try {
+    const { ticketCode, participantId, name } = req.body;
+
+    // Check if at least one field is provided
+    if (!ticketCode && !participantId && !name) {
+      return res.status(404).json({
+        message: "Please provide at least one data",
+        flag: 'field'
+      });
+    }
+
+    // Build query based on provided fields
+    const query = {};
+    if (ticketCode) query.ticketCode = ticketCode;
+    if (participantId) query.userId = participantId;
+    if (name) query.name = name;
+
+    // Find ticket in database
+    const ticket = await EventOrder.findOne(query)
+      .select('userId _id eventId tickets verifyEntry entryTime')  // Only select these fields
+      .populate('userId', 'name email')  // Populate only name and email from user
+      .lean();
+
+    if (!ticket) {
+      return res.status(404).json({ message: "Invalid ticket", flag: 'invalid' });
+    }
+    if (ticket.verifyEntry) {
+      return res.status(404).json({ message: "Ticket already used", flag: 'already' });
+    }
+    const eventName = await Event.findOne({ _id: ticket.eventId }).select('eventName')
+
+    return res.status(200).json({
+      message: "Access granted, Welcome",
+      ticket,
+      eventName,
+      flag: 'granted'
+    });
+
+  } catch (err) {
+    console.error("Error verifying ticket:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+exports.updateOrderVerifyEntryStatus = async (req, res) => {
+  try {
+    const { entryTime, verifyEntry } = req.body;
+    const { ticketCode, participantId, name } = req.body.verifyData;
+
+    // Check if at least one identifier is provided
+    if (!ticketCode && !participantId && !name) {
+      return res.status(400).json({
+        message: "Please provide at least one identifier (ticketCode, participantId, or name)"
+      });
+    }
+
+    // Check if verifyEntry is provided
+    if (typeof verifyEntry !== 'boolean') {
+      return res.status(400).json({
+        message: "Please provide a valid verifyEntry status (true/false)"
+      });
+    }
+
+    // Create a filter object based on provided identifiers
+    const filter = {};
+    if (ticketCode) filter.ticketCode = ticketCode;
+    if (participantId) filter.participantId = participantId;
+    if (name) filter.name = name;
+
+    // Update the verifyEntry status
+    const updatedOrder = await EventOrder.findOneAndUpdate(
+      filter,
+      { $set: { verifyEntry: verifyEntry, entryTime: entryTime } },
+      { new: true }
+    );
+
+    if (!updatedOrder) {
+      return res.status(404).json({
+        message: "No matching order found with the provided identifiers"
+      });
+    }
+
+    res.status(200).json({
+      message: "Entry status updated successfully",
+      data: {
+        ticketCode: updatedOrder.ticketCode,
+        verifyEntry: updatedOrder.verifyEntry,
+        entryTime: updatedOrder.entryTime
+      }
     });
   } catch (error) {
-    console.error('Error fetching all orders:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Error updating order:', error);
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 };

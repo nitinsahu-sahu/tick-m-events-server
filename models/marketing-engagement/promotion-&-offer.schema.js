@@ -1,36 +1,16 @@
 // models/Promotion.js
 const mongoose = require('mongoose');
 
-const PromotionTypeSchema = new mongoose.Schema({
-    percentageDiscount: {
-        type: Boolean,
-        default: false,
-    },
-    fixedValueDiscount: {
-        type: Boolean,
-        default: false,
-    },
-    groupOffer: {
-        type: Boolean,
-        default: false,
-    },
-    earlyBuyerDiscount: {
-        type: Boolean,
-        default: false,
-    },
-});
-
 const PromotionSchema = new mongoose.Schema({
-    promotionType: PromotionTypeSchema,
+    promotionType: {
+        type: String,
+        enum: ['percentageDiscount', 'fixedValueDiscount', 'groupOffer', 'earlyBuyerDiscount'],
+        required: true
+    },
     discountValue: {
         type: String,
         required: true,
     },
-    // ticketId: {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: 'TicketConfiguration',
-    //     required: true,
-    // },
     ticketSelection: {
         type: String,
         required: true,
@@ -45,14 +25,6 @@ const PromotionSchema = new mongoose.Schema({
     },
     promoCode: {
         type: String,
-        default: null,
-    },
-    advantageType: {
-        type: String,
-        required: true,
-    },
-    usageLimit: {
-        type: Number,
         default: null,
     },
     createdBy: {

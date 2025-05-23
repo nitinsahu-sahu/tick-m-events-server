@@ -9,23 +9,18 @@ exports.createPromotion = async (req, res) => {
         validityPeriodStart,
         promotionType,
         promoCode,
-        usageLimit,
-        advantageType
     } = req.body;
-
     try {
         const promotion = new Promotion({
             discountValue,
             ticketSelection,
             validityPeriodEnd,
             validityPeriodStart,
-            promotionType: JSON.parse(promotionType), // Parsed version
+            promotionType,
             promoCode,
-            usageLimit,
-            advantageType,
             createdBy: req.user?._id || req.body.createdBy
         });
-
+ 
         await promotion.save();
         res.status(201).json({
             success: true,

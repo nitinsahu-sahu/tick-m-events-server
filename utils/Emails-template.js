@@ -1,6 +1,6 @@
-// Evemnt create HTML email template
 exports.createOrderEmailTemplate = async (order, userEmail) => {
-    return `
+    
+  return `
     <!DOCTYPE html>
     <html>
     <head>
@@ -13,6 +13,7 @@ exports.createOrderEmailTemplate = async (order, userEmail) => {
         .ticket-table th { background-color: #f2f2f2; text-align: left; padding: 10px; }
         .ticket-table td { padding: 10px; border-bottom: 1px solid #ddd; }
         .footer { margin-top: 20px; font-size: 0.9em; color: #666; }
+        .qr-code { width: 100px; height: 100px; border: 1px solid #ddd; border-radius: 8px; }
       </style>
     </head>
     <body>
@@ -48,8 +49,15 @@ exports.createOrderEmailTemplate = async (order, userEmail) => {
           
           <p><strong>Total Amount:</strong> ${order.totalAmount}</p>
           <p><strong>Transaction ID:</strong> ${order.transactionId}</p>
+          <p><strong>Ticket Code:</strong> ${order.ticketCode}</p>
           
-          <h3>Event Information</h3>
+          ${order.qrCode ? `
+            <div style="margin: 20px 0;">
+              <p><strong>Your QR Code:</strong></p>
+              <img src="${order.qrCode}" alt="QR Code" class="qr-code"/>
+            </div>
+          ` : ''}
+          
           <p>We look forward to seeing you at the event!</p>
           
           <div class="footer">

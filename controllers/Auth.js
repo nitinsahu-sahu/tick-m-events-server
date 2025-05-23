@@ -22,7 +22,7 @@ exports.signup = async (req, res) => {
             message: "All fields are required including avatar"
         });
     }
-    const username =generateUsername(name, 5); 
+    const username = generateUsername(name, 5);
     try {
         // Check for existing user in a single query
         const existingUser = await User.findOne({
@@ -30,8 +30,8 @@ exports.signup = async (req, res) => {
         });
 
         if (existingUser) {
-            const message = existingUser.email === email 
-                ? "Email already registered" 
+            const message = existingUser.email === email
+                ? "Email already registered"
                 : "Phone number already registered";
             return res.status(400).json({ success: false, message });
         }
@@ -159,12 +159,12 @@ exports.getUserProfile = async (req, res) => {
 
 // Update user info
 exports.updateUser = async (req, res) => {
-    
+
     try {
         const { id } = req.params;
         let updateData = { ...req.body };
-        const {socialLinks} = updateData
-        const {instagram,facebook,linkedin,tiktok} = JSON.parse(socialLinks)
+        const { socialLinks } = updateData
+        const { instagram, facebook, linkedin, tiktok } = JSON.parse(socialLinks)
 
         // Handle password update
         if (updateData.password) {
@@ -176,11 +176,11 @@ exports.updateUser = async (req, res) => {
         // Handle socialLinks - no need to parse if using proper middleware
         if (updateData.socialLinks && typeof updateData.socialLinks === 'string') {
             try {
-                updateData.socialLinks = {instagram,facebook,linkedin,tiktok};
+                updateData.socialLinks = { instagram, facebook, linkedin, tiktok };
             } catch (e) {
-                return res.status(400).json({ 
-                    success: false, 
-                    message: "Invalid socialLinks format" 
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid socialLinks format"
                 });
             }
         }
@@ -195,9 +195,9 @@ exports.updateUser = async (req, res) => {
         ).select('-password'); // Exclude password from the returned user
 
         if (!updatedUser) {
-            return res.status(404).json({ 
-                success: false, 
-                message: "User not found" 
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
             });
         }
 
@@ -209,8 +209,8 @@ exports.updateUser = async (req, res) => {
 
     } catch (error) {
         console.error("Update error:", error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             message: error.message,
             error: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
@@ -397,5 +397,15 @@ exports.checkAuth = async (req, res) => {
     } catch (error) {
         console.log(error);
         res.sendStatus(500)
+    }
+}
+
+exports.getOrganizer = async (req, res) => {
+    try {
+        const { role } = req.params;
+        const users = await User.find({ role });
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 }

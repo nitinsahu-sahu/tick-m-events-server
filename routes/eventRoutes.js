@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createEvent, getEvents, getEvent, updateEvent, deleteEvent } = require('../controllers/event-details/eventController');
+const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, deleteEvent, addCategory } = require('../controllers/event-details/eventController');
 const { verifyToken } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
 const { createEventCustomization } = require('../controllers/event-details/customizationController');
@@ -9,6 +9,9 @@ const { createPublicationVisibility } = require('../controllers/event-details/vi
 router.route('/')
   .get(getEvents)
   .post(verifyToken, createEvent)
+
+router.route('/add-category').post(addCategory);
+router.route('/allCategory').get(getAllCategories);
 
 router.route('/:id')
   .get(getEvent)

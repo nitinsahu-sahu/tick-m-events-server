@@ -6,9 +6,10 @@ const { signupValidation, loginValidation } = require('../validators/authValidat
 const validate = require('../middleware/validateRequest')
 
 router
-    .post("/signup",  authController.signup)
-    .patch("/:id",  authController.updateUser)
-    .get("/profile/:id",  authController.getUserProfile)
+    .post("/signup", authController.signup)
+    .patch("/:id", authController.updateUser)
+    .get("/profile/:id", authController.getUserProfile)
+    .get("/users/:role", authController.getOrganizer)
     .post('/login', validate(loginValidation), authController.login)
     .post("/verify-otp", authController.verifyOtp)
     .post("/resend-otp", authController.resendOtp)
@@ -16,7 +17,6 @@ router
     .post("/reset-password", authController.resetPassword)
     .get("/check-auth", verifyToken, authController.checkAuth)
     .get('/logout', authController.logout)
-    .get('/test')
 
 
 module.exports = router

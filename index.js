@@ -1,7 +1,9 @@
 require("dotenv").config()
 const express = require('express')
-const cors = require('cors')
+const User = require('./models/User');
+const Message = require('./models/chat-schema');
 const http = require('http');
+const cors = require('cors')
 const morgan = require("morgan")
 const cookieParser = require("cookie-parser")
 const { connectToDB } = require("./database/db")
@@ -11,140 +13,238 @@ const bodyParser = require('body-parser');
 const fileUpload = require('express-fileupload');
 const initReminderScheduler = require("./schedulers/reminderScheduler")
 const socketIo = require('socket.io');
-const Message = require('./models/chat-schema'); // Make sure you have this model
-
+// const cron = require("./schedulers/reminderScheduler");
 const port = process.env.PORT || 3000;
-
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.CLOUDINARY_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 // server init
-const app = express()
+const server = express()
 
 // database connection
 connectToDB()
-
-// middlewares
-app.use(express.json())
-app.use(cookieParser())
-app.use(morgan("tiny"))
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(fileUpload({
-    useTempFiles: true,
-    tempFileDir: '/tmp/',
+// server.use(cron)
+server.use(express.json())
+server.use(cookieParser())
+server.use(morgan("tiny"))
+server.use(bodyParser.urlencoded({ extended: true }));
+server.use(fileUpload({
+  useTempFiles: true,
+  tempFileDir: '/tmp/',
 }));
-app.use(cors({
-    origin: [process.env.ORIGIN, process.env.ADMIN_ORIGIN],
-    credentials: true,
-    exposedHeaders: ['X-Total-Count'],
-    methods: ['GET', 'POST', 'PATCH', 'DELETE']
-}))
-
-// Dynamically register routes
-for (const [prefix, router] of Object.entries(routesLists)) {
-    app.use(prefix, router);
-}
-
-app.get("/", (req, res) => {
-    res.status(200).json({ message: 'running' })
-})
-
-initReminderScheduler();
-
-// Create HTTP server
-const server = http.createServer(app);
-
-// Socket.io setup
-const io = socketIo(server, {
+// middlewares
+const socketServer = http.createServer(server);
+const io = socketIo(socketServer, {
   cors: {
-    origin: [process.env.ORIGIN, process.env.ADMIN_ORIGIN],
+    origin: "http://localhost:3039", // Update with your frontend URL
     methods: ["GET", "POST"]
   }
 });
-
-// Store active users
-const activeUsers = new Map();
-
+// Socket.io Connection
 io.on('connection', (socket) => {
+  console.log(`New connection from: ${socket.handshake.headers.origin}`);
   console.log('New client connected:', socket.id);
 
-  // Join user to their room
-  socket.on('join', async ({ userId, role }) => {
-    activeUsers.set(userId, { socketId: socket.id, role });
-    socket.join(userId);
-    console.log(`User ${userId} (${role}) joined chat`);
-    
-    // Send any unread messages
-    const unreadMessages = await Message.find({
-      receiver: userId,
-      read: false
-    }).populate('sender', 'name');
-    
-    unreadMessages.forEach(msg => {
-      socket.emit('newMessage', {
-        sender: msg.sender._id,
-        senderName: msg.sender.name,
-        content: msg.content,
-        timestamp: msg.timestamp,
-        senderRole: msg.senderRole
-      });
-      Message.updateOne({ _id: msg._id }, { read: true }).exec();
-    });
+  // Register user with their socket ID
+  socket.on('socket-update', async (_id) => {
+    try {
+      const user = await User.findOneAndUpdate(
+        { _id },
+        { socketId: socket.id },
+        { new: true }
+      );
+      if (!user) {
+        console.log('User not found:', _id);
+      }
+    } catch (err) {
+      console.error('Error updating socket ID:', err);
+    }
   });
 
   // Handle sending messages
-  socket.on('sendMessage', async ({ sender, senderRole, receiver, content }) => {
-    const receiverData = activeUsers.get(receiver);
-    const receiverRole = receiverData?.role;
-    
-    // Save message to database
-    const newMessage = new Message({
-      sender,
-      receiver,
-      content,
-      senderRole,
-      receiverRole,
-      read: !!receiverData
-    });
+  socket.on('sendMessage', async ({ senderId, receiverId, message }) => {
+    try {
+      // Validate sender and receiver
+      const sender = await User.findOne({ _id: senderId });
+      const receiver = await User.findOne({ _id: receiverId });
 
-    await newMessage.save();
+      if (!sender || !receiver) {
+        console.log('Invalid sender or receiver');
+        return;
+      }
 
-    // If receiver is online, send the message
-    if (receiverData) {
-      io.to(receiverData.socketId).emit('newMessage', {
-        sender,
-        content,
-        timestamp: new Date(),
-        senderRole
+      // Check if participant is trying to message someone other than organizer
+      if (sender.role === 'participant' && receiver.role !== 'organizer') {
+        console.log('Participants can only message organizers');
+        return;
+      }
+
+      // Save message to database
+      const newMessage = new Message({
+        senderId,
+        receiverId,
+        message
       });
-    }
+      await newMessage.save();
 
-    // Send back to sender for their own UI
-    socket.emit('newMessage', {
-      sender,
-      content,
-      timestamp: new Date(),
-      senderRole,
-      isOwn: true
-    });
+      // Get receiver's socket ID
+      const receiverSocketId = receiver.socketId;
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit('receiveMessage', {
+          senderId,
+          message,
+          timestamp: newMessage.timestamp
+        });
+      }
+
+      // Send confirmation to sender
+      socket.emit('messageSent', {
+        receiverId,
+        message,
+        timestamp: newMessage.timestamp
+      });
+
+    } catch (err) {
+      console.error('Error sending message:', err);
+    }
+  });
+
+  // Get chat history
+  socket.on('getChatHistory', async ({ userId, otherUserId }) => {
+    try {
+      const messages = await Message.find({
+        $or: [
+          { senderId: userId, receiverId: otherUserId },
+          { senderId: otherUserId, receiverId: userId }
+        ]
+      }).sort({ timestamp: 1 });
+
+      socket.emit('chatHistory', messages);
+    } catch (err) {
+      console.error('Error fetching chat history:', err);
+    }
+  });
+
+  // Get all conversations for a user
+  socket.on('getConversations', async (_id) => {
+    try {
+      const user = await User.findOne({ _id });
+      if (!user) return;
+
+      let query = {};
+      if (user.role === 'participant') {
+        // Participants can only see organizers
+        query = { $or: [{ senderId: _id }, { receiverId: _id }] };
+      } else if (user.role === 'organizer') {
+        // Organizers can see all users who messaged them
+        query = { $or: [{ receiverId: _id }, { senderId: _id }] };
+      } else {
+        // Admin and provider can see organizers
+        query = {
+          $or: [
+            { senderId: _id, receiverRole: 'organizer' },
+            { receiverId: _id, senderRole: 'organizer' }
+          ]
+        };
+      }
+
+      const conversations = await Message.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: {
+              $cond: [
+                { $eq: ["$senderId", userId] },
+                "$receiverId",
+                "$senderId"
+              ]
+            },
+            lastMessage: { $last: "$$ROOT" },
+            unreadCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ["$receiverId", userId] },
+                      { $eq: ["$read", false] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        },
+        { $sort: { "lastMessage.timestamp": -1 } }
+      ]);
+
+      // Populate user details
+      const populatedConversations = await Promise.all(
+        conversations.map(async (conv) => {
+          const otherUserId = conv._id;
+          const otherUser = await User.findOne({ _id: otherUserId });
+          return {
+            userId: otherUserId,
+            name: otherUser?.name || 'Unknown',
+            role: otherUser?.role || 'unknown',
+            lastMessage: conv.lastMessage,
+            unreadCount: conv.unreadCount
+          };
+        })
+      );
+
+      socket.emit('conversations', populatedConversations);
+    } catch (err) {
+      console.error('Error fetching conversations:', err);
+    }
+  });
+
+  // Mark messages as read
+  socket.on('markAsRead', async ({ userId, otherUserId }) => {
+    try {
+      await Message.updateMany(
+        { senderId: otherUserId, receiverId: userId, read: false },
+        { $set: { read: true } }
+      );
+    } catch (err) {
+      console.error('Error marking messages as read:', err);
+    }
   });
 
   // Handle disconnection
   socket.on('disconnect', () => {
-    for (let [userId, userData] of activeUsers.entries()) {
-      if (userData.socketId === socket.id) {
-        activeUsers.delete(userId);
-        console.log(`User ${userId} disconnected`);
-        break;
-      }
-    }
+    console.log('Client disconnected:', socket.id);
   });
 });
 
-// Start the combined server
-server.listen(port, () => {
-  console.log(`Server with Socket.io running on port ${port}`);
+server.use(cors(
+  {
+    origin: [process.env.ORIGIN, process.env.ADMIN_ORIGIN],
+    credentials: true,
+    exposedHeaders: ['X-Total-Count'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE']
+  })
+)
+
+// Dynamically register routes
+for (const [prefix, router] of Object.entries(routesLists)) {
+  server.use(prefix, router);
+}
+
+server.get("/", (req, res) => {
+  res.status(200).json({ message: 'running' })
+})
+
+socketServer.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
+
+// server.listen(port, () => {
+//   console.log(`Server running on port ${port}`);
+// });
+
+initReminderScheduler();
