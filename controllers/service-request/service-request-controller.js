@@ -3,37 +3,51 @@ const cloudinary = require('cloudinary').v2;
 const moment = require('moment');
 // Create Service Request
 exports.createServiceRequest = async (req, res) => {
-    const { coverImage } = req.files
-    const { serviceType, dateAndTime, eventLocation, budget, description, additionalOptions, status } = req.body
+    const { serviceType, dateAndTime, eventLocation, budget, description, additionalOptions, status } = req.body;
     const formattedDateTime = moment(dateAndTime).format('YYYY-MM-DD hh:mm A'); 
+    
     try {
-        // Upload avatar to Cloudinary
-        const myCloud = await cloudinary.uploader.upload(coverImage.tempFilePath, {
-            folder: "service-request", // Optional: specify a folder in Cloudinary
-            width: 150,
-            crop: "scale",
-        });
+        let coverImageData = {};
+        
+        // Check if coverImage exists in req.files
+        if (req.files && req.files.coverImage) {
+            const { coverImage } = req.files;
+            // Upload avatar to Cloudinary
+            const myCloud = await cloudinary.uploader.upload(coverImage.tempFilePath, {
+                folder: "service-request", // Optional: specify a folder in Cloudinary
+                width: 150,
+                crop: "scale",
+            });
+            
+            coverImageData = {
+                public_id: myCloud.public_id,
+                url: myCloud.secure_url,
+            };
+        }
+
         const service = new ServiceRequest({
             serviceType,
-            dateAndTime:formattedDateTime,
+            dateAndTime: formattedDateTime,
             eventLocation,
             budget,
             description,
             additionalOptions,
             status,
-            coverImage: {
-                public_id: myCloud.public_id,
-                url: myCloud.secure_url,
-            },
+            coverImage: coverImageData, // This will be empty object if no image was uploaded
             createdBy: req.user?._id || req.body.createdBy
         });
+
         const saved = await service.save();
         res.status(201).json({
             success: true,
-            message: status==="draft"?'Service send as a draft successfully':'Service send successfully',
+            message: status === "draft" ? 'Service saved as a draft successfully' : 'Service created successfully',
+            data: saved // Optional: you can include the saved document in the response
         });
     } catch (err) {
-        res.status(400).json({ error: err.message });
+        res.status(400).json({ 
+            success: false,
+            error: err.message 
+        });
     }
 };
 

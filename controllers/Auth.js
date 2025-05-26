@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const UserReview = require("../models/userRiiew.schema");
 const bcrypt = require('bcryptjs');
 const { sendMail } = require("../utils/Emails");
 const { generateOTP } = require("../utils/GenerateOtp");
@@ -407,5 +408,216 @@ exports.getOrganizer = async (req, res) => {
         res.json(users);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+}
+
+// Riview system
+// Create a new review
+exports.createReview = async (req, res) => {
+    try {
+        const { reviewedUserId, rating, comment } = req.body;
+
+        // Validate input
+        if (!reviewedUserId || !rating) {
+            return res.status(400).json({ message: "Reviewed user ID and rating are required" });
+        }
+
+        // Check if user is reviewing themselves
+        if (req.user._id.toString() === reviewedUserId.toString()) {
+            return res.status(400).json({ message: "You cannot review yourself" });
+        }
+
+        // Check if reviewed user exists
+        const reviewedUser = await User.findById(reviewedUserId);
+        if (!reviewedUser) {
+            return res.status(404).json({ message: "User being reviewed not found" });
+        }
+
+        // Check if reviewer has already reviewed this user
+        const existingReview = await UserReview.findOne({
+            reviewer: req.user._id,
+            reviewedUser: reviewedUserId
+        });
+
+        if (existingReview) {
+            return res.status(400).json({ message: "You have already reviewed this user" });
+        }
+
+        // Create review
+        const review = await UserReview.create({
+            reviewer: req.user._id || '',
+            reviewedUser: reviewedUserId,
+            rating,
+            comment
+        });
+
+        // Update the reviewed user's average rating
+       await updateUserRating(reviewedUserId)
+        // Success response
+        return res.status(201).json({ success: true, review });
+
+    } catch (error) {
+        console.error("Error creating review:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// // Get all reviews for a specific user
+exports.getUserReviews = async (req, res) => {
+    const { userId } = req.params;
+
+    const reviews = await UserReview.find({ reviewedUser: userId, status: "approved" })
+        .populate("reviewer", "name profilePicture")
+        .sort({ createdAt: -1 });
+
+    res.status(200).json({ reviews, count: reviews.length });
+};
+
+// // Get a single review
+// exports.getReview = async (req, res) => {
+//     const { id } = req.params;
+
+//     const review = await UserReview.findById(id)
+//         .populate("reviewer", "name profilePicture")
+//         .populate("reviewedUser", "name profilePicture");
+
+//     if (!review) {
+//         throw new NotFoundError("Review not found");
+//     }
+
+//     res.status(200).json({ review });
+// };
+
+// // Update a review
+// exports.updateReview = async (req, res) => {
+//     const { id } = req.params;
+//     const { rating, comment } = req.body;
+
+//     const review = await UserReview.findById(id);
+
+//     if (!review) {
+//         throw new NotFoundError("Review not found");
+//     }
+
+//     // Check if the user is the reviewer or an admin
+//     if (review.reviewer.toString() !== req.user.userId && req.user.role !== "admin") {
+//         throw new BadRequestError("Not authorized to update this review");
+//     }
+
+//     review.rating = rating || review.rating;
+//     review.comment = comment || review.comment;
+//     review.status = "pending"; // Reset status if changed
+
+//     await review.save();
+
+//     // Update the reviewed user's average rating
+//     await updateUserRating(review.reviewedUser);
+
+//     res.status(200).json({ review });
+// };
+
+// // Delete a review
+// exports.deleteReview = async (req, res) => {
+//     const { id } = req.params;
+
+//     const review = await UserReview.findById(id);
+
+//     if (!review) {
+//         throw new NotFoundError("Review not found");
+//     }
+
+//     // Check if the user is the reviewer or an admin
+//     if (review.reviewer.toString() !== req.user.userId && req.user.role !== "admin") {
+//         throw new BadRequestError("Not authorized to delete this review");
+//     }
+
+//     await review.remove();
+
+//     // Update the reviewed user's average rating
+//     await updateUserRating(review.reviewedUser);
+
+//     res.status(200).json({ message: "Review deleted successfully" });
+// };
+
+// // Add or update reply to a review
+// exports.addReply = async (req, res) => {
+//     const { id } = req.params;
+//     const { message } = req.body;
+
+//     const review = await UserReview.findById(id);
+
+//     if (!review) {
+//         throw new NotFoundError("Review not found");
+//     }
+
+//     // Check if the user is the one being reviewed or an admin
+//     if (review.reviewedUser.toString() !== req.user.userId && req.user.role !== "admin") {
+//         throw new BadRequestError("Not authorized to reply to this review");
+//     }
+
+//     review.reply = {
+//         userId: req.user.userId,
+//         message
+//     };
+
+//     await review.save();
+
+//     res.status(200).json({ review });
+// };
+
+// // Admin update review status
+// exports.updateReviewStatus = async (req, res) => {
+//     const { id } = req.params;
+//     const { status } = req.body;
+
+//     const review = await UserReview.findById(id);
+
+//     if (!review) {
+//         throw new NotFoundError("Review not found");
+//     }
+
+//     review.status = status;
+//     await review.save();
+
+//     // If approved, update the reviewed user's average rating
+//     if (status === "approved") {
+//         await updateUserRating(review.reviewedUser);
+//     }
+
+//     res.status(200).json({ review });
+// };
+
+// // Helper function to update user's average rating
+async function updateUserRating(userId) {
+    const result = await UserReview.aggregate([
+        {
+            $match: {
+                reviewedUser: userId,
+                status: "approved"
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                averageRating: { $avg: "$rating" },
+                reviewCount: { $sum: 1 }
+            }
+        }
+    ]);
+
+    if (result.length > 0) {
+        await User.findByIdAndUpdate({ _id: userId }, {
+            averageRating: result[0].averageRating.toFixed(1),
+            reviewCount: result[0].reviewCount
+        });
+    } else {
+        await User.findByIdAndUpdate({ _id: userId }, {
+            averageRating: 0,
+            reviewCount: 0
+        });
     }
 }

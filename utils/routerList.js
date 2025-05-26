@@ -8,6 +8,7 @@ const userServiceRequestRoutes = require("../routes/userServiceRequestRoutes")
 const reminderRoutes = require("../routes/reminders")
 const eventReviewRoutes = require("../routes/eventReviewRoute")
 const eventOrderRoutes = require("../routes/eventOrderRoute")
+const userReviewsRoutes = require("../routes/userReview.Routes")
 
 // Define route configuration
 exports.routesLists = {
@@ -21,4 +22,5 @@ exports.routesLists = {
     '/api/v1/reminder': reminderRoutes,
     '/api/v1/promotion': promotionOfferRoutes,
     '/api/v1/event-order': eventOrderRoutes,
+    '/api/v1/reviews': userReviewsRoutes,
 };

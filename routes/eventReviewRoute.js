@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getReviewsByEvent, addReview ,replyToReview,approveReview} = require('../controllers/event-details/eventReviewController');
+const { getReviewsByEvent, addReview, replyToReview, approveReview } = require('../controllers/event-details/eventReviewController');
 
 router
     .get('/:eventId', getReviewsByEvent)

@@ -1,6 +1,7 @@
 const ErrorResponse = require('../../utils/errorHandler');
 const cloudinary = require('cloudinary').v2;
 const Event = require('../../models/event-details/Event');
+const Category = require('../../models/event-details/Category');
 const Organizer = require('../../models/event-details/Organizer');
 const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
@@ -307,5 +308,22 @@ exports.getAllCategories = async (req, res) => {
   } catch (error) {
     console.error("Error fetching categories:", error);
     res.status(500).json({ success: false, message: 'Failed to retrieve categories', error });
+  }
+};
+
+exports.getChildCategory = async (req, res) => {
+  try {
+    const { parentId } = req.params;
+ 
+    const parent = await Category.findById(parentId);
+ 
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent category not found' });
+    }
+ 
+    res.status(200).json(parent.subcategories);
+  } catch (error) {
+    console.error('Error fetching child categories:', error);
+    res.status(500).json({ message: 'Failed to fetch child categories' });
   }
 };
