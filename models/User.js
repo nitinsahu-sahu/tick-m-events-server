@@ -22,6 +22,7 @@ const userSchema = new Schema({
     socialLinks: SocialLinksSchema,
     username: {
         type: String,
+        unique: true,
     },
     name: {
         type: String,
@@ -97,7 +98,19 @@ const userSchema = new Schema({
         enum: ['block', 'active', 'inActive'],
         default: 'active'
     },
+    serviceCategory: {
+        type: String,
+    },
+    averageRating: {
+        type: Number,
+        default: 0
+    },
+    reviewCount: {
+        type: Number,
+        default: 0
+    },
     createdAt: { type: Date, default: Date.now },
+    socketId: { type: String }
 }, { timestamps: true })
 
 // Hash password before saving

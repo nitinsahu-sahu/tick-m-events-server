@@ -1,6 +1,7 @@
 const ErrorResponse = require('../../utils/errorHandler');
 const cloudinary = require('cloudinary').v2;
 const Event = require('../../models/event-details/Event');
+const Category = require('../../models/event-details/Category');
 const Organizer = require('../../models/event-details/Organizer');
 const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
@@ -249,4 +250,80 @@ exports.deleteEvent = async (req, res, next) => {
     } catch (err) {
         next(err);
     }
+};
+
+//Event category creation
+exports.addCategory = async (req, res) => {
+  try {
+    const { name, subcategories } = req.body;
+ 
+    if (!name) {
+      return res.status(400).json({ message: 'Category name is required' });
+    }
+ 
+    let category = await Category.findOne({ name });
+ 
+    if (!category) {
+      // Category doesn't exist: create it directly
+      category = new Category({ name, subcategories: subcategories || [] });
+    } else {
+      // Category exists: check for subcategory and nested subcategory duplicates
+      for (const incomingSub of subcategories || []) {
+        let existingSub = category.subcategories.find(sub => sub.name === incomingSub.name);
+ 
+        if (!existingSub) {
+          // Subcategory doesn't exist: push it entirely
+          category.subcategories.push(incomingSub);
+        } else if (incomingSub.subcategories && incomingSub.subcategories.length > 0) {
+          // Subcategory exists: check for nested sub-subcategories
+          const existingSubSubNames = existingSub.subcategories?.map(sc => sc.name) || [];
+ 
+          const newNestedSubs = incomingSub.subcategories.filter(
+            subSub => !existingSubSubNames.includes(subSub.name)
+          );
+ 
+          if (!existingSub.subcategories) {
+            existingSub.subcategories = [];
+          }
+ 
+          existingSub.subcategories.push(...newNestedSubs);
+        }
+      }
+    }
+ 
+    await category.save();
+ 
+    res.status(201).json({ message: 'Category saved/updated successfully', category });
+  } catch (error) {
+    console.error('Error saving category:', error);
+    res.status(500).json({ message: 'Internal Server Error', error });
+  }
+};
+ 
+// Get all categories with subcategories
+exports.getAllCategories = async (req, res) => {
+  try {
+    const categories = await Category.find();
+    res.status(200).json({ success: true, categories });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve categories', error });
+  }
+};
+
+exports.getChildCategory = async (req, res) => {
+  try {
+    const { parentId } = req.params;
+ 
+    const parent = await Category.findById(parentId);
+ 
+    if (!parent) {
+      return res.status(404).json({ message: 'Parent category not found' });
+    }
+ 
+    res.status(200).json(parent.subcategories);
+  } catch (error) {
+    console.error('Error fetching child categories:', error);
+    res.status(500).json({ message: 'Failed to fetch child categories' });
+  }
 };

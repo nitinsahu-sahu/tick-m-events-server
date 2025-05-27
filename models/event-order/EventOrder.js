@@ -21,6 +21,7 @@ const eventOrderSchema = new Schema({
         required: true,
     },
     orderAddress: addressSchema,
+    qrCode: { type: String }, // Base64 image
     tickets: [
         {
             ticketId: { type: String, required: true },
@@ -46,6 +47,18 @@ const eventOrderSchema = new Schema({
     transactionId: {
         type: String,
         required: true
+    },
+    verifyEntry: {
+        type: Boolean,
+        default: false,
+    },
+    ticketCode: {
+        type: String,
+        required: true,
+        unique: true,
+    },
+    entryTime: {  // Add this new field
+        type: Date
     },
     createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });

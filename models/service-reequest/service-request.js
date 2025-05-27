@@ -29,8 +29,8 @@ const serviceRequestSchema = new Schema({
         type: String,
     },
     coverImage: {
-        public_id: { type: String, required: true },
-        url: { type: String, required: true }
+        public_id: { type: String },
+        url: { type: String }
     },
     status: {
         type: String,
