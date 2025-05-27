@@ -98,6 +98,9 @@ const userSchema = new Schema({
         enum: ['block', 'active', 'inActive'],
         default: 'active'
     },
+    serviceCategory: {
+        type: String,
+    },
     averageRating: {
         type: Number,
         default: 0

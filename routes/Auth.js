@@ -2,8 +2,9 @@ const express = require('express')
 const router = express.Router()
 const authController = require("../controllers/Auth")
 const { verifyToken } = require('../middleware/VerifyToken')
-const { signupValidation, loginValidation } = require('../validators/authValidator')
+const { loginValidation } = require('../validators/authValidator')
 const validate = require('../middleware/validateRequest')
+const { getAllServiceProvider } = require('../controllers/search-and-select/searchSelect.controller')
 
 router
     .post("/signup", authController.signup)
@@ -17,6 +18,7 @@ router
     .post("/reset-password", authController.resetPassword)
     .get("/check-auth", verifyToken, authController.checkAuth)
     .get('/logout', authController.logout)
+    .get('/providers', getAllServiceProvider)
 
 
 module.exports = router
