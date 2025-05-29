@@ -253,77 +253,312 @@ exports.deleteEvent = async (req, res, next) => {
 };
 
 //Event category creation
+// exports.addCategory = async (req, res) => {
+//   try {
+//     const { name, subcategories } = req.body;
+ 
+//     if (!name) {
+//       return res.status(400).json({ message: 'Category name is required' });
+//     }
+ 
+//     let category = await Category.findOne({ name });
+ 
+//     if (!category) {
+//       // Category doesn't exist: create it directly
+//       category = new Category({ name, subcategories: subcategories || [] });
+//     } else {
+//       // Category exists: check for subcategory and nested subcategory duplicates
+//       for (const incomingSub of subcategories || []) {
+//         let existingSub = category.subcategories.find(sub => sub.name === incomingSub.name);
+ 
+//         if (!existingSub) {
+//           // Subcategory doesn't exist: push it entirely
+//           category.subcategories.push(incomingSub);
+//         } else if (incomingSub.subcategories && incomingSub.subcategories.length > 0) {
+//           // Subcategory exists: check for nested sub-subcategories
+//           const existingSubSubNames = existingSub.subcategories?.map(sc => sc.name) || [];
+ 
+//           const newNestedSubs = incomingSub.subcategories.filter(
+//             subSub => !existingSubSubNames.includes(subSub.name)
+//           );
+ 
+//           if (!existingSub.subcategories) {
+//             existingSub.subcategories = [];
+//           }
+ 
+//           existingSub.subcategories.push(...newNestedSubs);
+//         }
+//       }
+//     }
+ 
+//     await category.save();
+ 
+//     res.status(201).json({ message: 'Category saved/updated successfully', category });
+//   } catch (error) {
+//     console.error('Error saving category:', error);
+//     res.status(500).json({ message: 'Internal Server Error', error });
+//   }
+// };
+ 
 exports.addCategory = async (req, res) => {
-  try {
-    const { name, subcategories } = req.body;
- 
-    if (!name) {
-      return res.status(400).json({ message: 'Category name is required' });
+    try {
+        const { name, subcategories } = req.body;
+        const { cover } = req.files;
+
+        if (!name) {
+            return res.status(400).json({ message: 'Category name is required' });
+        }
+
+        let category = await Category.findOne({ name });
+
+        if (!category) {
+            // If no existing category, cover image is required
+            if (!cover) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Please upload a category image"
+                });
+            }
+
+            // Upload cover image
+            const result = await cloudinary.uploader.upload(cover.tempFilePath, {
+                folder: 'event_category',
+                width: 400,
+                crop: "scale"
+            });
+
+            // Create new category
+            category = new Category({
+                name,
+                cover: {
+                    public_id: result.public_id,
+                    url: result.secure_url
+                },
+                subcategories: subcategories || []
+            });
+
+        } else {
+            // If category exists, update subcategories only (do not touch cover)
+            for (const incomingSub of subcategories || []) {
+                let existingSub = category.subcategories.find(sub => sub.name === incomingSub.name);
+
+                if (!existingSub) {
+                    // Subcategory doesn't exist: push it
+                    category.subcategories.push(incomingSub);
+                } else if (incomingSub.subcategories && incomingSub.subcategories.length > 0) {
+                    // Nested sub-subcategories merge
+                    const existingSubSubNames = existingSub.subcategories?.map(sc => sc.name) || [];
+
+                    const newNestedSubs = incomingSub.subcategories.filter(
+                        subSub => !existingSubSubNames.includes(subSub.name)
+                    );
+
+                    if (!existingSub.subcategories) {
+                        existingSub.subcategories = [];
+                    }
+
+                    existingSub.subcategories.push(...newNestedSubs);
+                }
+            }
+        }
+
+        await category.save();
+
+        res.status(201).json({
+            message: 'Category saved/updated successfully',
+            category
+        });
+
+    } catch (error) {
+        console.error('Error saving category:', error);
+        res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
- 
-    let category = await Category.findOne({ name });
- 
+};
+
+exports.getAllCategories = async (req, res) => {
+  try {
+    // First fetch all categories with their subcategories
+    const categories = await Category.find({});
+    
+    // Create an array to hold categories with their events
+    const categoriesWithEvents = [];
+    
+    // For each category, find matching events
+    for (const category of categories) {
+      // Get all category names to search for (parent + subcategories)
+      const categoryNames = getAllCategoryNames(category);
+      
+      // Find events that match any of these category names
+      const events = await Event.find({
+        category: { $in: categoryNames },
+        isDelete: false // assuming you don't want deleted events
+      });
+      
+      // Add category with its events to the result array
+      categoriesWithEvents.push({
+        ...category.toObject(),
+        events
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      categories: categoriesWithEvents,
+      message: "Category fetch successfully",
+
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+// Helper function to get all category names (parent + subcategories)
+function getAllCategoryNames(category) {
+  const names = [category.name];
+  
+  // Recursively get all subcategory names
+  function getSubcategoryNames(subcategories) {
+    for (const subcategory of subcategories) {
+      names.push(subcategory.name);
+      if (subcategory.subcategories && subcategory.subcategories.length > 0) {
+        getSubcategoryNames(subcategory.subcategories);
+      }
+    }
+  }
+  
+  if (category.subcategories && category.subcategories.length > 0) {
+    getSubcategoryNames(category.subcategories);
+  }
+  
+  return names;
+}
+
+exports.getCategoryById = async (req, res) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    
     if (!category) {
-      // Category doesn't exist: create it directly
-      category = new Category({ name, subcategories: subcategories || [] });
-    } else {
-      // Category exists: check for subcategory and nested subcategory duplicates
-      for (const incomingSub of subcategories || []) {
-        let existingSub = category.subcategories.find(sub => sub.name === incomingSub.name);
- 
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      category,
+    });
+  } catch (error) {
+    console.error("Error fetching category:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+exports.updateCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, subcategories } = req.body;
+    const { cover } = req.files || {};
+
+    let category = await Category.findById(id);
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    // Update name if provided
+    if (name) category.name = name;
+
+    // Update cover image if uploaded
+    if (cover) {
+      // Delete old image if it exists
+      if (category.cover?.public_id) {
+        await cloudinary.uploader.destroy(category.cover.public_id);
+      }
+
+      // Upload new image
+      const result = await cloudinary.uploader.upload(cover.tempFilePath, {
+        folder: "event_category",
+        width: 400,
+        crop: "scale",
+      });
+
+      category.cover = {
+        public_id: result.public_id,
+        url: result.secure_url,
+      };
+    }
+
+    // Update subcategories (same logic as addCategory)
+    if (subcategories) {
+      for (const incomingSub of subcategories) {
+        let existingSub = category.subcategories.find(
+          (sub) => sub.name === incomingSub.name
+        );
+
         if (!existingSub) {
-          // Subcategory doesn't exist: push it entirely
           category.subcategories.push(incomingSub);
-        } else if (incomingSub.subcategories && incomingSub.subcategories.length > 0) {
-          // Subcategory exists: check for nested sub-subcategories
-          const existingSubSubNames = existingSub.subcategories?.map(sc => sc.name) || [];
- 
+        } else if (incomingSub.subcategories?.length > 0) {
+          const existingSubSubNames = existingSub.subcategories?.map((sc) => sc.name) || [];
           const newNestedSubs = incomingSub.subcategories.filter(
-            subSub => !existingSubSubNames.includes(subSub.name)
+            (subSub) => !existingSubSubNames.includes(subSub.name)
           );
- 
-          if (!existingSub.subcategories) {
-            existingSub.subcategories = [];
-          }
- 
           existingSub.subcategories.push(...newNestedSubs);
         }
       }
     }
- 
+
     await category.save();
- 
-    res.status(201).json({ message: 'Category saved/updated successfully', category });
+
+    res.status(200).json({
+      success: true,
+      message: "Category updated successfully",
+      category,
+    });
   } catch (error) {
-    console.error('Error saving category:', error);
-    res.status(500).json({ message: 'Internal Server Error', error });
-  }
-};
- 
-// Get all categories with subcategories
-exports.getAllCategories = async (req, res) => {
-  try {
-    const categories = await Category.find();
-    res.status(200).json({ success: true, categories });
-  } catch (error) {
-    console.error("Error fetching categories:", error);
-    res.status(500).json({ success: false, message: 'Failed to retrieve categories', error });
+    console.error("Error updating category:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 };
 
-exports.getChildCategory = async (req, res) => {
+exports.deleteCategory = async (req, res) => {
   try {
-    const { parentId } = req.params;
- 
-    const parent = await Category.findById(parentId);
- 
-    if (!parent) {
-      return res.status(404).json({ message: 'Parent category not found' });
+    const category = await Category.findByIdAndDelete(req.params.id);
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
     }
- 
-    res.status(200).json(parent.subcategories);
+
+    // Delete image from Cloudinary
+    await cloudinary.uploader.destroy(category.cover.public_id);
+
+    res.status(200).json({
+      success: true,
+      message: "Category deleted successfully",
+    });
   } catch (error) {
-    console.error('Error fetching child categories:', error);
-    res.status(500).json({ message: 'Failed to fetch child categories' });
+    console.error("Error deleting category:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 };

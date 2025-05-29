@@ -6,7 +6,7 @@ const SubcategorySchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
-   subcategories: [this] 
+  subcategories: [this]
 });
 
 const CategorySchema = new mongoose.Schema({
@@ -15,6 +15,10 @@ const CategorySchema = new mongoose.Schema({
     required: true,
     trim: true,
     unique: true
+  },
+  cover: {
+    public_id: { type: String, required: true },
+    url: { type: String, required: true }
   },
   subcategories: [SubcategorySchema],
 }, { timestamps: true });

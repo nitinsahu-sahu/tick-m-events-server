@@ -164,9 +164,6 @@ exports.updateUser = async (req, res) => {
     try {
         const { id } = req.params;
         let updateData = { ...req.body };
-        console.log('====================================');
-        console.log(req.body);
-        console.log('====================================');
         const { socialLinks } = updateData
         const { instagram, facebook, linkedin, tiktok } = JSON.parse(socialLinks)
 

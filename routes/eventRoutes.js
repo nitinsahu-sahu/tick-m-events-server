@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, deleteEvent, addCategory, getChildCategory } = require('../controllers/event-details/eventController');
+const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, updateCategory, deleteCategory, deleteEvent, addCategory, getCategoryById } = require('../controllers/event-details/eventController');
 const { verifyToken } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
 const { createEventCustomization } = require('../controllers/event-details/customizationController');
@@ -12,7 +12,9 @@ router.route('/')
 
 router.route('/add-category').post(addCategory);
 router.route('/allCategory').get(getAllCategories);
-router.route('/children/:parentId').get(getChildCategory);
+router.route('/category/:id').get(getCategoryById);
+router.route('/category/:id').put(updateCategory);
+router.route('/category/:id').delete(deleteCategory);
 
 router.route('/:id')
   .get(getEvent)
