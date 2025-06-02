@@ -10,119 +10,245 @@ const { createOrderEmailTemplate } = require('../../utils/Emails-template');
 const QRCode = require('qrcode');
 
 // Create a new order
+// exports.createOrder = async (req, res) => {
+//   const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
+//   const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
+//   const transactionId = uuidToNumeric(uuidv4());
+//   const ticketCode = uuidToSixNumeric(uuidv4())
+
+//   try {
+//     const { eventId, orderAddress, tickets, totalAmount, paymentMethod } = req.body;
+//     const ticketList = JSON.parse(tickets);
+//     const parsedOrderAddress = JSON.parse(orderAddress);
+//     const userEmail = parsedOrderAddress.email; // Extract email from order address
+//     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
+//     // Validate required fields
+//     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
+//       return res.status(400).json({ message: 'Missing required fields' });
+//     }
+
+//     // Validate tickets array
+//     if (!Array.isArray(ticketList.tickets) || ticketList.tickets.length === 0) {
+//       return res.status(400).json({ message: 'At least one ticket is required' });
+//     }
+
+//     // Start a transaction session
+//     const session = await mongoose.startSession();
+//     session.startTransaction();
+
+//     try {
+//       // First find the ticket configuration for this event
+//       const ticketConfig = await TicketConfiguration.findOne({
+//         eventId: eventId
+//       }).session(session);
+
+//       if (!ticketConfig) {
+//         throw new Error(`No ticket configuration found for event ID: ${eventId}`);
+//       }
+
+//       // Process each ticket in the order
+//       for (const orderedTicket of ticketList.tickets) {
+//         const ticketType = ticketConfig.tickets.find(
+//           t => t.id === orderedTicket.ticketId || t._id.toString() === orderedTicket.ticketId
+//         );
+
+//         if (!ticketType) {
+//           throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
+//         }
+
+//         const availableTickets = parseInt(ticketType.totalTickets || "0");
+//         const orderedQuantity = parseInt(orderedTicket.quantity || "0");
+
+//         if (availableTickets < orderedQuantity) {
+//           throw new Error(`Not enough tickets available for ${ticketType.ticketType}`);
+//         }
+
+//         ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
+//       }
+
+//       await ticketConfig.save({ session });
+
+//       // Create the new order
+//       const newOrder = new EventOrder({
+//         eventId,
+//         userId: req.user._id,
+//         orderAddress: parsedOrderAddress,
+//         tickets: ticketList.tickets,
+//         totalAmount,
+//         paymentMethod,
+//         transactionId,
+//         ticketCode,
+//         qrCode: qrImage
+//       });
+
+//       const savedOrder = await newOrder.save({ session });
+
+//       // Commit the transaction
+//       await session.commitTransaction();
+//       session.endSession();
+
+//       // Send confirmation email
+//       try {
+//         const emailHtml = createOrderEmailTemplate(savedOrder, userEmail);
+//         // Await the sendMail function directly
+//         await sendMail(
+//           userEmail,
+//           'Your Ticket Purchase Confirmation',
+//           emailHtml
+//         );
+
+//       } catch (emailError) {
+//         console.error('Failed to send confirmation email:', emailError);
+//         // Don't fail the order if email fails
+//       }
+
+//       res.status(201).json({
+//         success: true,
+//         savedOrder,
+//         message: "Tickets booked successfully"
+//       });
+
+//     } catch (error) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       throw error;
+//     }
+
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error processing order',
+//       error: error.message
+//     });
+//   }
+// };
 exports.createOrder = async (req, res) => {
   const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
   const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
   const transactionId = uuidToNumeric(uuidv4());
-  const ticketCode = uuidToSixNumeric(uuidv4())
+  const ticketCode = uuidToSixNumeric(uuidv4());
+
+  const session = await mongoose.startSession();
 
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod } = req.body;
-    const ticketList = JSON.parse(tickets);
-    const parsedOrderAddress = JSON.parse(orderAddress);
-    const userEmail = parsedOrderAddress.email; // Extract email from order address
-    const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
-    // Validate required fields
+
+    // Input validation
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    // Validate tickets array
-    if (!Array.isArray(ticketList.tickets) || ticketList.tickets.length === 0) {
+    const ticketList = JSON.parse(tickets);
+    const parsedOrderAddress = JSON.parse(orderAddress);
+    const userEmail = parsedOrderAddress.email;
+
+    if (!Array.isArray(ticketList?.tickets) || ticketList.tickets.length === 0) {
       return res.status(400).json({ message: 'At least one ticket is required' });
     }
 
-    // Start a transaction session
-    const session = await mongoose.startSession();
+    // Start transaction
     session.startTransaction();
 
-    try {
-      // First find the ticket configuration for this event
-      const ticketConfig = await TicketConfiguration.findOne({
-        eventId: eventId
-      }).session(session);
+    // 1. First update the event's sold tickets count
+    const totalSoldTickets = ticketList.tickets.reduce((sum, ticket) => {
+      return sum + (Number(ticket.quantity) || 0);
+    }, 0);
 
-      if (!ticketConfig) {
-        throw new Error(`No ticket configuration found for event ID: ${eventId}`);
-      }
+    const updatedEvent = await Event.findByIdAndUpdate(
+      eventId,
+      { $inc: { soldTicket: totalSoldTickets } },
+      { new: true, session }
+    );
 
-      // Process each ticket in the order
-      for (const orderedTicket of ticketList.tickets) {
-        const ticketType = ticketConfig.tickets.find(
-          t => t.id === orderedTicket.ticketId || t._id.toString() === orderedTicket.ticketId
-        );
-
-        if (!ticketType) {
-          throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
-        }
-
-        const availableTickets = parseInt(ticketType.totalTickets || "0");
-        const orderedQuantity = parseInt(orderedTicket.quantity || "0");
-
-        if (availableTickets < orderedQuantity) {
-          throw new Error(`Not enough tickets available for ${ticketType.ticketType}`);
-        }
-
-        ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
-      }
-
-      await ticketConfig.save({ session });
-
-      // Create the new order
-      const newOrder = new EventOrder({
-        eventId,
-        userId: req.user._id,
-        orderAddress: parsedOrderAddress,
-        tickets: ticketList.tickets,
-        totalAmount,
-        paymentMethod,
-        transactionId,
-        ticketCode,
-        qrCode: qrImage
-      });
-
-      const savedOrder = await newOrder.save({ session });
-
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
-
-      // Send confirmation email
-      try {
-        const emailHtml = createOrderEmailTemplate(savedOrder, userEmail);
-        // Await the sendMail function directly
-        await sendMail(
-          userEmail,
-          'Your Ticket Purchase Confirmation',
-          emailHtml
-        );
-
-      } catch (emailError) {
-        console.error('Failed to send confirmation email:', emailError);
-        // Don't fail the order if email fails
-      }
-
-      res.status(201).json({
-        success: true,
-        savedOrder,
-        message: "Tickets booked successfully"
-      });
-
-    } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
-      throw error;
+    if (!updatedEvent) {
+      throw new Error('Event not found');
     }
 
+    // 2. Update ticket configuration
+    const ticketConfig = await TicketConfiguration.findOne({
+      eventId: eventId
+    }).session(session);
+
+    if (!ticketConfig) {
+      throw new Error(`No ticket configuration found for event ID: ${eventId}`);
+    }
+
+    // Process each ticket
+    for (const orderedTicket of ticketList.tickets) {
+      const ticketType = ticketConfig.tickets.find(
+        t => t.id === orderedTicket.ticketId || t._id?.toString() === orderedTicket.ticketId
+      );
+
+      if (!ticketType) {
+        throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
+      }
+
+      const availableTickets = Number(ticketType.totalTickets) || 0;
+      const orderedQuantity = Number(orderedTicket.quantity) || 0;
+
+      if (availableTickets < orderedQuantity) {
+        throw new Error(`Not enough tickets available for ${ticketType.ticketType}`);
+      }
+
+      ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
+    }
+
+    await ticketConfig.save({ session });
+
+    // Generate QR code
+    const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
+
+    // Create order
+    const newOrder = new EventOrder({
+      eventId,
+      userId: req.user._id,
+      orderAddress: parsedOrderAddress,
+      tickets: ticketList.tickets,
+      totalAmount,
+      paymentMethod,
+      transactionId,
+      ticketCode,
+      qrCode: qrImage
+    });
+
+    const savedOrder = await newOrder.save({ session });
+
+    // Commit transaction if everything succeeded
+    await session.commitTransaction();
+
+    // Send confirmation email (don't fail if email fails)
+    try {
+      const emailHtml = createOrderEmailTemplate(savedOrder, userEmail);
+      await sendMail(
+        userEmail,
+        'Your Ticket Purchase Confirmation',
+        emailHtml
+      );
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+    }
+
+    res.status(201).json({
+      success: true,
+      savedOrder,
+      message: "Tickets booked successfully"
+    });
+
   } catch (error) {
+    // Abort transaction on error
+    await session.abortTransaction();
+    console.error('Order processing error:', error);
+
     res.status(500).json({
       success: false,
       message: 'Error processing order',
       error: error.message
     });
+  } finally {
+    // End session in all cases
+    session.endSession();
   }
 };
-
 // Get order by ID
 exports.getOrderById = async (req, res) => {
 

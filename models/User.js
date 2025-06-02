@@ -88,6 +88,10 @@ const userSchema = new Schema({
         type: Boolean,
         default: false
     },
+    certified: {
+        type: Boolean,
+        default: false
+    },
     role: {
         type: String,
         enum: ['organizer', 'admin', 'participant', 'provider'],
