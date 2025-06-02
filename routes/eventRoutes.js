@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, updateCategory, deleteCategory, deleteEvent, addCategory, getCategoryById } = require('../controllers/event-details/eventController');
+const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, updateCategory, deleteCategory, deleteEvent, addCategory, getCategoryById, updateEventPageCostomization } = require('../controllers/event-details/eventController');
 const { verifyToken } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
 const { createEventCustomization } = require('../controllers/event-details/customizationController');
@@ -20,6 +20,9 @@ router.route('/:id')
   .get(getEvent)
   .patch(updateEvent)
   .delete(deleteEvent);
+
+router.route('/eventPageCustomization/:id')
+  .patch(updateEventPageCostomization)
 
 // Event ticket Configuration Routes
 router.route('/tickets/:eventId')

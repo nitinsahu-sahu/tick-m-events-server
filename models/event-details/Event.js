@@ -18,6 +18,8 @@ const eventSchema = new Schema({
     url: { type: String, required: true }
   },
   location: { type: String, required: true },
+  ticketQuantity: { type: String },
+  soldTicket: { type: Number },
   format: {
     type: String,
     required: true,
@@ -28,7 +30,7 @@ const eventSchema = new Schema({
     ref: "User",
     required: true,
   },
-  
+
   isDelete: {
     type: Boolean,
     default: false

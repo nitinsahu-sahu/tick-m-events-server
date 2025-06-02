@@ -11,22 +11,25 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
     try {
         const currentDate = new Date();
         const userId = req.user?._id; // Assuming user is authenticated and user data is in req.user
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1; // Months are 0-indexed in JS
 
         // 1. Get upcoming events (events with date in future)
-        const upcomingEvents = await Event.find({ 
+        const upcomingEvents = await Event.find({
             isDelete: { $ne: true },
             date: { $gte: currentDate.toISOString().split('T')[0] } // Date is today or in future
         })
-        .sort({ date: 1 }) // Sort by date ascending (earliest first)
-        .limit(10) // Limit to 10 upcoming events
-        .lean();
+            .sort({ date: 1 }) // Sort by date ascending (earliest first)
+            .limit(10) // Limit to 10 upcoming events
+            .lean();
+
 
         // 2. Get popular trending events
         const popularEvents = await Event.aggregate([
-            { 
-                $match: { 
+            {
+                $match: {
                     isDelete: { $ne: true },
-                } 
+                }
             },
             {
                 $lookup: {
@@ -58,11 +61,11 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
             },
             { $sort: { popularityScore: -1 } }, // Sort by popularity descending
             { $limit: 10 }, // Limit to 10 popular events
-            { 
-                $project: { 
+            {
+                $project: {
                     ticketData: 0,
                     reviews: 0
-                } 
+                }
             }
         ]);
 
@@ -71,7 +74,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         if (userId) {
             // Get user's past event preferences (categories they've interacted with)
             const userPreferences = await getEventPreferences(userId);
-            
+
             if (userPreferences && userPreferences.length > 0) {
                 recommendedEvents = await Event.aggregate([
                     {
@@ -95,11 +98,13 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
                             reviewCount: { $size: "$reviews" }
                         }
                     },
-                    { $sort: { 
-                        avgRating: -1, 
-                        reviewCount: -1,
-                        date: 1 
-                    }},
+                    {
+                        $sort: {
+                            avgRating: -1,
+                            reviewCount: -1,
+                            date: 1
+                        }
+                    },
                     { $limit: 10 },
                     { $project: { reviews: 0 } }
                 ]);
@@ -108,13 +113,13 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
 
         // If no personalized recommendations, fall back to recently added events
         if (recommendedEvents.length === 0) {
-            recommendedEvents = await Event.find({ 
+            recommendedEvents = await Event.find({
                 isDelete: { $ne: true },
                 date: { $gte: currentDate.toISOString().split('T')[0] }
             })
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean();
+                .sort({ createdAt: -1 })
+                .limit(10)
+                .lean();
         }
 
         // Helper function to get full event details
@@ -139,6 +144,43 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
             }));
         };
 
+        //4. Find events within this month
+         const currentDateFormatted = currentDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
+        const currentTimeFormatted = currentDate.toTimeString().substring(0, 5); // "HH:mm"
+        
+        // Find events within this month
+        const currentMonthFormatted = String(currentMonth).padStart(2, '0');
+        const currentMonthEvents = await Event.find({
+            date: { $regex: `^${currentYear}-${currentMonthFormatted}` },
+            isDelete: false // Exclude deleted events
+        });
+
+        // Filter events that are either:
+        // 1. In the future (date after today), OR
+        // 2. Today but time hasn't passed yet
+        const filteredEvents = currentMonthEvents.filter(event => {
+            const eventDate = event.date;
+            const eventTime = event.time;
+            
+            // If event date is in the future
+            if (eventDate > currentDateFormatted) {
+                return true;
+            }
+            // If event date is today and time hasn't passed
+            if (eventDate === currentDateFormatted && eventTime >= currentTimeFormatted) {
+                return true;
+            }
+            // Otherwise exclude
+            return false;
+        });
+
+        // Sort events by date then time (ascending)
+        filteredEvents.sort((a, b) => {
+            const dateCompare = a.date.localeCompare(b.date);
+            if (dateCompare !== 0) return dateCompare;
+            return a.time.localeCompare(b.time);
+        });
+
         const upcomingWithDetails = await getEventDetails(upcomingEvents);
         const popularWithDetails = await getEventDetails(popularEvents);
         const recommendedWithDetails = await getEventDetails(recommendedEvents);
@@ -148,7 +190,8 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
             message: "Events fetched successfully",
             upcomingEvents: upcomingWithDetails,
             popularEvents: popularWithDetails,
-            recommendedEvents: recommendedWithDetails
+            recommendedEvents: recommendedWithDetails,
+            latestEvents: filteredEvents
         });
 
     } catch (error) {

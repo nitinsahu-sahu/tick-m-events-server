@@ -1,5 +1,6 @@
 // controllers/ticketController.js
 const TicketConfiguration = require('../../models/event-details/Ticket');
+const Event = require('../../models/event-details/Event');
 
 // Create a new ticket configuration
 exports.createTicketConfiguration = async (req, res) => {
@@ -22,7 +23,7 @@ exports.createTicketConfiguration = async (req, res) => {
   try {
     const { eventId } = req.params
     const ticketList = JSON.parse(tickets)
-    const refundPolicy= {
+    const refundPolicy = {
       fullRefund: fullRefundCheck,
       fullRefundDaysBefore: fullRefundDaysBefore,
       partialRefund: partialRefundCheck,
@@ -30,9 +31,19 @@ exports.createTicketConfiguration = async (req, res) => {
       noRefundAfterDate: noRefundAfterDateCheck,
       noRefundDate: noRefundDate
     }
+    const ticketQuantity = ticketList.reduce((sum, ticket) => {
+      // Remove commas and convert to number
+      const ticketCount = parseInt(ticket.totalTickets.replace(/,/g, ''), 10);
+      return sum + (isNaN(ticketCount) ? 0 : ticketCount);
+    }, 0);
+    await Event.findByIdAndUpdate(
+      { _id: eventId },
+      { ticketQuantity },
+      { new: true }
+    );
     const newConfig = new TicketConfiguration({
       eventId,
-      tickets:ticketList,
+      tickets: ticketList,
       purchaseDeadlineDate,
       isPurchaseDeadlineEnabled,
       paymentMethods,
