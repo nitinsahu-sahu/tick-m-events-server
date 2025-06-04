@@ -31,8 +31,8 @@ exports.fetchTicketType = async (req, res) => {
 };
 
 exports.createTicketType = async (req, res) => {
-  const { name, quantity, ticketDescription, price, validity, optionList } = req.body
-  const options = JSON.parse(optionList)
+  const { name, quantity, ticketDescription, price, validity, options } = req.body
+
   try {
     await TicketType.create({
       name,
@@ -48,7 +48,10 @@ exports.createTicketType = async (req, res) => {
       message: "Ticket Type created successfully",
     });
   } catch (err) {
+  console.log(err);
+
     res.status(500).json({
+      
       message: "An error occurred while creating the ticket type",
       error: err.message
     });
