@@ -13,6 +13,14 @@ const eventSchema = new Schema({
     type: String,
     required: true,
   },
+  averageRating: {
+    type: Number,
+    default: 0
+  },
+  reviewCount: {
+    type: Number,
+    default: 0
+  },
   coverImage: {
     public_id: { type: String, required: true },
     url: { type: String, required: true }

@@ -7,6 +7,7 @@ const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
 const Visibility = require('../../models/event-details/Visibility');
 const eventReview = require('../../models/event-details/eventReview');
+const EventOrders = require('../../models/event-order/EventOrder');
 const moment = require('moment');
 
 // Create Event
@@ -120,18 +121,29 @@ exports.getEvents = async (req, res, next) => {
 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [organizer, customization, tickets, visibility] = await Promise.all([
+      const [organizer, customization, tickets, order,review, visibility] = await Promise.all([
         Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+        EventOrders.find({ eventId: event._id })
+          .select('-qrCode -orderAddress -updatedAt -__v')
+          .populate({
+            path: 'userId',
+            select: 'name email', // Only get the name field from User
+            model: 'User' // Replace with your actual User model name
+          })
+          .lean(),
+        eventReview.find({ eventId: event._id , status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
         Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean()
       ]);
 
       return {
         ...event,
+        order,
         organizer,
         customization,
         tickets,
+        review,
         visibility
       };
     }));
@@ -363,8 +375,7 @@ exports.getAllCategories = async (req, res) => {
     // For each category, find matching events
     for (const category of categories) {
       // Get all category names to search for (parent + subcategories)
-      const categoryNames = getAllCategoryNames(category);
-
+      const categoryNames = getAllCategoryIds(category);
       // Find events that match any of these category names
       const events = await Event.find({
         category: { $in: categoryNames },
@@ -394,24 +405,25 @@ exports.getAllCategories = async (req, res) => {
 };
 
 // Helper function to get all category names (parent + subcategories)
-function getAllCategoryNames(category) {
-  const names = [category.name];
+// Helper function to get all category IDs (parent + subcategories)
+function getAllCategoryIds(category) {
+  const ids = [category._id.toString()]; // Convert ObjectId to string
 
-  // Recursively get all subcategory names
-  function getSubcategoryNames(subcategories) {
+  // Recursively get all subcategory IDs
+  function getSubcategoryIds(subcategories) {
     for (const subcategory of subcategories) {
-      names.push(subcategory.name);
+      ids.push(subcategory._id.toString());
       if (subcategory.subcategories && subcategory.subcategories.length > 0) {
-        getSubcategoryNames(subcategory.subcategories);
+        getSubcategoryIds(subcategory.subcategories);
       }
     }
   }
 
   if (category.subcategories && category.subcategories.length > 0) {
-    getSubcategoryNames(category.subcategories);
+    getSubcategoryIds(category.subcategories);
   }
 
-  return names;
+  return ids;
 }
 
 exports.getCategoryById = async (req, res) => {

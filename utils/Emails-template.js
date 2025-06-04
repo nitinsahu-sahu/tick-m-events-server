@@ -71,3 +71,17 @@ exports.createOrderEmailTemplate = async (order, userEmail) => {
     </html>
   `;
 };
+
+exports.createWithdrawalOTPTemplate = (otp) => {
+  return `
+    <div style="font-family: Arial, sans-serif;">
+      <h2>Withdrawal Verification Code</h2>
+      <p>Hello,</p>
+      <p>Your OTP code for withdrawal is:</p>
+      <h3 style="color: #007bff;">${otp}</h3>
+      <p>This code is valid for 10 minutes.</p>
+      <br/>
+      <p>Thank you,<br/>Support Team</p>
+    </div>
+  `;
+};
