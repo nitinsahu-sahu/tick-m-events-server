@@ -2,15 +2,18 @@ const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
 const ticketTypeSchema = new Schema({
-  eventName: {
+  name: {
     type: String,
-    required: [true, "Event Name is required"],
+    required: [true, "Ticket Name is required"],
     trim: true,
   },
-  availableQuantity: {
-    type: Number,
+  quantity: {
+    type: String,
     required: [true, "Available Quantity is required"],
     min: [1, "Minimum quantity should be 1"]
+  },
+  sold: {
+    type: Number
   },
   ticketDescription: {
     type: String,
@@ -18,9 +21,8 @@ const ticketTypeSchema = new Schema({
     required: [true, "Ticket Description is required"],
   },
   price: {
-    type: Number,
+    type: String,
     required: [true, "Price is required"],
-    min: [0, "Price must be non-negative"],
   },
   validity: {
     type: Date,

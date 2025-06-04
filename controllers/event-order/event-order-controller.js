@@ -8,120 +8,8 @@ const mongoose = require("mongoose");
 const { sendMail } = require('../../utils/Emails');
 const { createOrderEmailTemplate } = require('../../utils/Emails-template');
 const QRCode = require('qrcode');
+const TicketType = require("../../models/TicketType");
 
-// Create a new order
-// exports.createOrder = async (req, res) => {
-//   const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
-//   const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
-//   const transactionId = uuidToNumeric(uuidv4());
-//   const ticketCode = uuidToSixNumeric(uuidv4())
-
-//   try {
-//     const { eventId, orderAddress, tickets, totalAmount, paymentMethod } = req.body;
-//     const ticketList = JSON.parse(tickets);
-//     const parsedOrderAddress = JSON.parse(orderAddress);
-//     const userEmail = parsedOrderAddress.email; // Extract email from order address
-//     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
-//     // Validate required fields
-//     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
-//       return res.status(400).json({ message: 'Missing required fields' });
-//     }
-
-//     // Validate tickets array
-//     if (!Array.isArray(ticketList.tickets) || ticketList.tickets.length === 0) {
-//       return res.status(400).json({ message: 'At least one ticket is required' });
-//     }
-
-//     // Start a transaction session
-//     const session = await mongoose.startSession();
-//     session.startTransaction();
-
-//     try {
-//       // First find the ticket configuration for this event
-//       const ticketConfig = await TicketConfiguration.findOne({
-//         eventId: eventId
-//       }).session(session);
-
-//       if (!ticketConfig) {
-//         throw new Error(`No ticket configuration found for event ID: ${eventId}`);
-//       }
-
-//       // Process each ticket in the order
-//       for (const orderedTicket of ticketList.tickets) {
-//         const ticketType = ticketConfig.tickets.find(
-//           t => t.id === orderedTicket.ticketId || t._id.toString() === orderedTicket.ticketId
-//         );
-
-//         if (!ticketType) {
-//           throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
-//         }
-
-//         const availableTickets = parseInt(ticketType.totalTickets || "0");
-//         const orderedQuantity = parseInt(orderedTicket.quantity || "0");
-
-//         if (availableTickets < orderedQuantity) {
-//           throw new Error(`Not enough tickets available for ${ticketType.ticketType}`);
-//         }
-
-//         ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
-//       }
-
-//       await ticketConfig.save({ session });
-
-//       // Create the new order
-//       const newOrder = new EventOrder({
-//         eventId,
-//         userId: req.user._id,
-//         orderAddress: parsedOrderAddress,
-//         tickets: ticketList.tickets,
-//         totalAmount,
-//         paymentMethod,
-//         transactionId,
-//         ticketCode,
-//         qrCode: qrImage
-//       });
-
-//       const savedOrder = await newOrder.save({ session });
-
-//       // Commit the transaction
-//       await session.commitTransaction();
-//       session.endSession();
-
-//       // Send confirmation email
-//       try {
-//         const emailHtml = createOrderEmailTemplate(savedOrder, userEmail);
-//         // Await the sendMail function directly
-//         await sendMail(
-//           userEmail,
-//           'Your Ticket Purchase Confirmation',
-//           emailHtml
-//         );
-
-//       } catch (emailError) {
-//         console.error('Failed to send confirmation email:', emailError);
-//         // Don't fail the order if email fails
-//       }
-
-//       res.status(201).json({
-//         success: true,
-//         savedOrder,
-//         message: "Tickets booked successfully"
-//       });
-
-//     } catch (error) {
-//       await session.abortTransaction();
-//       session.endSession();
-//       throw error;
-//     }
-
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: 'Error processing order',
-//       error: error.message
-//     });
-//   }
-// };
 exports.createOrder = async (req, res) => {
   const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
   const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
@@ -141,7 +29,6 @@ exports.createOrder = async (req, res) => {
     const ticketList = JSON.parse(tickets);
     const parsedOrderAddress = JSON.parse(orderAddress);
     const userEmail = parsedOrderAddress.email;
-
     if (!Array.isArray(ticketList?.tickets) || ticketList.tickets.length === 0) {
       return res.status(400).json({ message: 'At least one ticket is required' });
     }
@@ -159,6 +46,9 @@ exports.createOrder = async (req, res) => {
       { $inc: { soldTicket: totalSoldTickets } },
       { new: true, session }
     );
+
+
+
 
     if (!updatedEvent) {
       throw new Error('Event not found');
@@ -186,11 +76,35 @@ exports.createOrder = async (req, res) => {
       const availableTickets = Number(ticketType.totalTickets) || 0;
       const orderedQuantity = Number(orderedTicket.quantity) || 0;
 
-      if (availableTickets < orderedQuantity) {
-        throw new Error(`Not enough tickets available for ${ticketType.ticketType}`);
-      }
+      // if (availableTickets < orderedQuantity) {
+      //   throw new Error(`Not enough tickets available for ${ticketType.ticketType}`);
+      // }
 
       ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
+    }
+
+    // Process each ticket
+    // Process each ticket
+    for (const orderedTicket of ticketList.tickets) {
+      const orderedQuantity = Number(orderedTicket.quantity) || 0;
+
+      try {
+        const updatedTicket = await TicketType.findByIdAndUpdate(
+          orderedTicket.ticketId,
+          { $inc: { sold: orderedQuantity } },
+          { new: true, session }
+        );
+
+        if (!updatedTicket) {
+          console.error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
+          throw new Error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
+        }
+
+        console.log('Updated ticket sold count:', updatedTicket.sold);
+      } catch (updateError) {
+        console.error('Error updating ticket sold count:', updateError);
+        throw updateError; // This will trigger transaction rollback
+      }
     }
 
     await ticketConfig.save({ session });

@@ -36,7 +36,7 @@ const eventOrderSchema = new Schema({
     },
     paymentStatus: {
         type: String,
-        enum: ['pending', 'completed', 'failed'],
+        enum: ['pending', 'confirmed', 'denied'],
         default: 'pending'
     },
     paymentMethod: {
