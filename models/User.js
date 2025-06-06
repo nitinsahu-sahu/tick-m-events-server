@@ -109,10 +109,6 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
-    reviewCount: {
-        type: Number,
-        default: 0
-    },
     createdAt: { type: Date, default: Date.now },
     socketId: { type: String }
 }, { timestamps: true })
