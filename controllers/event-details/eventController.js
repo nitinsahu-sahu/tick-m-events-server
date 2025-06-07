@@ -121,7 +121,7 @@ exports.getEvents = async (req, res, next) => {
 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [organizer, customization, tickets, order,review, visibility] = await Promise.all([
+      const [organizer, customization, tickets, order, review, visibility] = await Promise.all([
         Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -133,7 +133,7 @@ exports.getEvents = async (req, res, next) => {
             model: 'User' // Replace with your actual User model name
           })
           .lean(),
-        eventReview.find({ eventId: event._id , status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
+        eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
         Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean()
       ]);
 
@@ -437,9 +437,21 @@ exports.getCategoryById = async (req, res) => {
       });
     }
 
+    // Get all category names to search for (parent + subcategories)
+    const categoryNames = getAllCategoryIds(category);
+
+    // Find events that match any of these category names
+    const events = await Event.find({
+      category: { $in: categoryNames },
+      isDelete: false
+    }).select('-__v'); // Exclude version key
+
     res.status(200).json({
       success: true,
-      category,
+      category: {
+        ...category.toObject(),
+        events
+      }
     });
   } catch (error) {
     console.error("Error fetching category:", error);

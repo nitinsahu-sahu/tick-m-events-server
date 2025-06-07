@@ -1,6 +1,7 @@
 const EventReview = require("../../models/event-details/eventReview");
 const Event = require("../../models/event-details/Event");
 const Rating = require("../../models/event-details/event-rating");
+const mongoose = require('mongoose');
 
 // Add review
 exports.addReview = async (req, res) => {
@@ -86,117 +87,64 @@ exports.replyToReview = async (req, res) => {
 // Submit or update a rating
 exports.submitRating = async (req, res) => {
     try {
-        const { eventId, userId, ratingValue } = req.body;
-
-        // Validate rating value (assuming 1-5 scale)
-        if (ratingValue < 1 || ratingValue > 5) {
+        const { eventId, ratingValue } = req.body;
+        // Validate rating value (1-5 stars)
+        if (!ratingValue || ratingValue < 1 || ratingValue > 5) {
             return res.status(400).json({
                 success: false,
-                message: "Rating must be between 1 and 5"
+                message: "Please provide a valid rating between 1 and 5"
             });
         }
 
         // Check if event exists
-        const event = await Event.findById(eventId);
-        if (!event) {
+        const eventExists = await Event.exists({ _id: eventId });
+        if (!eventExists) {
             return res.status(404).json({
                 success: false,
                 message: "Event not found"
             });
         }
 
-        // Check if user already rated this event
-        let existingRating = await Rating.findOne({ eventId, userId });
-
-        if (existingRating) {
-            // Update existing rating
-            const oldRatingValue = existingRating.ratingValue;
-            existingRating.ratingValue = ratingValue;
-            await existingRating.save();
-
-            // Calculate new average
-            const totalRatings = await Rating.aggregate([
-                { $match: { eventId: mongoose.Types.ObjectId(eventId) } },
-                { $group: { _id: null, total: { $sum: "$ratingValue" }, count: { $sum: 1 } } }
-            ]);
-
-            if (totalRatings.length > 0) {
-                const newAverage = totalRatings[0].total / totalRatings[0].count;
-                
-                // Update event with new average (count remains the same)
-                await Event.findByIdAndUpdate(eventId, {
-                    averageRating: newAverage
-                });
-            }
-
-            return res.status(200).json({
-                success: true,
-                message: "Rating updated successfully"
-            });
-        } else {
-            // Create new rating
-            const newRating = await Rating.create({
-                eventId,
-                userId,
-                ratingValue
-            });
-
-            // Calculate new average and count
-            const totalRatings = await Rating.aggregate([
-                { $match: { eventId } },
-                { $group: { _id: null, total: { $sum: "$ratingValue" }, count: { $sum: 1 } } }
-            ]);
-
-            if (totalRatings.length > 0) {
-                const newAverage = totalRatings[0].total / totalRatings[0].count;
-                
-                // Update event with new average and increment count
-                await Event.findByIdAndUpdate(eventId, {
-                    averageRating: newAverage,
-                    $inc: { reviewCount: 1 }
-                });
-            }
-
-            return res.status(201).json({
-                success: true,
-                message: "Rating submitted successfully"
-            });
-        }
-    } catch (error) {
-        console.error("Error submitting rating:", error);
-        res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
+        // 1. Add the new rating to Rating collection (no user tracking)
+        await Rating.create({
+            eventId,
+            ratingValue
         });
-    }
-};
 
-// Get average rating for an event
-exports.getEventRating = async (req, res) => {
-    try {
-        const { eventId } = req.params;
+        // 2. Calculate new average and count
+        const ratingStats = await Rating.aggregate([
+            { $match: { eventId: eventId } },
+            {
+                $group: {
+                    _id: null,
+                    average: { $avg: "$ratingValue" },
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
 
-        const event = await Event.findById(eventId, 'averageRating reviewCount');
-        
-        if (!event) {
-            return res.status(404).json({
-                success: false,
-                message: "Event not found"
-            });
-        }
+        // Round the average to nearest whole number
+        const roundedAverage = Math.round(ratingStats[0]?.average || 0);
+        // 3. Update Event document with new values
+        await Event.findByIdAndUpdate(eventId, {
+            averageRating: roundedAverage,
+            reviewCount: ratingStats[0]?.count || 0
+        });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-            averageRating: event.averageRating,
-            reviewCount: event.reviewCount
+            message: "Rating submitted successfully",
+            averageRating: ratingStats[0]?.average,
+            reviewCount: ratingStats[0]?.count
         });
+
     } catch (error) {
-        console.error("Error getting event rating:", error);
-        res.status(500).json({
+        console.error("Rating submission error:", error.message);
+        return res.status(500).json({
             success: false,
-            message: "Internal server error",
+            message: "Failed to submit rating",
             error: error.message
         });
     }
 };
+
