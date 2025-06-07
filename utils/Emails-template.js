@@ -1,5 +1,5 @@
-exports.createOrderEmailTemplate = async (order, userEmail) => {
-    
+exports.createOrderEmailTemplate = async (order, userEmail, event) => {
+
   return `
     <!DOCTYPE html>
     <html>
@@ -24,7 +24,11 @@ exports.createOrderEmailTemplate = async (order, userEmail) => {
         <div class="content">
           <p>Dear ${order?.orderAddress?.name},</p>
           <p>Thank you for your purchase! Here are your order details:</p>
-          
+           <h3>Event Information</h3>
+           <p style="text-transform:capitalize"><strong>Event Name:</strong> ${event?.eventName}</p>
+           <p><strong>Date:</strong> ${event?.date}</p>
+           <p><strong>Time:</strong> ${event?.time}</p>
+           <p><strong>Location:</strong> ${event?.location}</p>
           <h3>Order Summary</h3>
           <table class="ticket-table">
             <thead>

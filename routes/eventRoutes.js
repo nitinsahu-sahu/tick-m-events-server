@@ -5,6 +5,7 @@ const { verifyToken } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
 const { createEventCustomization } = require('../controllers/event-details/customizationController');
 const { createPublicationVisibility } = require('../controllers/event-details/visibilityController');
+const { submitRating, getEventRating } = require('../controllers/event-details/eventReviewController');
 
 router.route('/')
   .get(getEvents)
@@ -15,6 +16,8 @@ router.route('/allCategory').get(getAllCategories);
 router.route('/category/:id').get(getCategoryById);
 router.route('/category/:id').put(updateCategory);
 router.route('/category/:id').delete(deleteCategory);
+
+router.route('/rating').post(submitRating);
 
 router.route('/:id')
   .get(getEvent)

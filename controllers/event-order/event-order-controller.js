@@ -129,10 +129,10 @@ exports.createOrder = async (req, res) => {
 
     // Commit transaction if everything succeeded
     await session.commitTransaction();
-
+    const event = await Event.findById(eventId).select('eventName date time location');
     // Send confirmation email (don't fail if email fails)
     try {
-      const emailHtml = createOrderEmailTemplate(savedOrder, userEmail);
+      const emailHtml = await createOrderEmailTemplate(savedOrder, userEmail, event);
       await sendMail(
         userEmail,
         'Your Ticket Purchase Confirmation',
@@ -186,37 +186,96 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
+// exports.getOrdersByUser = async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(userId)) {
+//       return res.status(400).json({ message: "Invalid user ID" });
+//     }
+
+//     // 1. Get all orders for the user
+//     const orders = await EventOrder.find({ userId }).sort({ createdAt: -1 });
+
+//     // 2. Extract all unique eventIds
+//     const eventIds = [...new Set(orders.map(order => order.eventId))];
+
+//     // 3. Fetch all corresponding events
+//     const events = await Event.find({ _id: { $in: eventIds } });
+
+//     // 4. Create a map for fast lookup
+//     const eventMap = {};
+//     events.forEach(event => {
+//       eventMap[event._id.toString()] = event;
+//     });
+
+//     // 5. Attach event details to each order
+//     const enrichedOrders = orders.map(order => ({
+//       ...order.toObject(),
+//       eventDetails: eventMap[order.eventId] || null
+//     }));
+
+//     res.status(200).json(enrichedOrders);
+//   } catch (error) {
+//     res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
 exports.getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
-
+ 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: "Invalid user ID" });
     }
-
+ 
     // 1. Get all orders for the user
     const orders = await EventOrder.find({ userId }).sort({ createdAt: -1 });
-
+ 
     // 2. Extract all unique eventIds
     const eventIds = [...new Set(orders.map(order => order.eventId))];
-
-    // 3. Fetch all corresponding events
+ 
+    // 3. Fetch corresponding events
     const events = await Event.find({ _id: { $in: eventIds } });
-
-    // 4. Create a map for fast lookup
     const eventMap = {};
     events.forEach(event => {
       eventMap[event._id.toString()] = event;
     });
-
-    // 5. Attach event details to each order
-    const enrichedOrders = orders.map(order => ({
-      ...order.toObject(),
-      eventDetails: eventMap[order.eventId] || null
-    }));
-
+ 
+    // 4. Fetch TicketConfiguration for those events
+    const ticketConfigs = await TicketConfiguration.find({ eventId: { $in: eventIds.map(id => id.toString()) } });
+ 
+    const configMap = {};
+    ticketConfigs.forEach(config => {
+      configMap[config.eventId] = {
+        refundPolicy: config.refundPolicy || null,
+        isRefundPolicyEnabled: config.isRefundPolicyEnabled || false
+      };
+    });
+ 
+    // 5. Enrich each order
+    const enrichedOrders = orders.map(order => {
+      const event = eventMap[order.eventId] || null;
+      const ticketConfig = configMap[order.eventId] || { refundPolicy: null, isRefundPolicyEnabled: false };
+ 
+      return {
+        ...order.toObject(),
+        eventDetails: event,
+        refundPolicy: ticketConfig.refundPolicy,
+        isRefundPolicyEnabled: ticketConfig.isRefundPolicyEnabled,
+        eventDate: event?.date ? new Date(event.date) : null,
+      };
+    }).sort((a, b) => {
+      if (!a.eventDate) return 1;
+      if (!b.eventDate) return -1;
+      return a.eventDate - b.eventDate;
+    });
+ 
+ 
+ 
     res.status(200).json(enrichedOrders);
   } catch (error) {
+    console.error("Error in getOrdersByUser:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
