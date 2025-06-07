@@ -109,13 +109,18 @@ exports.login = async (req, res) => {
             const cookieExpiry = 2 * 60 * 60 * 1000; // 2 hours
             // const cookieExpiry = 2 * 60 * 1000; // 2 min
             // Sending JWT token in the response cookies
+            // res.cookie('token', token, {
+            //     sameSite: process.env.PRODUCTION === 'true' ? "None" : 'Lax',
+            //     maxAge: cookieExpiry, // 30 minutes
+            //     httpOnly: true,
+            //     secure: process.env.PRODUCTION === 'true' ? true : false
+            // });
             res.cookie('token', token, {
-                sameSite: process.env.PRODUCTION === 'true' ? "None" : 'Lax',
+                sameSite: process.env.PRODUCTION ? "none" : 'Lax',
                 maxAge: cookieExpiry, // 30 minutes
                 httpOnly: true,
-                secure: process.env.PRODUCTION === 'true' ? true : false
+                secure: process.env.PRODUCTION? true : false
             });
-
             // Sending token and user info in the response
             return res.status(200).json({
                 user: sanitizeUser(existingUser),
@@ -452,7 +457,7 @@ exports.createReview = async (req, res) => {
         });
 
         // Update the reviewed user's average rating
-       await updateUserRating(reviewedUserId)
+        await updateUserRating(reviewedUserId)
         // Success response
         return res.status(201).json({ success: true, review });
 
