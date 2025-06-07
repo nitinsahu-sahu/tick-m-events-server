@@ -3,10 +3,6 @@ const { Schema } = mongoose;
 
 const ratingSchema = new Schema({
     eventId: { type: String, required: true },
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-    },
     ratingValue: {
         type: Number,
         required: true,
@@ -19,7 +15,5 @@ const ratingSchema = new Schema({
     }
 }, { timestamps: true });
 
-// Ensure one rating per user per event
-ratingSchema.index({ eventId: 1, userId: 1 }, { unique: true });
 
 module.exports = mongoose.model('eventRating', ratingSchema);
