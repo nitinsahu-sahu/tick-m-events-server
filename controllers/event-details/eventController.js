@@ -643,3 +643,92 @@ exports.updateEventPageCostomization = async (req, res) => {
     });
   }
 };
+
+exports.getTodayEvents = async (req, res, next) => {
+  try {
+    const currentDate = new Date();
+    // Set to start of day (00:00:00)
+    const startOfDay = new Date(currentDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // Set to end of day (23:59:59)
+    const endOfDay = new Date(currentDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get all events that aren't deleted and are today
+    const events = await Event.find({
+      isDelete: { $ne: true },
+      $expr: {
+        $and: [
+          {
+            $gte: [
+              {
+                $dateFromString: {
+                  dateString: {
+                    $concat: [
+                      "$date",
+                      "T",
+                      "$time",
+                      ":00.000Z"
+                    ]
+                  }
+                }
+              },
+              startOfDay
+            ]
+          },
+          {
+            $lte: [
+              {
+                $dateFromString: {
+                  dateString: {
+                    $concat: [
+                      "$date",
+                      "T",
+                      "$time",
+                      ":00.000Z"
+                    ]
+                  }
+                }
+              },
+              endOfDay
+            ]
+          }
+        ]
+      }
+    })
+      .select('-category -location -format -eventType -coverImage -description -reviewCount -soldTicket -ticketQuantity -createdBy -createdAt -updatedAt -isDelete -__v')
+      .lean();
+
+    if (events.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No events found for today.",
+        currentEvents: []
+      });
+    }
+
+    // Get all related data for each event
+    const eventsWithDetails = await Promise.all(events.map(async (event) => {
+      const [ order] = await Promise.all([
+        // Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+        EventOrders.find({ eventId: event._id, userId:req.user._id })
+          .select(' -orderAddress -updatedAt -__v').lean(),
+      ]);
+
+      return {
+        ...event,
+        order,
+      };
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Today's events fetched successfully.",
+      currentEvents: eventsWithDetails,
+    });
+  } catch (error) {
+    console.error('Error fetching events:', error.message);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
