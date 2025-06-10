@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { createOrder, getOrdersByUser, downloadTicket, verifyTicket, getAllOrders, updateOrderVerifyEntryStatus } = require('../controllers/event-order/event-order-controller');
+const { createOrder, getOrdersByUser, downloadTicket, verifyTicket, getAllOrders, updateOrderVerifyEntryStatus, fetchUserValidatedTickets } = require('../controllers/event-order/event-order-controller');
 const { verifyToken } = require('../middleware/VerifyToken');
 
 
 
 // Create a new order
 router.post("/order", verifyToken, createOrder);
+router.get("/validated", verifyToken, fetchUserValidatedTickets);
 
 // Get order by ID
 // router.get('/:id', getOrderById);

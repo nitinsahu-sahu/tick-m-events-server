@@ -10,6 +10,64 @@ const { createOrderEmailTemplate } = require('../../utils/Emails-template');
 const QRCode = require('qrcode');
 const TicketType = require("../../models/TicketType");
 
+// Get Validated tickets
+exports.fetchUserValidatedTickets = async (req, res) => {
+  try {
+
+    if (!req.user._id) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    const tickets = await EventOrder.find({
+      verifyEntry: true,  // Only validated tickets
+      userId: req.user._id      // Filter by specific user
+    })
+      .sort({ createdAt: -1 })  // Newest first
+      .populate({
+        path: 'eventId',
+        select: 'eventName date time location',  // Include event details
+        model: 'Event'
+      })
+      .lean();
+
+    if (!tickets || tickets.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No validated tickets found for this user'
+      });
+    }
+
+    // Format response
+    const formattedTickets = tickets.map(ticket => ({
+      ticketId: ticket._id,
+      event: {
+        name: ticket.eventId?.eventName || 'N/A',
+        date: ticket.eventId?.date || 'N/A',
+        time: ticket.eventId?.time || 'N/A',
+        venue: ticket.eventId?.location || 'N/A'
+      },
+      validatedAt: ticket.updatedAt // When verifyEntry was set to true
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: formattedTickets.length,
+      tickets: formattedTickets
+    });
+
+  } catch (error) {
+    console.error('Error fetching user tickets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
 exports.createOrder = async (req, res) => {
   const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
   const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
@@ -163,6 +221,7 @@ exports.createOrder = async (req, res) => {
     session.endSession();
   }
 };
+
 // Get order by ID
 exports.getOrderById = async (req, res) => {
 
@@ -186,65 +245,30 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// exports.getOrdersByUser = async (req, res) => {
-//   try {
-//     const { userId } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(userId)) {
-//       return res.status(400).json({ message: "Invalid user ID" });
-//     }
-
-//     // 1. Get all orders for the user
-//     const orders = await EventOrder.find({ userId }).sort({ createdAt: -1 });
-
-//     // 2. Extract all unique eventIds
-//     const eventIds = [...new Set(orders.map(order => order.eventId))];
-
-//     // 3. Fetch all corresponding events
-//     const events = await Event.find({ _id: { $in: eventIds } });
-
-//     // 4. Create a map for fast lookup
-//     const eventMap = {};
-//     events.forEach(event => {
-//       eventMap[event._id.toString()] = event;
-//     });
-
-//     // 5. Attach event details to each order
-//     const enrichedOrders = orders.map(order => ({
-//       ...order.toObject(),
-//       eventDetails: eventMap[order.eventId] || null
-//     }));
-
-//     res.status(200).json(enrichedOrders);
-//   } catch (error) {
-//     res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// };
-
 exports.getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
- 
+
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: "Invalid user ID" });
     }
- 
+
     // 1. Get all orders for the user
-    const orders = await EventOrder.find({ userId }).sort({ createdAt: -1 });
- 
+    const orders = await EventOrder.find({ userId,verifyEntry:false }).sort({ createdAt: -1 });
+
     // 2. Extract all unique eventIds
     const eventIds = [...new Set(orders.map(order => order.eventId))];
- 
+
     // 3. Fetch corresponding events
     const events = await Event.find({ _id: { $in: eventIds } });
     const eventMap = {};
     events.forEach(event => {
       eventMap[event._id.toString()] = event;
     });
- 
+
     // 4. Fetch TicketConfiguration for those events
     const ticketConfigs = await TicketConfiguration.find({ eventId: { $in: eventIds.map(id => id.toString()) } });
- 
+
     const configMap = {};
     ticketConfigs.forEach(config => {
       configMap[config.eventId] = {
@@ -252,12 +276,12 @@ exports.getOrdersByUser = async (req, res) => {
         isRefundPolicyEnabled: config.isRefundPolicyEnabled || false
       };
     });
- 
+
     // 5. Enrich each order
     const enrichedOrders = orders.map(order => {
       const event = eventMap[order.eventId] || null;
       const ticketConfig = configMap[order.eventId] || { refundPolicy: null, isRefundPolicyEnabled: false };
- 
+
       return {
         ...order.toObject(),
         eventDetails: event,
@@ -270,9 +294,9 @@ exports.getOrdersByUser = async (req, res) => {
       if (!b.eventDate) return -1;
       return a.eventDate - b.eventDate;
     });
- 
- 
- 
+
+
+
     res.status(200).json(enrichedOrders);
   } catch (error) {
     console.error("Error in getOrdersByUser:", error);
@@ -709,8 +733,59 @@ exports.getAllOrders = async (req, res) => {
   }
 };
 
-
 //verify event
+// exports.verifyTicket = async (req, res) => {
+//   try {
+//     const { ticketCode, participantId, name } = req.body;
+
+//     // Check if at least one field is provided
+//     if (!ticketCode && !participantId && !name) {
+//       return res.status(404).json({
+//         message: "Please provide at least one data",
+//         flag: 'field'
+//       });
+//     }
+
+//     // Build query based on provided fields
+//     const query = {};
+//     if (ticketCode) query.ticketCode = ticketCode;
+//     if (participantId) query.userId = participantId;
+//     if (name) query.name = name;
+
+//     // Find ticket in database
+//     const ticket = await EventOrder.findOne(query)
+//       .select('userId _id eventId tickets verifyEntry entryTime')  // Only select these fields
+//       .populate('userId', 'name email')
+//       .populate({
+//         path: 'eventId',
+//         select: 'eventName date time location',  // Include event details
+//         model: 'Event'
+//       })
+//       .lean();
+
+//     console.log('==ticket==================================');
+//     console.log(ticket);
+//     console.log('====================================');
+//     if (!ticket) {
+//       return res.status(404).json({ message: "Invalid ticket", flag: 'invalid' });
+//     }
+//     if (ticket.verifyEntry) {
+//       return res.status(404).json({ message: "Ticket already used", flag: 'already' });
+//     }
+//     const eventName = await Event.findOne({ _id: ticket.eventId }).select('eventName')
+
+//     return res.status(200).json({
+//       message: "Access granted, Welcome",
+//       ticket,
+//       eventName,
+//       flag: 'granted'
+//     });
+
+//   } catch (err) {
+//     console.error("Error verifying ticket:", err);
+//     return res.status(500).json({ message: "Internal server error" });
+//   }
+// };
 exports.verifyTicket = async (req, res) => {
   try {
     const { ticketCode, participantId, name } = req.body;
@@ -731,22 +806,50 @@ exports.verifyTicket = async (req, res) => {
 
     // Find ticket in database
     const ticket = await EventOrder.findOne(query)
-      .select('userId _id eventId tickets verifyEntry entryTime')  // Only select these fields
-      .populate('userId', 'name email')  // Populate only name and email from user
+      .select('userId _id eventId tickets verifyEntry entryTime')
+      .populate('userId', 'name email')
+      .populate({
+        path: 'eventId',
+        select: 'eventName date time location',
+        model: 'Event'
+      })
       .lean();
 
     if (!ticket) {
       return res.status(404).json({ message: "Invalid ticket", flag: 'invalid' });
     }
+
     if (ticket.verifyEntry) {
       return res.status(404).json({ message: "Ticket already used", flag: 'already' });
     }
-    const eventName = await Event.findOne({ _id: ticket.eventId }).select('eventName')
+
+    // Check if event date and time have passed
+    const eventDate = new Date(ticket.eventId.date);
+    const eventTime = ticket.eventId.time.split(':');
+    
+    // Set the hours and minutes from the event time
+    eventDate.setHours(parseInt(eventTime[0]));
+    eventDate.setMinutes(parseInt(eventTime[1]));
+    
+    const currentDate = new Date();
+
+    if (currentDate > eventDate) {
+      return res.status(400).json({ 
+        message: "Event has expired. Please purchase a ticket for the next event.", 
+        flag: 'expired',
+        eventDetails: {
+          name: ticket.eventId.eventName,
+          date: ticket.eventId.date,
+          time: ticket.eventId.time,
+          location: ticket.eventId.location
+        }
+      });
+    }
 
     return res.status(200).json({
       message: "Access granted, Welcome",
       ticket,
-      eventName,
+      eventName: ticket.eventId.eventName,
       flag: 'granted'
     });
 
