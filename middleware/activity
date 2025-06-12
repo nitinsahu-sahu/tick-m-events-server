@@ -1,0 +1,37 @@
+// middleware/activityLogger.js
+import Activity from '../models/activity/activity.modal';
+
+export const logActivity = (activityType, descriptionFn) => {
+    return async (req, res, next) => {
+        try {
+            if (!req.user) return next(); // Skip if no user
+
+            const description = typeof descriptionFn === 'function'
+                ? descriptionFn(req)
+                : descriptionFn;
+
+            await Activity.create({
+                userId: req.user._id,
+                activityType,
+                description,
+                ipAddress: req.ip,
+                userAgent: req.headers['user-agent'],
+                metadata: {
+                    params: req.params,
+                    body: req.body,
+                    query: req.query
+                }
+            });
+
+            next();
+        } catch (error) {
+            console.error('Activity logging failed:', error);
+            next(); // Don't block the request if logging fails
+        }
+    };
+};
+
+// Common activities
+export const loginActivity = logActivity('login', req => `${req.user.email} logged in`);
+export const logoutActivity = logActivity('logout', req => `${req.user.email} logged out`);
+export const eventCreatedActivity = logActivity('event_created', req => `${req.user.email} created event "${req.body.eventName}"`);

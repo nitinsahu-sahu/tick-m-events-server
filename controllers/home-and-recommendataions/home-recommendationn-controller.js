@@ -145,9 +145,9 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         };
 
         //4. Find events within this month
-         const currentDateFormatted = currentDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
+        const currentDateFormatted = currentDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
         const currentTimeFormatted = currentDate.toTimeString().substring(0, 5); // "HH:mm"
-        
+
         // Find events within this month
         const currentMonthFormatted = String(currentMonth).padStart(2, '0');
         const currentMonthEvents = await Event.find({
@@ -161,7 +161,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         const filteredEvents = currentMonthEvents.filter(event => {
             const eventDate = event.date;
             const eventTime = event.time;
-            
+
             // If event date is in the future
             if (eventDate > currentDateFormatted) {
                 return true;
