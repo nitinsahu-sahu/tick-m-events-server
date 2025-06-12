@@ -9,7 +9,7 @@ const { submitRating } = require('../controllers/event-details/eventReviewContro
 const { rotateRadians } = require('pdf-lib');
 
 router.route('/')
-  .get(getEvents)
+  .get( getEvents)
   .post(verifyToken, createEvent)
 
 router.route('/currentDateEvents')
