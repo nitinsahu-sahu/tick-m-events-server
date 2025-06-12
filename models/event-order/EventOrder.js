@@ -44,6 +44,11 @@ const eventOrderSchema = new Schema({
         enum: ['credit_card', 'paypal', 'upi', 'cod'],
         required: true
     },
+    refundStatus: {
+        type: String,
+        enum: ['none', 'requestedRefund', 'cancelled'],
+        default: 'none'
+    },
     transactionId: {
         type: String,
         required: true
