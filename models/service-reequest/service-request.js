@@ -17,9 +17,8 @@ const serviceRequestSchema = new Schema({
         required: [true, "Date and time is required"],
     },
     budget: {
-        type: Number,
-        required: [true, "Budget is required"],
-        min: [0, "Budget must be non-negative"],
+        type: String,
+        required:true,
     },
     description: {
         type: String,

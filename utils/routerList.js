@@ -11,10 +11,12 @@ const eventOrderRoutes = require("../routes/eventOrderRoute")
 const userReviewsRoutes = require("../routes/userReview.Routes")
 const homeRecommendationsRoutes = require("../routes/homeRecommendationsRoutes")
 const transactionPaymentRoutes = require("../routes/transactionPaymentRoutes")
-const refundRequestRoutes=require("../routes/refundRequestRoutes");
+const refundRequestRoutes = require("../routes/refundRequestRoutes");
+const activityRoutes = require("../routes/activity.route");
 // Define route configuration
 exports.routesLists = {
     '/api/v1/refund-request': refundRequestRoutes,
+    '/api/v1/activities': activityRoutes,
     '/api/v1/auth': authRoutes,
     '/api/v1/tickets': ticketTypeRoutes,
     '/api/v1/event': eventRoutes,

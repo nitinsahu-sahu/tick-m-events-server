@@ -5,7 +5,7 @@ const moment = require('moment');
 exports.createServiceRequest = async (req, res) => {
     const { serviceType, dateAndTime, eventLocation, budget, description, additionalOptions, status } = req.body;
     const formattedDateTime = moment(dateAndTime).format('YYYY-MM-DD hh:mm A'); 
-    
+
     try {
         let coverImageData = {};
         

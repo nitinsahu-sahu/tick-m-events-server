@@ -11,9 +11,10 @@ const UserServiceRequest = require("../models/profile-service-maagement/add-serv
 const { generateUsername } = require("../utils/generate-username");
 const cloudinary = require('cloudinary').v2;
 
+
 //register controller
 exports.signup = async (req, res) => {
-    const { name, email, password, gender, number, role } = req.body;
+    const { name, email, password, gender, number, role, experience, serviceCategory } = req.body;
     const { avatar } = req.files;
 
     // Input validation
@@ -64,7 +65,8 @@ exports.signup = async (req, res) => {
             avatar: {
                 public_id: cloudinaryResult.public_id,
                 url: cloudinaryResult.secure_url
-            }
+            },
+            role, experience, serviceCategory
         });
 
         // Omit sensitive data in response
@@ -119,7 +121,7 @@ exports.login = async (req, res) => {
                 sameSite: process.env.PRODUCTION ? "none" : 'Lax',
                 maxAge: cookieExpiry, // 30 minutes
                 httpOnly: true,
-                secure: process.env.PRODUCTION? true : false
+                secure: process.env.PRODUCTION ? true : false
             });
             // Sending token and user info in the response
             return res.status(200).json({

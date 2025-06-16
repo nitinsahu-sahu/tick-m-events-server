@@ -12,7 +12,7 @@ exports.createServiceRequest = async (req, res) => {
             crop: "scale",
         });
 
-        const newRequest = await UserServiceRequest.create({
+        await UserServiceRequest.create({
             serviceName,
             location,
             budget,
@@ -26,7 +26,7 @@ exports.createServiceRequest = async (req, res) => {
 
         res.status(201).json({
             success: true,
-            message: 'Service request created successfully',
+            message: 'Requested successfully',
         });
     } catch (error) {
         console.error("Create Request Error:", error.message);
