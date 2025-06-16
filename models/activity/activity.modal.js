@@ -1,11 +1,10 @@
 // models/Activity.js
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
 
 const activitySchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
   },
   activityType: {
     type: String,
@@ -32,4 +31,4 @@ const activitySchema = new mongoose.Schema({
   }
 });
 
-export default mongoose.model('Activity', activitySchema);
+module.exports = mongoose.model('Activity', activitySchema);

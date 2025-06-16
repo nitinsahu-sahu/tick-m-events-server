@@ -90,4 +90,8 @@ const paginationMiddleware = (options = {}) => {
   };
 };
 
-export { paginate, paginationMiddleware };
+// Change the export to CommonJS syntax
+module.exports = {
+  paginate,
+  paginationMiddleware
+};
