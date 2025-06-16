@@ -13,9 +13,8 @@ const userServiceRequestSchema = new Schema({
         min: [3, "Minimum letter should be 3"]
     },
     budget: {
-        type: Number,
-        required: [true, "Budget is required"],
-        min: [0, "Budget must be non-negative"],
+        type: String,
+        required:true
     },
     description: {
         type: String,

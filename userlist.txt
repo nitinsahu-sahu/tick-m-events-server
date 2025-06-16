@@ -23,3 +23,12 @@ Forgine Credential
 
 "email": "provider.harry2@gmail.com",
 "password": "Harry@123",
+
+"email": "provider.nelson23@gmail.com",
+"password": "Nelson@123",
+
+"email": "provider.paul13@gmail.com",
+"password": "Paul@123",
+
+"email": "provider.watson13@gmail.com",
+"password": "wAtson@123",

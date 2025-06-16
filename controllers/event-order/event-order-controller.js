@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const EventOrder = require('../../models/event-order/EventOrder');
+const EventCustomization = require('../../models/event-details/Customization');
 const Event = require('../../models/event-details/Event');
 const TicketConfiguration = require('../../models/event-details/Ticket');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
@@ -36,7 +37,7 @@ exports.fetchUserValidatedTickets = async (req, res) => {
     if (!tickets || tickets.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No validated tickets found for this user'
+        message: 'No validated tickets found yet..'
       });
     }
 
@@ -59,7 +60,6 @@ exports.fetchUserValidatedTickets = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching user tickets:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -254,7 +254,7 @@ exports.getOrdersByUser = async (req, res) => {
     }
 
     // 1. Get all orders for the user
-    const orders = await EventOrder.find({ userId,verifyEntry:false }).sort({ createdAt: -1 });
+    const orders = await EventOrder.find({ userId, verifyEntry: false }).sort({ createdAt: -1 });
 
     // 2. Extract all unique eventIds
     const eventIds = [...new Set(orders.map(order => order.eventId))];
@@ -281,7 +281,6 @@ exports.getOrdersByUser = async (req, res) => {
     const enrichedOrders = orders.map(order => {
       const event = eventMap[order.eventId] || null;
       const ticketConfig = configMap[order.eventId] || { refundPolicy: null, isRefundPolicyEnabled: false };
-
       return {
         ...order.toObject(),
         eventDetails: event,
@@ -294,9 +293,6 @@ exports.getOrdersByUser = async (req, res) => {
       if (!b.eventDate) return -1;
       return a.eventDate - b.eventDate;
     });
-
-
-
     res.status(200).json(enrichedOrders);
   } catch (error) {
     console.error("Error in getOrdersByUser:", error);
@@ -826,16 +822,16 @@ exports.verifyTicket = async (req, res) => {
     // Check if event date and time have passed
     const eventDate = new Date(ticket.eventId.date);
     const eventTime = ticket.eventId.time.split(':');
-    
+
     // Set the hours and minutes from the event time
     eventDate.setHours(parseInt(eventTime[0]));
     eventDate.setMinutes(parseInt(eventTime[1]));
-    
+
     const currentDate = new Date();
 
     if (currentDate > eventDate) {
-      return res.status(400).json({ 
-        message: "Event has expired. Please purchase a ticket for the next event.", 
+      return res.status(400).json({
+        message: "Event has expired. Please purchase a ticket for the next event.",
         flag: 'expired',
         eventDetails: {
           name: ticket.eventId.eventName,

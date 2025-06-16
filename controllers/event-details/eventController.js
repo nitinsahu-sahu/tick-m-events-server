@@ -215,9 +215,6 @@ exports.getEvent = async (req, res, next) => {
 exports.updateEvent = async (req, res, next) => {
   try {
     const { isDelete, eventName, date, time, category, eventType, location, format, description } = req.body;
-    console.log('====================================');
-    console.log(req.body);
-    console.log('====================================');
     // Convert date if provided
     dateOnly = moment(date).format('YYYY-MM-DD');
 

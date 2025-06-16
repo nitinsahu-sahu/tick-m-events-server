@@ -1,14 +1,15 @@
-// controllers/activityController.js
-import Activity from '../../models/activity/activity.modal.js';
-import { paginate } from '../../utils/pagination.js';
 
+const Activity = require('../../models/activity/activity.modal');
+const { paginate } = require('../../utils/pagination');
 
-export const getUserActivities = async (req, res) => {
+exports.getAdminActivities = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
-    
+    const { page = 1, limit = 10, userId } = req.query;
+    const filter = userId ? { userId } : {};
+
     const activities = await paginate(
-      Activity.find({ userId: req.user._id })
+      Activity.find(filter)
+        .populate('userId', 'email name')
         .sort({ timestamp: -1 })
         .lean(),
       { page, limit }
@@ -26,14 +27,12 @@ export const getUserActivities = async (req, res) => {
   }
 };
 
-export const getAdminActivities = async (req, res) => {
+exports.getUserActivities = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, userId } = req.query;
-    const filter = userId ? { userId } : {};
-    
+    const { page = 1, limit = 10 } = req.query;
+
     const activities = await paginate(
-      Activity.find(filter)
-        .populate('userId', 'email name')
+      Activity.find({ userId: req.user._id })
         .sort({ timestamp: -1 })
         .lean(),
       { page, limit }
