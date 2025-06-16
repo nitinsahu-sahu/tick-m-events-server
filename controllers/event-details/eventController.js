@@ -82,7 +82,6 @@ exports.createEvent = async (req, res, next) => {
 };
 
 // Get all events
-
 exports.getEvents = async (req, res, next) => {
   try {
     const currentDateTime = new Date();
@@ -160,6 +159,7 @@ exports.getEvents = async (req, res, next) => {
   }
 };
 // Get single event
+
 exports.getEvent = async (req, res, next) => {
   try {
     const eventId = req.params.id; // Extract event ID from URL params
@@ -707,9 +707,9 @@ exports.getTodayEvents = async (req, res, next) => {
 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [ order] = await Promise.all([
+      const [order] = await Promise.all([
         // Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-        EventOrders.find({ eventId: event._id, userId:req.user._id })
+        EventOrders.find({ eventId: event._id, userId: req.user._id })
           .select(' -orderAddress -updatedAt -__v').lean(),
       ]);
 
