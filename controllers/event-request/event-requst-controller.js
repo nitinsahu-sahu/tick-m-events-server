@@ -1,6 +1,55 @@
 const EventRequest = require("../../models/event-request/event-requests.model");
 const ProviderService = require("../../models/service-reequest/service-request");
 const mongoose = require('mongoose');
+
+
+exports.getRequestsByProvider = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
+
+    // Build query
+    const query = { providerId: req.user._id, status:"requested-by-organizer" };
+    if (status) {
+      query.status = status;
+    }
+
+    // Parse sorting
+    const [sortField, sortOrder] = sortBy.split(':');
+    const sort = { [sortField]: sortOrder === 'desc' ? -1 : 1 };
+
+    // Pagination
+    const skip = (page - 1) * limit;
+
+    const [requests, total] = await Promise.all([
+      EventRequest.find(query)
+        .populate('eventId', 'eventName date location time description experience averageRating website certified')
+        .populate('organizerId', 'name email avatar')
+        .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+        .sort(sort)
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      EventRequest.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: parseInt(page),
+      requests
+    });
+
+  } catch (error) {
+    console.error('Error fetching provider requests:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching requests'
+    });
+  }
+};
+
 // Get Validated tickets
 exports.updateRequestById = async (req, res) => {
     try {
@@ -36,18 +85,21 @@ exports.updateRequestById = async (req, res) => {
 // Organizer sends request to provider
 exports.createRequest = async (req, res) => {
     try {
-        const { eventId, serviceId, message } = req.body;
+        const { eventId, serviceId, message, providerId } = req.body;
         const organizerId = req.user._id;
 
         // Check for existing request
         const existingRequest = await EventRequest.findOne({
             eventId,
-            organizer: organizerId,
-            providerService: serviceId
+            organizerId,
+            serviceRequestId: serviceId
         });
 
+        const existingServiceRequest = await ProviderService.findOne({
+            _id: serviceId
+        });
         if (existingRequest) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
                 message: "You have already requested this service for this event"
             });
@@ -56,9 +108,10 @@ exports.createRequest = async (req, res) => {
         // Create new request
         const request = await EventRequest.create({
             eventId,
-            organizer: organizerId,
-            providerService: serviceId,
+            organizerId,
+            serviceRequestId: serviceId,
             message,
+            providerId: existingServiceRequest.createdBy
         });
 
         res.status(201).json({
@@ -69,7 +122,7 @@ exports.createRequest = async (req, res) => {
 
     } catch (err) {
         console.error('Error creating request:', err);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: 'Failed to create service request',
             error: process.env.NODE_ENV === 'development' ? err.message : undefined
@@ -91,7 +144,7 @@ exports.providerRespondOnReq = async (req, res) => {
             { status: req.body.status, providerResponse: req.body.message },
             { new: true }
         );
-    console.log(request);
+        console.log(request);
 
         // Notify organizer
         // io.to(organizerSocketId).emit('requestUpdated', request);
@@ -104,23 +157,23 @@ exports.providerRespondOnReq = async (req, res) => {
 
 
 async function getProviderServices(providerId) {
-  try {
-    // Validate input
-    if (!providerId || !mongoose.Types.ObjectId.isValid(providerId)) {
-      throw new Error('Invalid provider ID');
+    try {
+        // Validate input
+        if (!providerId || !mongoose.Types.ObjectId.isValid(providerId)) {
+            throw new Error('Invalid provider ID');
+        }
+
+        // Find all services where provider matches, selecting only the _id field
+        const services = await ProviderService.find(
+            { provider: providerId },
+            '_id' // Projection - only return _id field
+        ).lean(); // .lean() for better performance with simple JS objects
+
+        // Extract just the ID strings from the documents
+        return services.map(service => service._id.toString());
+
+    } catch (error) {
+        console.error('Error in getProviderServices:', error);
+        throw error; // Re-throw for calling function to handle
     }
-
-    // Find all services where provider matches, selecting only the _id field
-    const services = await ProviderService.find(
-      { provider: providerId },
-      '_id' // Projection - only return _id field
-    ).lean(); // .lean() for better performance with simple JS objects
-
-    // Extract just the ID strings from the documents
-    return services.map(service => service._id.toString());
-    
-  } catch (error) {
-    console.error('Error in getProviderServices:', error);
-    throw error; // Re-throw for calling function to handle
-  }
 }
