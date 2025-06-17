@@ -3,11 +3,12 @@ const mongoose = require("mongoose")
 // event-requests.model.js
 const eventRequestSchema = new mongoose.Schema({
   eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
-  organizer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  providerService: { type: mongoose.Schema.Types.ObjectId, ref: 'ProviderService', required: true },
-  status: { 
-    type: String, 
-    enum: ['accept', 'accepted-by-provider', 'rejected-by-provider', 'requested-by-organizer', 'rejected-by-organizer'],
+  organizerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  serviceRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceRequest', required: true },
+  providerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  status: {
+    type: String,
+    enum: ['accepted', 'requested-by-organizer', 'accepted-by-provider', 'rejected-by-provider', 'rejected-by-organizer'],
     default: 'requested-by-organizer'
   },
   message: String, // Custom message from organizer
