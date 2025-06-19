@@ -17,7 +17,7 @@ router
     .post("/forgot-password", authController.forgotPassword)
     .post("/reset-password", authController.resetPassword)
     .get("/check-auth", verifyToken, authController.checkAuth)
-    .get('/logout', authController.logout)
+    .post('/logout', authController.logout)
     .get('/providers',verifyToken, getAllServiceProvider)
     .get('/providers/service', getAllServiceCategories)
 

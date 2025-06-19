@@ -11,6 +11,12 @@ const eventRequestSchema = new mongoose.Schema({
     enum: ['accepted', 'requested-by-organizer', 'accepted-by-provider', 'rejected-by-provider', 'rejected-by-organizer'],
     default: 'requested-by-organizer'
   },
+  contractStatus: {
+    type: String,
+    enum: ['pending', 'signed', 'ongoing', 'completed'],
+    default: 'pending'
+
+  },
   message: String, // Custom message from organizer
   providerResponse: String, // Provider's response message
 }, { timestamps: true });
