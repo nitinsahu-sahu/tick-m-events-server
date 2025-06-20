@@ -1,9 +1,9 @@
 const express = require('express')
-const { getUserActivities } = require('../controllers/activity/activityController')
+const { getUserActivities, getAllActivitiesForUser } = require('../controllers/activity/activityController')
 const router = express.Router()
-
-router
-    .get('/', getUserActivities)
-
-
+const { verifyToken } = require('../middleware/VerifyToken')
+ 
+router.get('/', getUserActivities)
+router.get('/message-notification', verifyToken, getAllActivitiesForUser);
+ 
 module.exports = router
