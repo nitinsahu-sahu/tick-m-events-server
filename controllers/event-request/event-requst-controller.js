@@ -4,50 +4,50 @@ const mongoose = require('mongoose');
 
 
 exports.getRequestsByProvider = async (req, res) => {
-  try {
-    const { status, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
+    try {
+        const { status, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
 
-    // Build query
-    const query = { providerId: req.user._id, status:"requested-by-organizer" };
-    if (status) {
-      query.status = status;
+        // Build query
+        const query = { providerId: req.user._id, status: "requested-by-organizer" };
+        if (status) {
+            query.status = status;
+        }
+
+        // Parse sorting
+        const [sortField, sortOrder] = sortBy.split(':');
+        const sort = { [sortField]: sortOrder === 'desc' ? -1 : 1 };
+
+        // Pagination
+        const skip = (page - 1) * limit;
+
+        const [requests, total] = await Promise.all([
+            EventRequest.find(query)
+                .populate('eventId', 'eventName date location time description experience averageRating website certified')
+                .populate('organizerId', 'name email avatar')
+                .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+                .sort(sort)
+                .skip(skip)
+                .limit(parseInt(limit))
+                .lean(),
+            EventRequest.countDocuments(query)
+        ]);
+
+        res.status(200).json({
+            success: true,
+            count: requests.length,
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: parseInt(page),
+            requests
+        });
+
+    } catch (error) {
+        console.error('Error fetching provider requests:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while fetching requests'
+        });
     }
-
-    // Parse sorting
-    const [sortField, sortOrder] = sortBy.split(':');
-    const sort = { [sortField]: sortOrder === 'desc' ? -1 : 1 };
-
-    // Pagination
-    const skip = (page - 1) * limit;
-
-    const [requests, total] = await Promise.all([
-      EventRequest.find(query)
-        .populate('eventId', 'eventName date location time description experience averageRating website certified')
-        .populate('organizerId', 'name email avatar')
-        .populate('serviceRequestId', 'serviceType budget description additionalOptions')
-        .sort(sort)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(),
-      EventRequest.countDocuments(query)
-    ]);
-
-    res.status(200).json({
-      success: true,
-      count: requests.length,
-      total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      requests
-    });
-
-  } catch (error) {
-    console.error('Error fetching provider requests:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching requests'
-    });
-  }
 };
 
 // Get Validated tickets
@@ -85,18 +85,18 @@ exports.updateRequestById = async (req, res) => {
 // Organizer sends request to provider
 exports.createRequest = async (req, res) => {
     try {
-        const { eventId, serviceId, message, providerId } = req.body;
+        const { eventId, serviceRequestId, orgRequirement, orgBudget } = req.body;
         const organizerId = req.user._id;
 
         // Check for existing request
         const existingRequest = await EventRequest.findOne({
             eventId,
             organizerId,
-            serviceRequestId: serviceId
+            serviceRequestId
         });
 
         const existingServiceRequest = await ProviderService.findOne({
-            _id: serviceId
+            _id: serviceRequestId
         });
         if (existingRequest) {
             return res.status(400).json({
@@ -109,15 +109,15 @@ exports.createRequest = async (req, res) => {
         const request = await EventRequest.create({
             eventId,
             organizerId,
-            serviceRequestId: serviceId,
-            message,
+            serviceRequestId,
+            orgRequirement, orgBudget,
             providerId: existingServiceRequest.createdBy
         });
 
         res.status(201).json({
             success: true,
             request,
-            message: "Service requested successfully"
+            message: "Request sent successfully!"
         });
 
     } catch (err) {

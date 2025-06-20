@@ -10,7 +10,7 @@ const PasswordResetToken = require("../models/PasswordResetToken");
 const UserServiceRequest = require("../models/profile-service-maagement/add-service");
 const { generateUsername } = require("../utils/generate-username");
 const cloudinary = require('cloudinary').v2;
-
+const Activity = require("../models/activity/activity.modal");
 
 //register controller
 exports.signup = async (req, res) => {
@@ -96,48 +96,56 @@ exports.signup = async (req, res) => {
 
 exports.login = async (req, res) => {
     try {
-        // Checking if user exists or not
-        const existingUser = await User.findOne({ email: req.body.email });
-
-        // If user exists and password matches the hash
-        if (existingUser && (await bcrypt.compare(req.body.password, existingUser.password))) {
-            // Getting secure user info
-            const secureInfo = sanitizeUser(existingUser);
-
-            // Generating JWT token
-            const token = generateToken(secureInfo);
-
-            // Set cookie expiry to 30 minutes (in milliseconds)
-            const cookieExpiry = 2 * 60 * 60 * 1000; // 2 hours
-            // const cookieExpiry = 2 * 60 * 1000; // 2 min
-            // Sending JWT token in the response cookies
-            // res.cookie('token', token, {
-            //     sameSite: process.env.PRODUCTION === 'true' ? "None" : 'Lax',
-            //     maxAge: cookieExpiry, // 30 minutes
-            //     httpOnly: true,
-            //     secure: process.env.PRODUCTION === 'true' ? true : false
-            // });
-            res.cookie('token', token, {
-                sameSite: process.env.PRODUCTION ? "none" : 'Lax',
-                maxAge: cookieExpiry, // 30 minutes
-                httpOnly: true,
-                secure: process.env.PRODUCTION ? true : false
-            });
-            // Sending token and user info in the response
-            return res.status(200).json({
-                user: sanitizeUser(existingUser),
-                token: token, // Include the token in the response
-                expiresIn: cookieExpiry, // Send the expiry time to the frontend
-                message: "Signin successfully"
-            });
+        const { email, password } = req.body;
+ 
+        const existingUser = await User.findOne({ email });
+ 
+        if (!existingUser || !(await bcrypt.compare(password, existingUser.password))) {
+            res.clearCookie('token');
+            return res.status(400).json({ message: "Invalid credentials" });
         }
-
-        // Clear the token cookie if credentials are invalid
-        res.clearCookie('token');
-        return res.status(400).json({ message: "Invalid credentials" });
+ 
+        const secureInfo = sanitizeUser(existingUser);
+        const token = generateToken(secureInfo);
+        const cookieExpiry = 2 * 60 * 60 * 1000;
+ 
+        res.cookie('token', token, {
+            sameSite: process.env.PRODUCTION ? "none" : 'Lax',
+            maxAge: cookieExpiry,
+            httpOnly: true,
+            secure: process.env.PRODUCTION ? true : false
+        });
+ 
+        // ✅ Log activity manually — since req.user is not set
+        try {
+            await Activity.create({
+                userId: existingUser._id,
+                activityType: 'login success',
+                description: `${existingUser.email} logged in`,
+                ipAddress: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+                userAgent: req.headers['user-agent'],
+                metadata: {
+                    body: { email },
+                    query: req.query,
+                    params: req.params
+                }
+            });
+        } catch (logErr) {
+            console.error("Activity logging failed:", logErr.message);
+        }
+ 
+        return res.status(200).json({
+            user: secureInfo,
+            token,
+            expiresIn: cookieExpiry,
+            message: "Signin successfully"
+        });
+ 
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ message: 'Some error occurred while logging in, please try again later' });
+        console.error("Login error:", error.message);
+        return res.status(500).json({
+            message: 'Some error occurred while logging in, please try again later'
+        });
     }
 };
 

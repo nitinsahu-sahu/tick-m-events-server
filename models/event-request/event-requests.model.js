@@ -17,7 +17,17 @@ const eventRequestSchema = new mongoose.Schema({
     default: 'pending'
 
   },
-  message: String, // Custom message from organizer
+  orgBudget: {
+    type: Number,
+    required: true
+  },
+  orgRequirement: {
+    type: String,
+    required: true
+  }, // Custom message from organizer
+  discussion: {
+    type: String,
+  }, // Custom message from organizer
   providerResponse: String, // Provider's response message
 }, { timestamps: true });
 
