@@ -49,3 +49,24 @@ exports.getUserActivities = async (req, res, next) => {
     });
   }
 };
+
+exports.getAllActivitiesForUser= async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Fetch all activities for the user, regardless of type
+    const activities = await Activity.find({ userId }).sort({ timestamp: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: 'All activities fetched successfully',
+      data: activities,
+    });
+  } catch (err) {
+    console.error('Activity Fetch Error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Something went wrong while fetching activities',
+    });
+  }
+};

@@ -1,4 +1,3 @@
-// models/Activity.js
 const mongoose = require('mongoose');
 
 const activitySchema = new mongoose.Schema({
@@ -9,7 +8,7 @@ const activitySchema = new mongoose.Schema({
   activityType: {
     type: String,
     required: true,
-    enum: ['login', 'logout', 'event_created', 'ticket_purchased', 'profile_updated', 'password_changed']
+     enum: ['login success', 'logout success', 'event_created', 'ticket_purchased', 'profile_updated', 'password_changed']
   },
   description: {
     type: String,
