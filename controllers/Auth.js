@@ -11,12 +11,15 @@ const UserServiceRequest = require("../models/profile-service-maagement/add-serv
 const { generateUsername } = require("../utils/generate-username");
 const cloudinary = require('cloudinary').v2;
 const Activity = require("../models/activity/activity.modal");
-
+const sharp = require('sharp');
 //register controller
 exports.signup = async (req, res) => {
     const { name, email, password, gender, number, role, experience, serviceCategory } = req.body;
     const { avatar } = req.files;
-
+console.log('====================================');
+console.log(req.body);
+console.log(req.files);
+console.log('====================================');
     // Input validation
     if (!name || !email || !password || !gender || !number || !avatar) {
         return res.status(400).json({
@@ -97,25 +100,25 @@ exports.signup = async (req, res) => {
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
- 
+
         const existingUser = await User.findOne({ email });
- 
+
         if (!existingUser || !(await bcrypt.compare(password, existingUser.password))) {
             res.clearCookie('token');
             return res.status(400).json({ message: "Invalid credentials" });
         }
- 
+
         const secureInfo = sanitizeUser(existingUser);
         const token = generateToken(secureInfo);
         const cookieExpiry = 2 * 60 * 60 * 1000;
- 
+
         res.cookie('token', token, {
             sameSite: process.env.PRODUCTION ? "none" : 'Lax',
             maxAge: cookieExpiry,
             httpOnly: true,
             secure: process.env.PRODUCTION ? true : false
         });
- 
+
         // ✅ Log activity manually — since req.user is not set
         try {
             await Activity.create({
@@ -133,14 +136,14 @@ exports.login = async (req, res) => {
         } catch (logErr) {
             console.error("Activity logging failed:", logErr.message);
         }
- 
+
         return res.status(200).json({
             user: secureInfo,
             token,
             expiresIn: cookieExpiry,
             message: "Signin successfully"
         });
- 
+
     } catch (error) {
         console.error("Login error:", error.message);
         return res.status(500).json({
@@ -636,3 +639,173 @@ async function updateUserRating(userId) {
         });
     }
 }
+
+// update avatar
+exports.updateAvatar = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { avatar } = req.files; // Expecting base64 encoded image or file URL
+
+        if (!avatar) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide an image'
+            });
+        }
+
+        // Check file size (3MB limit)
+        if (avatar.size > 3 * 1024 * 1024) { // 3MB in bytes
+            return res.status(400).json({
+                success: false,
+                message: 'File size exceeds the 3MB limit'
+            });
+        }
+
+        // Get current user data
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        let result;
+        const uploadOptions = {
+            folder: 'avatars',
+            width: 192,
+            height: 192,
+            crop: 'fill'
+        };
+
+        // Check image dimensions before uploading
+        const imageInfo = await sharp(avatar.tempFilePath).metadata();
+        if (imageInfo.width !== 192 || imageInfo.height !== 192) {
+            return res.status(400).json({
+                success: false,
+                message: 'Avatar dimensions must be exactly 192x192 pixels'
+            });
+        }
+        
+        // Check if user has existing avatar
+        if (user.avatar.public_id && user.avatar.public_id !== 'avatars/pmqlhyz1ehcipviw3ren') {
+            // Destroy old image first
+            await cloudinary.uploader.destroy(user.avatar.public_id);
+            // Upload new image
+            result = await cloudinary.uploader.upload(avatar.tempFilePath, uploadOptions);
+        } else {
+            // Upload new image without destroying default
+            result = await cloudinary.uploader.upload(avatar.tempFilePath, uploadOptions);
+        }
+
+        // Update user avatar
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            {
+                $set: {
+                    'avatar.public_id': result.public_id,
+                    'avatar.url': result.secure_url
+                }
+            },
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        res.status(200).json({
+            success: true,
+            message: 'Avatar updated successfully',
+        });
+
+    } catch (error) {
+        console.error('Error updating avatar:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update avatar',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// update cover
+exports.updateCover = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { cover } = req.files; // Expecting base64 encoded image or file URL
+
+        if (!cover) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide an image'
+            });
+        }
+
+        // Check file size (3MB limit)
+        if (cover.size > 3 * 1024 * 1024) { // 3MB in bytes
+            return res.status(400).json({
+                success: false,
+                message: 'File size exceeds the 3MB limit'
+            });
+        }
+
+        // Get current user data
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        let result;
+        const uploadOptions = {
+            folder: 'covers',
+            width: 1200,
+            height: 595,
+            crop: 'fill'
+        };
+
+        // Check image dimensions before uploading
+        const imageInfo = await sharp(cover.tempFilePath).metadata();
+        if (imageInfo.width !== 1200 || imageInfo.height !== 595) {
+            return res.status(400).json({
+                success: false,
+                message: 'Image dimensions must be exactly 1200x595 pixels'
+            });
+        }
+
+        // Check if user has existing cover
+        if (user.cover.public_id && user.cover.public_id !== 'cover/profile-cover') {
+            // Destroy old image first
+            await cloudinary.uploader.destroy(user.cover.public_id);
+            // Upload new image
+            result = await cloudinary.uploader.upload(cover.tempFilePath, uploadOptions);
+        } else {
+            // Upload new image without destroying default
+            result = await cloudinary.uploader.upload(cover.tempFilePath, uploadOptions);
+        }
+
+        // Update user cover
+        await User.findByIdAndUpdate(
+            userId,
+            {
+                $set: {
+                    'cover.public_id': result.public_id,
+                    'cover.url': result.secure_url
+                }
+            },
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        res.status(200).json({
+            success: true,
+            message: 'Cover image updated successfully',
+        });
+
+    } catch (error) {
+        console.error('Error updating cover image:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update cover image' || error.message,
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};

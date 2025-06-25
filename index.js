@@ -39,7 +39,7 @@ server.use(cors(
     origin: [process.env.ORIGIN, process.env.ADMIN_ORIGIN],
     credentials: true,
     exposedHeaders: ['X-Total-Count'],
-    methods: ['GET', 'POST', 'PATCH', 'DELETE']
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', "PUT"]
   })
 )
 
