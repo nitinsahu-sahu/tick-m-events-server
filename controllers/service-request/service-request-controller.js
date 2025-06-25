@@ -1,14 +1,13 @@
 const ServiceRequest = require('../../models/service-reequest/service-request');
 const cloudinary = require('cloudinary').v2;
-const moment = require('moment');
+
 // Create Service Request
 exports.createServiceRequest = async (req, res) => {
-    const { serviceType, dateAndTime, eventLocation, budget, description, additionalOptions, status } = req.body;
-    const formattedDateTime = moment(dateAndTime).format('YYYY-MM-DD hh:mm A'); 
-
+    const { serviceType, eventLocation, budget, description, additionalOptions, status } = req.body;
+    
     try {
         let coverImageData = {};
-        
+
         // Check if coverImage exists in req.files
         if (req.files && req.files.coverImage) {
             const { coverImage } = req.files;
@@ -18,7 +17,7 @@ exports.createServiceRequest = async (req, res) => {
                 width: 150,
                 crop: "scale",
             });
-            
+
             coverImageData = {
                 public_id: myCloud.public_id,
                 url: myCloud.secure_url,
@@ -27,7 +26,6 @@ exports.createServiceRequest = async (req, res) => {
 
         const service = new ServiceRequest({
             serviceType,
-            dateAndTime: formattedDateTime,
             eventLocation,
             budget,
             description,
@@ -44,9 +42,9 @@ exports.createServiceRequest = async (req, res) => {
             data: saved // Optional: you can include the saved document in the response
         });
     } catch (err) {
-        res.status(400).json({ 
+        res.status(400).json({
             success: false,
-            error: err.message 
+            error: err.message
         });
     }
 };

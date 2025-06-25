@@ -16,10 +16,7 @@ const sharp = require('sharp');
 exports.signup = async (req, res) => {
     const { name, email, password, gender, number, role, experience, serviceCategory } = req.body;
     const { avatar } = req.files;
-console.log('====================================');
-console.log(req.body);
-console.log(req.files);
-console.log('====================================');
+
     // Input validation
     if (!name || !email || !password || !gender || !number || !avatar) {
         return res.status(400).json({
