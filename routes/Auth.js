@@ -21,6 +21,8 @@ router
     .post('/logout', verifyToken, logoutActivity, authController.logout)
     .get('/providers', verifyToken, getAllServiceProvider)
     .get('/providers/service', getAllServiceCategories)
+    .put('/cover', verifyToken, authController.updateCover)
+    .put('/avatar', verifyToken, authController.updateAvatar)
 
 
 module.exports = router
