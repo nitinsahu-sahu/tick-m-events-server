@@ -15,10 +15,12 @@ const refundRequestRoutes = require("../routes/refundRequestRoutes");
 const activityRoutes = require("../routes/activity.route");
 const eventRequestRoutes = require("../routes/event-request");
 const chatRoutes = require("../routes/chat.route");
+const availabilityRoutes = require("../routes/AvailabilityRoutes");
 
 
 // Define route configuration
 exports.routesLists = {
+    '/api/v1/availability': availabilityRoutes,
     '/api/v1/refund-request': refundRequestRoutes,
     '/api/v1/conv': chatRoutes,
     '/api/v1/activities': activityRoutes,
