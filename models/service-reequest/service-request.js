@@ -12,10 +12,6 @@ const serviceRequestSchema = new Schema({
         required: [true, "Locaion is required"],
         min: [3, "Minimum letter should be 3"]
     },
-    dateAndTime: {
-        type: String,
-        required: [true, "Date and time is required"],
-    },
     budget: {
         type: String,
         required:true,
