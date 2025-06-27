@@ -91,3 +91,43 @@ exports.deleteServiceRequest = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+// GEt Service Request behalf of userid
+exports.getServiceRequestsByUserId = async (req, res) => {
+    try {
+        // Validate MongoDB ID format
+        if (!req.user._id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid user ID format'
+            });
+        }
+
+        // Find service requests with user population
+        const serviceRequests = await ServiceRequest.find({ createdBy: req.user._id })
+            .populate('createdBy', 'name email') // Only include name and email
+            .sort({ createdAt: -1 }); // Newest first
+
+        if (!serviceRequests || serviceRequests.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'No service requests found for this user',
+                data: []
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            count: serviceRequests.length,
+            serviceRequests
+        });
+
+    } catch (error) {
+        console.error('Error fetching service requests:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while fetching service requests',
+            error: error.message
+        });
+    }
+};
