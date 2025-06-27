@@ -5,6 +5,7 @@ const router = express.Router()
 
 router
     .post('/', verifyToken, serviceRequestController.createServiceRequest)
+    .get('/userId', verifyToken, serviceRequestController.getServiceRequestsByUserId)
     .get('/', serviceRequestController.getAllServiceRequests)
     .get('/:id', serviceRequestController.getServiceRequestById)
     .patch('/:id', serviceRequestController.updateServiceRequest)
