@@ -89,3 +89,89 @@ exports.createWithdrawalOTPTemplate = (otp) => {
     </div>
   `;
 };
+
+exports.createEmailVerificationTemplate = (otp,otpExpires, name) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Email Verification</title>
+      <style>
+        body {
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .container {
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          padding: 30px;
+        }
+        .header {
+          color: #2c3e50;
+          text-align: center;
+          margin-bottom: 25px;
+        }
+        .otp-code {
+          background: #f8f9fa;
+          letter-spacing: 5px;
+          padding: 15px 10px;
+          text-align: center;
+          font-size: 24px;
+          font-weight: bold;
+          color: #e74c3c;
+          margin: 20px 0;
+          border-radius: 4px;
+        }
+        .footer {
+          margin-top: 30px;
+          font-size: 12px;
+          color: #7f8c8d;
+          text-align: center;
+        }
+        .warning {
+          color: #e74c3c;
+          font-size: 14px;
+          margin: 15px 0;
+        }
+        .button {
+          display: inline-block;
+          padding: 10px 20px;
+          background-color: #3498db;
+          color: white;
+          text-decoration: none;
+          border-radius: 4px;
+          margin: 15px 0;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h2>Verify Your Email Address</h2>
+        </div>
+        
+        <p>Hello ${name},</p>
+        
+        <p>Thank you for registering with us. To complete your email verification, please use the following One-Time Password (OTP):</p>
+        
+        <div class="otp-code">${otp}</div>
+        
+        <p class="warning">⚠️ This code is valid for <strong>10 minutes</strong>. Please do not share this code with anyone.</p>
+        
+        <p>If you didn't request this verification, please ignore this email or contact our support team immediately.</p>
+        
+        <div class="footer">
+          <p>Best regards,<br>The Support Team</p>
+          <p>© ${new Date().getFullYear()} Tick-m Events. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
