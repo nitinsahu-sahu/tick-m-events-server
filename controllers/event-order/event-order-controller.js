@@ -105,9 +105,6 @@ exports.createOrder = async (req, res) => {
       { new: true, session }
     );
 
-
-
-
     if (!updatedEvent) {
       throw new Error('Event not found');
     }
