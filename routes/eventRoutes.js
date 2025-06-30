@@ -1,21 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, updateCategory, deleteCategory, deleteEvent, addCategory, getCategoryById, updateEventPageCostomization, getTodayEvents } = require('../controllers/event-details/eventController');
+const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, updateCategory,
+  deleteCategory, deleteEvent, addCategory, getCategoryById, updateEventPageCostomization,
+  getTodayEvents, getAllServiceCategories } = require('../controllers/event-details/eventController');
 const { verifyToken } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
 const { createEventCustomization } = require('../controllers/event-details/customizationController');
 const { createPublicationVisibility } = require('../controllers/event-details/visibilityController');
 const { submitRating } = require('../controllers/event-details/eventReviewController');
-const { rotateRadians } = require('pdf-lib');
 
 router.route('/')
-  .get( verifyToken,getEvents)
+  .get(verifyToken, getEvents)
   .post(verifyToken, createEvent)
 
 router.route('/currentDateEvents')
   .get(verifyToken, getTodayEvents)
 
 router.route('/add-category').post(addCategory);
+
+router.route('/allServiceCategory').get(getAllServiceCategories);
 router.route('/allCategory').get(getAllCategories);
 router.route('/category/:id').get(getCategoryById);
 router.route('/category/:id').put(updateCategory);

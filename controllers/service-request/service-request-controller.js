@@ -75,7 +75,7 @@ exports.updateServiceRequest = async (req, res) => {
     try {
         const updated = await ServiceRequest.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
         if (!updated) return res.status(404).json({ error: 'Service request not found' });
-        res.status(200).json(updated);
+        res.status(200).json({ message: "Service updated..." });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
