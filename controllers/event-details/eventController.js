@@ -289,31 +289,29 @@ exports.deleteEvent = async (req, res, next) => {
 exports.addCategory = async (req, res) => {
   try {
     const { name, subcategories } = req.body;
-    const { cover } = req.files;
-
+    const cover = req.files?.cover;
+ 
     if (!name) {
       return res.status(400).json({ message: 'Category name is required' });
     }
-
+ 
     let category = await Category.findOne({ name });
-
+    let action = "";
+ 
     if (!category) {
-      // If no existing category, cover image is required
       if (!cover) {
         return res.status(400).json({
           success: false,
           message: "Please upload a category image"
         });
       }
-
-      // Upload cover image
+ 
       const result = await cloudinary.uploader.upload(cover.tempFilePath, {
         folder: 'event_category',
         width: 400,
         crop: "scale"
       });
-
-      // Create new category
+ 
       category = new Category({
         name,
         cover: {
@@ -322,39 +320,37 @@ exports.addCategory = async (req, res) => {
         },
         subcategories: subcategories || []
       });
-
+ 
+      action = "created";
+ 
     } else {
-      // If category exists, update subcategories only (do not touch cover)
+      // Check if new subcategories were added
+      let updated = false;
+ 
       for (const incomingSub of subcategories || []) {
-        let existingSub = category.subcategories.find(sub => sub.name === incomingSub.name);
-
-        if (!existingSub) {
-          // Subcategory doesn't exist: push it
+        const exists = category.subcategories.some(sub => sub.name === incomingSub.name);
+        if (!exists) {
           category.subcategories.push(incomingSub);
-        } else if (incomingSub.subcategories && incomingSub.subcategories.length > 0) {
-          // Nested sub-subcategories merge
-          const existingSubSubNames = existingSub.subcategories?.map(sc => sc.name) || [];
-
-          const newNestedSubs = incomingSub.subcategories.filter(
-            subSub => !existingSubSubNames.includes(subSub.name)
-          );
-
-          if (!existingSub.subcategories) {
-            existingSub.subcategories = [];
-          }
-
-          existingSub.subcategories.push(...newNestedSubs);
+          updated = true;
         }
       }
+ 
+      action = updated ? "updated" : "exists";
     }
-
+ 
     await category.save();
-
+ 
+    let message = {
+      created: "Category created successfully",
+      updated: "Category updated successfully",
+      exists: "Category already exists and no changes were made"
+    };
+ 
     res.status(201).json({
-      message: 'Category saved/updated successfully',
+      message: message[action],
       category
     });
-
+ 
   } catch (error) {
     console.error('Error saving category:', error);
     res.status(500).json({ message: 'Internal Server Error', error: error.message });
@@ -364,7 +360,7 @@ exports.addCategory = async (req, res) => {
 exports.getAllCategories = async (req, res) => {
   try {
     // First fetch all categories with their subcategories
-    const categories = await Category.find({});
+    const categories = await Category.find({type:"page"});
 
     // Create an array to hold categories with their events
     const categoriesWithEvents = [];
@@ -727,5 +723,45 @@ exports.getTodayEvents = async (req, res, next) => {
   } catch (error) {
     console.error('Error fetching events:', error.message);
     res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
+exports.getAllServiceCategories = async (req, res) => {
+  try {
+    // First fetch all categories with their subcategories
+    const categories = await Category.find({type:"serviceCategory"});
+
+    // Create an array to hold categories with their events
+    const categoriesWithEvents = [];
+
+    // For each category, find matching events
+    for (const category of categories) {
+      // Get all category names to search for (parent + subcategories)
+      const categoryNames = getAllCategoryIds(category);
+      // Find events that match any of these category names
+      const events = await Event.find({
+        category: { $in: categoryNames },
+        isDelete: false // assuming you don't want deleted events
+      });
+
+      // Add category with its events to the result array
+      categoriesWithEvents.push({
+        ...category.toObject(),
+        events
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      categories: categoriesWithEvents,
+      message: "Category fetch successfully",
+
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 };
