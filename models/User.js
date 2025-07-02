@@ -39,7 +39,6 @@ const userSchema = new Schema({
     },
     number: {
         type: String,
-        trim: true,
         max: 10,
         unique: true,
         default: "XXXXX XXXXX",
@@ -109,6 +108,31 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
+    reviewCount: {
+        type: Number,
+        default: 0
+    },
+    responseStats: {
+        currentMonth: {
+            totalResponseTime: { type: Number, default: 0 }, // in milliseconds
+            responseCount: { type: Number, default: 0 },
+            averageResponseTime: { type: Number, default: 0 } // in hours
+        },
+        history: [{
+            month: { type: String, required: true }, // Format: "YYYY-MM"
+            averageResponseTime: { type: Number, required: true }
+        }]
+    },
+    profileViews: {
+        currentMonth: {
+            count: { type: Number, default: 0 },
+            viewers: [{ type: Schema.Types.ObjectId, ref: 'User' }]
+        },
+        history: [{
+            month: { type: String, required: true }, // Format: "YYYY-MM"
+            count: { type: Number, required: true }
+        }]
+    },
     createdAt: { type: Date, default: Date.now },
     socketId: { type: String }
 }, { timestamps: true })
@@ -127,4 +151,20 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
 
+// Update average rating
+userSchema.methods.updateAverageRating = async function () {
+    const reviews = await mongoose.model("Review").find({ reviewedUserId: this._id });
+    if (reviews.length === 0) {
+        this.averageRating = 0;
+        this.reviewCount = 0;
+        const result = await this.save();
+        return result;
+    }
+    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    this.averageRating = parseFloat((totalRating / reviews.length).toFixed(1));
+    this.reviewCount = reviews.length;
+
+    const result = await this.save();
+    return result;
+};
 module.exports = mongoose.model("User", userSchema)
