@@ -8,7 +8,6 @@ const userServiceRequestRoutes = require("../routes/userServiceRequestRoutes")
 const reminderRoutes = require("../routes/reminders")
 const eventReviewRoutes = require("../routes/eventReviewRoute")
 const eventOrderRoutes = require("../routes/eventOrderRoute")
-const userReviewsRoutes = require("../routes/userReview.Routes")
 const homeRecommendationsRoutes = require("../routes/homeRecommendationsRoutes")
 const transactionPaymentRoutes = require("../routes/transactionPaymentRoutes")
 const refundRequestRoutes = require("../routes/refundRequestRoutes");
@@ -37,7 +36,6 @@ exports.routesLists = {
   '/api/v1/reminder': reminderRoutes,
   '/api/v1/promotion': promotionOfferRoutes,
   '/api/v1/event-order': eventOrderRoutes,
-  '/api/v1/reviews': userReviewsRoutes,
   '/api/v1/home-recommendations': homeRecommendationsRoutes,
   '/api/v1/transaction-payment': transactionPaymentRoutes,
   '/api/v1/event-requests': eventRequestRoutes,

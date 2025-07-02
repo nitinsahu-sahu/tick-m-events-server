@@ -23,6 +23,8 @@ router
     .get('/providers/service', getAllServiceCategories)
     .put('/cover', verifyToken, authController.updateCover)
     .put('/avatar', verifyToken, authController.updateAvatar)
-
+    .post("/reviews", verifyToken, authController.createReview)
+    .put("/reviews/:reviewId/reply", verifyToken, authController.addReply)
+    .get("/reviews",verifyToken, authController.getProviderReviews);
 
 module.exports = router
