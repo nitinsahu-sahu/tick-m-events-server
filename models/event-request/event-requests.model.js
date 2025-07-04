@@ -28,7 +28,16 @@ const eventRequestSchema = new mongoose.Schema({
   discussion: {
     type: String,
   }, // Custom message from organizer
-  providerResponse: String, // Provider's response message
+  providerResponse:  { type: String },
+  providerProposal: {
+    amount: { type: Number },
+    days: { type: Number },
+    message: { type: String }
+  },
+  providerHasProposed: {
+    type: Boolean,
+    default: false
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model('EventRequest', eventRequestSchema);

@@ -8,7 +8,8 @@ exports.getRequestsByProvider = async (req, res) => {
         const { status, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
 
         // Build query
-        const query = { providerId: req.user._id, status: "requested-by-organizer" };
+        // const query = { providerId: req.user._id, status: "requested-by-organizer" };
+        const query = { providerId: req.user._id };
         if (status) {
             query.status = status;
         }
@@ -155,6 +156,115 @@ exports.providerRespondOnReq = async (req, res) => {
     }
 };
 
+exports.sendProposal = async (req, res) => {
+  try {
+    const { id } = req.params; 
+    const { amount, days, message } = req.body;
+
+    const eventRequest = await EventRequest.findById(id);
+
+    if (!eventRequest) {
+      return res.status(404).json({ message: "Request not found" });
+    }
+
+    eventRequest.providerProposal = {
+      amount,
+      days,
+      message
+    };
+
+    eventRequest.providerHasProposed = true;
+    eventRequest.status = "accepted-by-provider"; 
+    // eventRequest.contractStatus="ongoing";
+    
+    await eventRequest.save();
+
+    res.status(200).json({ message: "Proposal sent successfully", eventRequest });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getPraposal = async (req, res) => {
+    try {
+        const request = await EventRequest.findById(req.params.id)
+            .populate('eventId organizerId serviceRequestId providerId');
+
+        if (!request) {
+            return res.status(404).json({ message: 'Request not found' });
+        }
+
+        res.json(request);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+exports.updatePraposal =async (req, res) => {
+    try {
+        const { amount, days, message } = req.body;
+
+        const request = await EventRequest.findById(req.params.id);
+        if (!request) {
+            return res.status(404).json({ message: 'EventRequest not found' });
+        }
+
+        request.providerProposal = { amount, days, message };
+        request.providerHasProposed = true;
+
+        await request.save();
+
+        res.json({ message: 'Proposal updated successfully', proposal: request.providerProposal });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error updating proposal' });
+    }
+};
+
+exports.getRequestsByOrganizer = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
+
+    const query = { organizerId: req.user._id };
+
+    // Sorting
+    const [sortField, sortOrder] = sortBy.split(':');
+    const sort = { [sortField]: sortOrder === 'desc' ? -1 : 1 };
+
+    const skip = (page - 1) * limit;
+
+    const [requests, total] = await Promise.all([
+      EventRequest.find(query)
+        .populate('eventId', 'eventName date location time description averageRating')
+        .populate('organizerId', 'name email avatar')
+        .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+        .populate('providerId', 'name email avatar')
+        .sort(sort)
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      EventRequest.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: parseInt(page),
+      requests
+    });
+
+  } catch (error) {
+    console.error('Error fetching requests by organizer:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching organizer requests'
+    });
+  }
+};
 
 async function getProviderServices(providerId) {
     try {

@@ -8,9 +8,17 @@ const { routesLists } = require("./utils/routerList")
 const cloudinary = require('cloudinary').v2;
 const bodyParser = require('body-parser');
 const fileUpload = require('express-fileupload');
+const User = require('./models/User');
 const initReminderScheduler = require("./schedulers/reminderScheduler")
 // const cron = require("./schedulers/reminderScheduler");
 const port = process.env.PORT || 3000;
+const SOCKET_PORT = process.env.SOCKET_PORT || 8000;
+
+const io = require('socket.io')(SOCKET_PORT, {
+  cors: {
+    origin: process.env.ADMIN_ORIGIN,
+  }
+});
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_NAME,
@@ -47,6 +55,70 @@ server.use(cors(
 for (const [prefix, router] of Object.entries(routesLists)) {
   server.use(prefix, router);
 }
+
+let users = [];
+// Update your socket.io implementation like this:
+io.on('connection', socket => {
+  console.log('====================================');
+  console.log(socket.socketId);
+  console.log('====================================');
+  socket.on('addUser', userId => {
+    const isUserExist = users.find(user => user.userId === userId);
+    if (!isUserExist && userId) {
+      const user = { userId, socketId: socket.id };
+      users.push(user);
+      io.emit('getUsers', users);
+    }
+  });
+
+  socket.on('sendMessage', async ({ senderId, receiverId, message, conversationId }) => {
+    const receiver = users.find(user => user.userId === receiverId);
+    const sender = users.find(user => user.userId === senderId);
+    const user = await User.findById(senderId);
+    
+    if (!user) return;
+
+    const messageData = {
+      senderId,
+      message,
+      conversationId,
+      receiverId,
+      user: {
+        _id: user._id,
+        fullname: user.name,
+        email: user.email,
+        profile: user.avatar
+      }
+    };
+    // Always emit to sender
+    if (sender) {
+      io.to(sender.socketId).emit('getMessage', messageData);
+    }
+
+    // Emit to receiver if online
+    if (receiver) {
+      io.to(receiver.socketId).emit('getMessage', messageData);
+    }
+
+    // Save to database
+    // try {
+    //   await axios.post(`/conv/message`, {
+    //     conversationId,
+    //     senderId,
+    //     message,
+    //     receiverId,
+    //     type: "text"
+    //   });
+    // } catch (error) {
+    //   console.error("Error saving message:", error);
+    // }
+  });
+
+  socket.on('disconnect', () => {
+    users = users.filter(user => user.socketId !== socket.id);
+    io.emit('getUsers', users);
+  });
+});
 
 server.get("/", (req, res) => {
   res.status(200).json({ message: 'running' })
