@@ -1,25 +1,15 @@
 const mongoose = require('mongoose');
 
 const messageSchema = mongoose.Schema({
+    conversationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "CONVERSATION",
+        required: true,
+    },
     senderId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    eventId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Event',
-        required: true
-    },
-    receiverId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    serviceRequestId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'ServiceRequest',
-        required: true
+        ref: "User",
+        required: true,
     },
     message: {
         type: String
@@ -27,6 +17,23 @@ const messageSchema = mongoose.Schema({
     type: {
         type: String
     },
+    receiverId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+    },
+    senderDeleteStatus: {
+        type: String,
+        enum: ['0', '1'],
+        default: '0'
+    },
+    receiverDeleteStatus: {
+        type: String,
+        enum: ['0', '1'],
+        default: '0'
+    }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Message', messageSchema);
+const Messages = mongoose.model('Message', messageSchema);
+
+module.exports = Messages;

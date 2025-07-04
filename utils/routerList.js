@@ -17,9 +17,10 @@ const chatRoutes = require("../routes/chat.route");
 const availabilityRoutes = require("../routes/AvailabilityRoutes");
 const verificationRoutes = require("../routes/verificationRoutes");
 const eventReminderRoutes = require("../routes/eventReminderRoutes");
-
+const saveSettings = require("../routes/settings");
 // Define route configuration
 exports.routesLists = {
+  '/api/v1/settings': saveSettings,
   '/api/v1/event-reminder': eventReminderRoutes,
   '/api/v1/verification': verificationRoutes,
   '/api/v1/availability': availabilityRoutes,
