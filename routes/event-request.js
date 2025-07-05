@@ -1,7 +1,8 @@
 const express = require("express")
 const {
     getRequestsByProvider, createRequest, providerRespondOnReq, updateRequestById, sendProposal,
-    getPraposal, updatePraposal, getRequestsByOrganizer
+    getPraposal, updatePraposal, getRequestsByOrganizer,
+    updateRequestStatusByOrganizer
 } = require("../controllers/event-request/event-requst-controller")
 const { verifyToken } = require("../middleware/VerifyToken")
 const router = express.Router()
@@ -15,6 +16,6 @@ router
     .get("/:id/getPraposal", getPraposal)
     .patch("/:id/proposal", updatePraposal)
     .get("/organizer-requests", verifyToken, getRequestsByOrganizer)
-
+    .put("/:id/status", verifyToken, updateRequestStatusByOrganizer)
 
 module.exports = router
