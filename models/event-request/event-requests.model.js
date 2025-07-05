@@ -8,14 +8,13 @@ const eventRequestSchema = new mongoose.Schema({
   providerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   status: {
     type: String,
-    enum: ['accepted', 'requested-by-organizer', 'accepted-by-provider', 'rejected-by-provider', 'rejected-by-organizer'],
+    enum: ['accepted', 'requested-by-organizer', 'accepted-by-provider', 'rejected-by-provider', 'rejected-by-organizer', 'accepted-by-organizer'],
     default: 'requested-by-organizer'
   },
   contractStatus: {
     type: String,
     enum: ['pending', 'signed', 'ongoing', 'completed'],
     default: 'pending'
-
   },
   orgBudget: {
     type: Number,
@@ -28,7 +27,7 @@ const eventRequestSchema = new mongoose.Schema({
   discussion: {
     type: String,
   }, // Custom message from organizer
-  providerResponse:  { type: String },
+  providerResponse: { type: String },
   providerProposal: {
     amount: { type: Number },
     days: { type: Number },

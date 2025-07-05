@@ -39,6 +39,9 @@ exports.conversationByuserId = async (req, res) => {
 exports.conversation = async (req, res) => {
     try {
         const { conversationId, receiverId } = req.body;
+        console.log('====================================');
+        console.log(req.body);
+        console.log('====================================');
         const senderId = req.user._id
         if (conversationId === 'new' && receiverId) {
             const newCoversation = new Conversation(
