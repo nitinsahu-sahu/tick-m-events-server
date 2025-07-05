@@ -57,6 +57,7 @@ exports.sendMessage = async (req, res) => {
     try {
         const senderId = req.user._id
         const { conversationId, message, receiverId = '', type } = req.body;
+     console.log('>>',req.body);
      
         if (conversationId === 'new' && receiverId) {
             const newCoversation = new Conversation(
@@ -89,7 +90,6 @@ exports.sendMessage = async (req, res) => {
         await newMessage.save();
         res.status(200).send('Message sent successfully');
     } catch (error) {
-        res.status(400).send({ errors: error.message });
-
+        res.status(400).send({ error: error.message });
     }
 }

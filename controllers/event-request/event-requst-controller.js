@@ -287,3 +287,51 @@ async function getProviderServices(providerId) {
         throw error; // Re-throw for calling function to handle
     }
 }
+
+exports.updateRequestStatusByOrganizer = async (req, res) => {
+    try {
+        const { id } = req.params; // EventRequest ID
+        const { status, contractStatus } = req.body;
+ 
+        // Validate status
+        const validStatuses = [
+            'accepted-by-organizer',
+            'rejected-by-organizer',
+        ];
+        const validContractStatuses = ['pending', 'ongoing'];
+ 
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status value' });
+        }
+ 
+        if (!validContractStatuses.includes(contractStatus)) {
+            return res.status(400).json({ success: false, message: 'Invalid contractStatus value' });
+        }
+ 
+        // Find and update
+        const updatedRequest = await EventRequest.findByIdAndUpdate(
+            id,
+            {
+                status,
+                contractStatus,
+            },
+            { new: true }
+        );
+ 
+        if (!updatedRequest) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+ 
+        res.status(200).json({
+            success: true,
+            message: 'Request status updated successfully',
+            data: updatedRequest,
+        });
+    } catch (error) {
+        console.error('Error updating request status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while updating request status',
+        });
+    }
+};

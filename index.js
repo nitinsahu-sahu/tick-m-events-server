@@ -99,19 +99,6 @@ io.on('connection', socket => {
     if (receiver) {
       io.to(receiver.socketId).emit('getMessage', messageData);
     }
-
-    // Save to database
-    // try {
-    //   await axios.post(`/conv/message`, {
-    //     conversationId,
-    //     senderId,
-    //     message,
-    //     receiverId,
-    //     type: "text"
-    //   });
-    // } catch (error) {
-    //   console.error("Error saving message:", error);
-    // }
   });
 
   socket.on('disconnect', () => {
