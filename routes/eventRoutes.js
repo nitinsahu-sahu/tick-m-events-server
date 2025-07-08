@@ -10,7 +10,7 @@ const { createPublicationVisibility } = require('../controllers/event-details/vi
 const { submitRating } = require('../controllers/event-details/eventReviewController');
 
 router.route('/')
-  .get(verifyToken, getEvents)
+  .get(getEvents)
   .post(verifyToken, createEvent)
 
 router.route('/currentDateEvents')
