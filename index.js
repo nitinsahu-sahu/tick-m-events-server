@@ -59,9 +59,6 @@ for (const [prefix, router] of Object.entries(routesLists)) {
 let users = [];
 // Update your socket.io implementation like this:
 io.on('connection', socket => {
-  console.log('====================================');
-  console.log(socket.socketId);
-  console.log('====================================');
   socket.on('addUser', userId => {
     const isUserExist = users.find(user => user.userId === userId);
     if (!isUserExist && userId) {

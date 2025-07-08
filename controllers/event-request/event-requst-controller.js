@@ -335,3 +335,51 @@ exports.updateRequestStatusByOrganizer = async (req, res) => {
         });
     }
 };
+
+exports.markRequestAsCompleted = async (req, res) => {
+    try {
+        const { id } = req.params;
+ 
+        // Find and populate eventId to get the event date
+        const request = await EventRequest.findById(id)
+            .populate('eventId', 'date');
+ 
+        if (!request) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+ 
+        // Check status
+        if (request.status !== 'accepted-by-organizer') {
+            return res.status(400).json({ success: false, message: 'Request is not accepted by organizer' });
+        }
+ 
+        // Check contractStatus
+        if (request.contractStatus !== 'ongoing') {
+            return res.status(400).json({ success: false, message: 'Only ongoing contracts can be completed' });
+        }
+ 
+        const eventDate = new Date(request.eventId.date);
+        const now = new Date();
+ 
+        if (now <= eventDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot mark as completed before the event date',
+            });
+        }
+ 
+        // Update contractStatus
+        request.contractStatus = 'completed';
+        await request.save();
+ 
+        return res.status(200).json({
+            success: true,
+            message: 'Contract marked as completed',
+            data: request,
+        });
+ 
+    } catch (error) {
+        console.error('❌ Error marking request as completed:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
