@@ -36,12 +36,10 @@ exports.conversationByuserId = async (req, res) => {
         res.status(400).send({ errors: error.message });
     }
 }
+
 exports.conversation = async (req, res) => {
     try {
         const { conversationId, receiverId } = req.body;
-        console.log('====================================');
-        console.log(req.body);
-        console.log('====================================');
         const senderId = req.user._id
         if (conversationId === 'new' && receiverId) {
             const newCoversation = new Conversation(
@@ -61,3 +59,46 @@ exports.conversation = async (req, res) => {
         res.status(400).send({ errors: error.message });
     }
 }
+
+exports.conversationByLoginUser = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const conversations = await Conversation.find({ members: { $in: [userId] } });
+        const conversationUserData = Promise.all(conversations.map(async (conversation) => {
+            const receiverId = conversation.members.find((member) => member !== userId);
+            const user = await User.findById(receiverId);
+            return {
+                user: {
+                    receiverId: user._id,
+                    email: user.email,
+                    name: user.name,
+                    avatar: user.avatar.url
+                },
+                conversationId: conversation._id
+            }
+        }))
+        res.status(200).json(await conversationUserData);
+    } catch (error) {
+        res.status(400).send({ errors: error.message });
+    }
+}
+
+exports.getAllActiveUsers = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        
+        // Get all ACTIVE users except current user
+        const allUsers = await User.find({ 
+            _id: { $ne: userId },
+            status: 'active' // Only include active users
+        }).select('_id email name avatar.url status');
+        
+        res.status(200).json(allUsers);
+    } catch (error) {
+        res.status(400).send({ 
+            success: false,
+            message: 'Failed to fetch user list',
+            error: error.message 
+        });
+    }
+};

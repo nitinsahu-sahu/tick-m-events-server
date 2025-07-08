@@ -24,6 +24,11 @@ const verificationSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  type: {
+    type: String,
+    enum: ['passport', 'driving_license', 'national_id'],
+    required: true
+  },
   identityDocuments: [{
     url: String,
     public_id: String,
