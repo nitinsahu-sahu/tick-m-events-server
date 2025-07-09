@@ -87,10 +87,26 @@ exports.getAllActiveUsers = async (req, res) => {
     try {
         const userId = req.user._id;
         
-        // Get all ACTIVE users except current user
+        // Step 1: Find all conversations where the user is a member
+        const userConversations = await Conversation.find({
+            $or: [
+                { senderId: userId },
+                { receiverId: userId }
+            ]
+        });
+        
+        // Step 2: Extract all unique user IDs the logged-in user has conversed with
+        const conversedUserIds = userConversations.flatMap(conv => 
+            [conv.senderId.toString(), conv.receiverId.toString()]
+        ).filter(id => id !== userId.toString());
+        
+        // Step 3: Get all active users except current user AND those already conversed with
         const allUsers = await User.find({ 
-            _id: { $ne: userId },
-            status: 'active' // Only include active users
+            _id: { 
+                $ne: userId,
+                $nin: conversedUserIds 
+            },
+            status: 'active'
         }).select('_id email name avatar.url status');
         
         res.status(200).json(allUsers);

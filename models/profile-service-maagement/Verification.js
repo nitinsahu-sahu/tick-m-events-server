@@ -24,12 +24,21 @@ const verificationSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  type: {
-    type: String,
-    enum: ['passport', 'driving_license', 'national_id'],
-    required: true
-  },
   identityDocuments: [{
+    type: {
+      type: String,
+      enum: ['passport', 'driving_license', 'national_id'],
+      required: true
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
+    },
+    rejectionReason: {
+      type: String,
+      default: null
+    },
     url: String,
     public_id: String,
     status: {
