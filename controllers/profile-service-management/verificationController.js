@@ -380,33 +380,79 @@ exports.approveIdentity = async (req, res) => {
 };
 
 // Admin endpoint to reject identity
-exports.rejectIdentity = async (req, res) => {
+//get all kyc data
+exports.getAllVerifications = async (req, res) => {
     try {
-        const { userId } = req.params;
-        const { reason } = req.body;
-
-        const verification = await Verification.findOneAndUpdate(
-            { userId },
-            { $set: { 'identityDocuments.$[].status': 'rejected' } },
-            { new: true }
-        );
-
-        if (!verification) {
-            return res.status(404).json({ success: false, message: 'Verification record not found' });
-        }
-
-        // TODO: Send notification to user about rejection with reason
-
-        res.status(200).json({
-            success: true,
-            message: 'Identity rejected',
-            data: verification
-        });
+        const verifications = await Verification.find()
+            .populate('userId', 'name email') // joins user info
+            .lean();
+ 
+        const formatted = verifications.map(v => ({
+            _id: v._id,
+            user: {
+                _id: v.userId._id,
+                name: v.userId.name,
+                email: v.userId.email
+            },
+            emailVerified: v.emailVerified,
+            whatsappVerified: v.whatsappVerified,
+            whatsappNumber: v.whatsappNumber,
+            identityVerified: v.identityVerified,
+            paymentVerified: v.paymentVerified,
+            identityDocuments: v.identityDocuments.map(doc => ({
+                url: doc.url,
+                public_id: doc.public_id,
+                type: doc.type,
+                status: doc.status,
+                uploadedAt: doc.uploadedAt
+            })),
+            lastUpdated: v.lastUpdated,
+            createdAt: v.createdAt,
+            updatedAt: v.updatedAt
+        }));
+ 
+        res.status(200).json({ success: true, data: formatted });
     } catch (error) {
+        console.error('Failed to get verification records:', error);
         res.status(500).json({
             success: false,
-            message: 'Rejection failed',
+            message: 'Error fetching verification data',
             error: error.message
         });
     }
+};
+ 
+exports.rejectIdentity = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+ 
+    const verification = await Verification.findOne({ userId });
+ 
+    if (!verification) {
+      return res.status(404).json({ success: false, message: 'Verification record not found' });
+    }
+ 
+    // Update all identity documents to rejected + set rejectionReason
+    verification.identityDocuments.forEach((doc) => {
+      doc.status = 'rejected';
+      doc.rejectionReason = reason;
+    });
+ 
+    await verification.save();
+ 
+    // TODO: Send notification to user about rejection with reason
+ 
+    res.status(200).json({
+      success: true,
+      message: 'Identity rejected',
+      data: verification
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Rejection failed',
+      error: error.message
+    });
+  }
 };
