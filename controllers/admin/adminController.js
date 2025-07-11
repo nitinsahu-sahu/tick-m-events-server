@@ -15,3 +15,35 @@ exports.getAllUsers = async (req, res) => {
     });
   }
 };
+
+exports.validateUser = async (req, res) => {
+  const { userId } = req.params;
+ 
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+ 
+    user.status = 'active';  
+    await user.save();
+ 
+    res.status(200).json({ success: true, message: 'User validated successfully', data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+ 
+exports.blockUser = async (req, res) => {
+  const { userId } = req.params;
+ 
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+ 
+    user.status = 'block';
+    await user.save();
+ 
+    res.status(200).json({ success: true, message: 'User blocked successfully', data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};

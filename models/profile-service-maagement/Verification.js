@@ -41,11 +41,6 @@ const verificationSchema = new mongoose.Schema({
     },
     url: String,
     public_id: String,
-    status: {
-      type: String,
-      enum: ['pending', 'approved', 'rejected'],
-      default: 'pending'
-    },
     uploadedAt: {
       type: Date,
       default: Date.now

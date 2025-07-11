@@ -11,6 +11,14 @@ const messageSchema = mongoose.Schema({
         ref: "User",
         required: true,
     },
+    file: {
+        public_id: {
+            type: String,
+        },
+        url: {
+            type: String,
+        }
+    },
     message: {
         type: String
     },
