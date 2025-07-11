@@ -86,10 +86,19 @@ exports.signup = async (req, res) => {
 
     } catch (error) {
         console.error('Signup error:', error);
+
+        if (error.name === 'ValidationError') {
+            // Extract all validation errors into an array or string
+            const messages = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: messages.join(', ') // or send as array
+            });
+        }
+
         return res.status(500).json({
             success: false,
             message: "Internal server error during registration"
-            // error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -100,7 +109,26 @@ exports.login = async (req, res) => {
 
         const existingUser = await User.findOne({ email });
 
-        if (!existingUser || !(await bcrypt.compare(password, existingUser.password))) {
+        // if (!existingUser || !(await bcrypt.compare(password, existingUser.password))) {
+        //     res.clearCookie('token');
+        //     return res.status(400).json({ message: "Invalid credentials" });
+        // }
+
+        if (!existingUser) {
+            res.clearCookie('token');
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
+
+        // Block login if user status is not active
+        if (existingUser.status !== 'active') {
+            return res.status(403).json({
+                message: "Your account is not activated yet. Please contact the admin."
+            });
+        }
+
+        // Password verification
+        const isPasswordMatch = await bcrypt.compare(password, existingUser.password);
+        if (!isPasswordMatch) {
             res.clearCookie('token');
             return res.status(400).json({ message: "Invalid credentials" });
         }
@@ -603,14 +631,14 @@ exports.createReview = async (req, res) => {
         const userId = req.user._id;
 
         // Check if user already reviewed this provider
-        const existingReview = await Review.findOne({ 
-            user: userId, 
-            reviewedUserId: reviewedUserId 
+        const existingReview = await Review.findOne({
+            user: userId,
+            reviewedUserId: reviewedUserId
         });
-        
+
         if (existingReview) {
-            return res.status(400).json({ 
-                message: "You have already reviewed this provider" 
+            return res.status(400).json({
+                message: "You have already reviewed this provider"
             });
         }
 
@@ -626,17 +654,17 @@ exports.createReview = async (req, res) => {
         // Update provider's average rating
         const provider = await User.findById(reviewedUserId);
         if (!provider) {
-            return res.status(404).json({ 
-                message: "Provider not found" 
+            return res.status(404).json({
+                message: "Provider not found"
             });
         }
 
         // Force the update and wait for it to complete
         await provider.updateAverageRating();
-        
+
         // Fetch the updated provider to verify changes
         const updatedProvider = await User.findById(reviewedUserId);
-        
+
         res.status(201).json({
             success: true,
             review: newReview,
@@ -647,8 +675,8 @@ exports.createReview = async (req, res) => {
         });
     } catch (error) {
         console.error("Error creating review:", error);
-        res.status(500).json({ 
-            message: error.message 
+        res.status(500).json({
+            message: error.message
         });
     }
 };
@@ -688,7 +716,7 @@ exports.addReply = async (req, res) => {
 exports.getProviderReviews = async (req, res) => {
     try {
         const providerId = req.user._id;
-        
+
         // Get all reviews for the provider
         const reviews = await Review.find({ reviewedUserId: providerId })
             .populate("user", "name avatar")
@@ -705,13 +733,13 @@ exports.getProviderReviews = async (req, res) => {
         };
 
         let totalRating = 0;
-        
+
         reviews.forEach(review => {
             ratingCounts[review.rating]++;
             totalRating += review.rating;
         });
 
-        const averageRating = reviews.length > 0 
+        const averageRating = reviews.length > 0
             ? (totalRating / reviews.length).toFixed(1)
             : 0;
 
@@ -733,8 +761,8 @@ exports.getProviderReviews = async (req, res) => {
         });
     } catch (error) {
         console.error("Error fetching provider reviews:", error);
-        res.status(500).json({ 
-            message: error.message 
+        res.status(500).json({
+            message: error.message
         });
     }
 };
