@@ -98,8 +98,8 @@ const userSchema = new Schema({
     },
     status: {
         type: String,
-        enum: ['block', 'active', 'inActive'],
-        default: 'active'
+        enum: ['pending', 'block', 'active', 'inActive'],
+        default: 'pending'
     },
     serviceCategory: {
         type: String,

@@ -1,6 +1,7 @@
 const Messages = require('../../models/chat/chat.schema')
 const User = require('../../models/User')
 const Conversation = require('../../models/chat/conv.schema')
+const cloudinary = require('cloudinary').v2;
 
 // @desc    Send a new message
 // @route   POST /api/messages
@@ -57,8 +58,8 @@ exports.sendMessage = async (req, res) => {
     try {
         const senderId = req.user._id
         const { conversationId, message, receiverId = '', type } = req.body;
-     console.log('>>',req.body);
-     
+        console.log('>>', req.body);
+
         if (conversationId === 'new' && receiverId) {
             const newCoversation = new Conversation(
                 {
@@ -89,6 +90,28 @@ exports.sendMessage = async (req, res) => {
         );
         await newMessage.save();
         res.status(200).send('Message sent successfully');
+    } catch (error) {
+        res.status(400).send({ error: error.message });
+    }
+}
+
+exports.uploadsFile = async (req, res) => {
+    try {
+
+        const files = req.files?.file;
+
+        if (!files) {
+            return res.status(400).json({
+                success: false,
+                message: "Please upload file..."
+            });
+        }
+        const result = await cloudinary.uploader.upload(files.tempFilePath, {
+            folder: 'msg_Files',
+            crop: "scale"
+        });
+
+        res.status(200).send(result);
     } catch (error) {
         res.status(400).send({ error: error.message });
     }

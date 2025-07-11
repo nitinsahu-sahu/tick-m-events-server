@@ -68,7 +68,7 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('sendMessage', async ({ senderId, receiverId, message, conversationId }) => {
+  socket.on('sendMessage', async ({ senderId, receiverId, message, conversationId,updatedAt,type}) => {
     const receiver = users.find(user => user.userId === receiverId);
     const sender = users.find(user => user.userId === senderId);
     const user = await User.findById(senderId);
@@ -80,6 +80,8 @@ io.on('connection', socket => {
       message,
       conversationId,
       receiverId,
+      updatedAt,
+      type,
       user: {
         _id: user._id,
         fullname: user.name,
