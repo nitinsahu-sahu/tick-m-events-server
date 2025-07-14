@@ -1,6 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
 const EventOrder = require('../../models/event-order/EventOrder');
-const EventCustomization = require('../../models/event-details/Customization');
 const Event = require('../../models/event-details/Event');
 const TicketConfiguration = require('../../models/event-details/Ticket');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
@@ -727,58 +726,6 @@ exports.getAllOrders = async (req, res) => {
 };
 
 //verify event
-// exports.verifyTicket = async (req, res) => {
-//   try {
-//     const { ticketCode, participantId, name } = req.body;
-
-//     // Check if at least one field is provided
-//     if (!ticketCode && !participantId && !name) {
-//       return res.status(404).json({
-//         message: "Please provide at least one data",
-//         flag: 'field'
-//       });
-//     }
-
-//     // Build query based on provided fields
-//     const query = {};
-//     if (ticketCode) query.ticketCode = ticketCode;
-//     if (participantId) query.userId = participantId;
-//     if (name) query.name = name;
-
-//     // Find ticket in database
-//     const ticket = await EventOrder.findOne(query)
-//       .select('userId _id eventId tickets verifyEntry entryTime')  // Only select these fields
-//       .populate('userId', 'name email')
-//       .populate({
-//         path: 'eventId',
-//         select: 'eventName date time location',  // Include event details
-//         model: 'Event'
-//       })
-//       .lean();
-
-//     console.log('==ticket==================================');
-//     console.log(ticket);
-//     console.log('====================================');
-//     if (!ticket) {
-//       return res.status(404).json({ message: "Invalid ticket", flag: 'invalid' });
-//     }
-//     if (ticket.verifyEntry) {
-//       return res.status(404).json({ message: "Ticket already used", flag: 'already' });
-//     }
-//     const eventName = await Event.findOne({ _id: ticket.eventId }).select('eventName')
-
-//     return res.status(200).json({
-//       message: "Access granted, Welcome",
-//       ticket,
-//       eventName,
-//       flag: 'granted'
-//     });
-
-//   } catch (err) {
-//     console.error("Error verifying ticket:", err);
-//     return res.status(500).json({ message: "Internal server error" });
-//   }
-// };
 exports.verifyTicket = async (req, res) => {
   try {
     const { ticketCode, participantId, name } = req.body;
@@ -901,6 +848,76 @@ exports.updateOrderVerifyEntryStatus = async (req, res) => {
   } catch (error) {
     console.error('Error updating order:', error);
     res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+exports.getPurchseTicketUserList = async (req, res) => {
+  try {
+    const organizerId = req.user._id;
+
+    // First, find all events created by this organizer
+    const events = await mongoose.model('Event').find({
+      createdBy: organizerId,
+      isDelete: false
+    }).select('_id eventName');
+
+    if (!events.length) {
+      return res.status(200).json({
+        success: true,
+        message: 'No events found for this organizer',
+        data: []
+      });
+    }
+
+    const eventIds = events.map(event => event._id);
+
+    // Then find all orders for these events, populating user details
+    const orders = await mongoose.model('EventOrder').find({
+      eventId: { $in: eventIds }
+    })
+      .populate({
+        path: 'userId',
+        select: '_id name email profileImage' // Select the user fields you need
+      })
+      .select('eventId userId tickets totalAmount paymentStatus createdAt verifyEntry entryTime');
+
+    if (!orders.length) {
+      return res.status(200).json({
+        success: true,
+        message: 'No ticket purchases found for your events',
+        data: []
+      });
+    }
+
+    // Transform the data to include event details with user information
+    const result = orders.map(order => {
+      const event = events.find(e => e._id.toString() === order.eventId.toString());
+      return {
+        eventId: order.eventId,
+        eventName: event ? event.eventName : 'Unknown Event',
+        user: {
+          id: order.userId._id,
+          name: `${order.userId.name}`,
+          email: order.userId.email,
+          phone: order.userId.phoneNumber,
+          profileImage: order.userId.profileImage
+        },
+        tickets: order.tickets,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Ticket purchase user list retrieved successfully',
+      data: result
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
       message: 'Server error',
       error: error.message
     });
