@@ -15,8 +15,7 @@ exports.createEvent = async (req, res, next) => {
   try {
     const { eventName, date, time, category, eventType, location, format, description,
       name, number, email, website, whatsapp, linkedin, facebook, tiktok } = req.body;
-    const { coverImage } = req.files;
-
+    const { coverImage, portraitImage } = req.files || {};
     // Check if file was uploaded
     if (!coverImage) {
       return res.status(400).json({
@@ -32,6 +31,22 @@ exports.createEvent = async (req, res, next) => {
       crop: "scale"
     });
 
+    // Upload portraitImage 
+    let portraitImageData = {};
+    if (portraitImage) {
+      const portraitResult = await cloudinary.uploader.upload(portraitImage.tempFilePath, {
+        folder: 'event_portrait_images',
+        width: 500,
+        height: 500,
+        crop: "fill"
+      });
+
+      portraitImageData = {
+        public_id: portraitResult.public_id,
+        url: portraitResult.secure_url
+      };
+    }
+
     // Create the event first
     const event = await Event.create({
       eventName,
@@ -46,8 +61,8 @@ exports.createEvent = async (req, res, next) => {
       location,
       format,
       description,
-      createdBy: req.user._id
-
+      createdBy: req.user._id,
+      portraitImage: portraitImageData,
     });
 
     // Then create the organizer with the event ID
@@ -290,14 +305,14 @@ exports.addCategory = async (req, res) => {
   try {
     const { name, subcategories } = req.body;
     const cover = req.files?.cover;
- 
+
     if (!name) {
       return res.status(400).json({ message: 'Category name is required' });
     }
- 
+
     let category = await Category.findOne({ name });
     let action = "";
- 
+
     if (!category) {
       if (!cover) {
         return res.status(400).json({
@@ -305,13 +320,13 @@ exports.addCategory = async (req, res) => {
           message: "Please upload a category image"
         });
       }
- 
+
       const result = await cloudinary.uploader.upload(cover.tempFilePath, {
         folder: 'event_category',
         width: 400,
         crop: "scale"
       });
- 
+
       category = new Category({
         name,
         cover: {
@@ -320,13 +335,13 @@ exports.addCategory = async (req, res) => {
         },
         subcategories: subcategories || []
       });
- 
+
       action = "created";
- 
+
     } else {
       // Check if new subcategories were added
       let updated = false;
- 
+
       for (const incomingSub of subcategories || []) {
         const exists = category.subcategories.some(sub => sub.name === incomingSub.name);
         if (!exists) {
@@ -334,23 +349,23 @@ exports.addCategory = async (req, res) => {
           updated = true;
         }
       }
- 
+
       action = updated ? "updated" : "exists";
     }
- 
+
     await category.save();
- 
+
     let message = {
       created: "Category created successfully",
       updated: "Category updated successfully",
       exists: "Category already exists and no changes were made"
     };
- 
+
     res.status(201).json({
       message: message[action],
       category
     });
- 
+
   } catch (error) {
     console.error('Error saving category:', error);
     res.status(500).json({ message: 'Internal Server Error', error: error.message });
@@ -360,7 +375,7 @@ exports.addCategory = async (req, res) => {
 exports.getAllCategories = async (req, res) => {
   try {
     // First fetch all categories with their subcategories
-    const categories = await Category.find({type:"page"});
+    const categories = await Category.find({ type: "page" });
 
     // Create an array to hold categories with their events
     const categoriesWithEvents = [];
@@ -729,7 +744,7 @@ exports.getTodayEvents = async (req, res, next) => {
 exports.getAllServiceCategories = async (req, res) => {
   try {
     // First fetch all categories with their subcategories
-    const categories = await Category.find({type:"serviceCategory"});
+    const categories = await Category.find({ type: "serviceCategory" });
 
     // Create an array to hold categories with their events
     const categoriesWithEvents = [];

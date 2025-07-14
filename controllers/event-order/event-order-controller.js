@@ -77,7 +77,9 @@ exports.createOrder = async (req, res) => {
 
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod } = req.body;
-
+console.log('====================================');
+console.log(req.body,'>>');
+console.log('====================================');
     // Input validation
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -880,7 +882,7 @@ exports.getPurchseTicketUserList = async (req, res) => {
     })
       .populate({
         path: 'userId',
-        select: '_id name email profileImage' // Select the user fields you need
+        select: '_id name email avatar' // Select the user fields you need
       })
       .select('eventId userId tickets totalAmount paymentStatus createdAt verifyEntry entryTime');
 
@@ -903,7 +905,7 @@ exports.getPurchseTicketUserList = async (req, res) => {
           name: `${order.userId.name}`,
           email: order.userId.email,
           phone: order.userId.phoneNumber,
-          profileImage: order.userId.profileImage
+          avatar: order.userId.avatar
         },
         tickets: order.tickets,
       };
@@ -912,7 +914,7 @@ exports.getPurchseTicketUserList = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Ticket purchase user list retrieved successfully',
-      data: result
+      result
     });
 
   } catch (error) {

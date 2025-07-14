@@ -25,6 +25,10 @@ const eventSchema = new Schema({
     public_id: { type: String, required: true },
     url: { type: String, required: true }
   },
+  portraitImage: {
+    public_id: { type: String },
+    url: { type: String }
+  },
   location: { type: String, required: true },
   ticketQuantity: { type: String },
   soldTicket: { type: Number },
