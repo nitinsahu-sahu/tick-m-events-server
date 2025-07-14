@@ -17,6 +17,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         // 1. Get upcoming events (events with date in future)
         const upcomingEvents = await Event.find({
             isDelete: { $ne: true },
+            createdBy:userId,
             date: { $gte: currentDate.toISOString().split('T')[0] } // Date is today or in future
         })
             .sort({ date: 1 }) // Sort by date ascending (earliest first)
@@ -152,7 +153,8 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         const currentMonthFormatted = String(currentMonth).padStart(2, '0');
         const currentMonthEvents = await Event.find({
             date: { $regex: `^${currentYear}-${currentMonthFormatted}` },
-            isDelete: false // Exclude deleted events
+            isDelete: false,
+            createdBy:userId,
         });
 
         // Filter events that are either:
