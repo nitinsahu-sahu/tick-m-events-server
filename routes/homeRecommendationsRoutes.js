@@ -5,7 +5,7 @@ const { verifyToken } = require('../middleware/VerifyToken');
 
 
 router.route('/')
-  .get( getHomeRecommendationsEvents)
+  .get(verifyToken, getHomeRecommendationsEvents)
 
 
 module.exports = router;

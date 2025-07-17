@@ -44,7 +44,7 @@ router.route('/tickets/ec/:eventId/:ticketCustomId')
 
 // Event Customization Routes
 router.route('/tickets/pvo/:eventId/:ticketCustomId/:eventCustomizationId')
-  .post(createPublicationVisibility)
+  .post(verifyToken, createPublicationVisibility)
 
 
 module.exports = router;

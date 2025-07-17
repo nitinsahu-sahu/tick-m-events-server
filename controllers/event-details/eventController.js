@@ -9,14 +9,15 @@ const Visibility = require('../../models/event-details/Visibility');
 const eventReview = require('../../models/event-details/eventReview');
 const EventOrders = require('../../models/event-order/EventOrder');
 const moment = require('moment');
-
+const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
+const TicketConfiguration = require('../../models/event-details/Ticket');
+ 
 // Create Event
 exports.createEvent = async (req, res, next) => {
   try {
     const { eventName, date, time, category, eventType, location, format, description,
       name, number, email, website, whatsapp, linkedin, facebook, tiktok } = req.body;
-    const { coverImage } = req.files;
-
+    const { coverImage, portraitImage } = req.files || {};
     // Check if file was uploaded
     if (!coverImage) {
       return res.status(400).json({
@@ -32,6 +33,22 @@ exports.createEvent = async (req, res, next) => {
       crop: "scale"
     });
 
+    // Upload portraitImage 
+    let portraitImageData = {};
+    if (portraitImage) {
+      const portraitResult = await cloudinary.uploader.upload(portraitImage.tempFilePath, {
+        folder: 'event_portrait_images',
+        width: 500,
+        height: 500,
+        crop: "fill"
+      });
+
+      portraitImageData = {
+        public_id: portraitResult.public_id,
+        url: portraitResult.secure_url
+      };
+    }
+
     // Create the event first
     const event = await Event.create({
       eventName,
@@ -46,8 +63,8 @@ exports.createEvent = async (req, res, next) => {
       location,
       format,
       description,
-      createdBy: req.user._id
-
+      createdBy: req.user._id,
+      portraitImage: portraitImageData,
     });
 
     // Then create the organizer with the event ID
@@ -85,7 +102,7 @@ exports.createEvent = async (req, res, next) => {
 exports.getEvents = async (req, res, next) => {
   try {
     const currentDateTime = new Date();
-
+ 
     // Get all events that aren't deleted and are in the future
     const events = await Event.find({
       isDelete: { $ne: true },
@@ -109,7 +126,7 @@ exports.getEvents = async (req, res, next) => {
     })
       .select('-createdBy -createdAt -updatedAt -isDelete -__v')
       .lean();
-
+ 
     // Create array for basic details
     const basicDetails = events.map(event => ({
       _id: event._id,
@@ -117,10 +134,10 @@ exports.getEvents = async (req, res, next) => {
       date: event.date,
       time: event.time
     }));
-
+ 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [organizer, customization, tickets, order, review, visibility] = await Promise.all([
+      const [organizer, customization, tickets, order, review, visibility, ticketConfig, photoFrame] = await Promise.all([
         Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -133,9 +150,11 @@ exports.getEvents = async (req, res, next) => {
           })
           .lean(),
         eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
-        Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean()
+        Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+        TicketConfiguration.findOne({ eventId: event._id }).lean(),
+        CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean()
       ]);
-
+ 
       return {
         ...event,
         order,
@@ -143,10 +162,15 @@ exports.getEvents = async (req, res, next) => {
         customization,
         tickets,
         review,
-        visibility
+        visibility,
+        refundPolicy: ticketConfig?.refundPolicy || null,
+        isRefundPolicyEnabled: ticketConfig?.isRefundPolicyEnabled || false,
+        payStatus: ticketConfig?.payStatus || 'paid',
+        purchaseDeadlineDate: ticketConfig?.purchaseDeadlineDate || null,
+        photoFrame,
       };
     }));
-
+ 
     res.status(200).json({
       success: true,
       message: "Events fetched successfully.",
@@ -158,8 +182,8 @@ exports.getEvents = async (req, res, next) => {
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
-// Get single event
 
+// Get single event
 exports.getEvent = async (req, res, next) => {
   try {
     const eventId = req.params.id; // Extract event ID from URL params
@@ -285,19 +309,18 @@ exports.deleteEvent = async (req, res, next) => {
 };
 
 //Event category creation
-
 exports.addCategory = async (req, res) => {
   try {
     const { name, subcategories } = req.body;
     const cover = req.files?.cover;
- 
+
     if (!name) {
       return res.status(400).json({ message: 'Category name is required' });
     }
- 
+
     let category = await Category.findOne({ name });
     let action = "";
- 
+
     if (!category) {
       if (!cover) {
         return res.status(400).json({
@@ -305,13 +328,13 @@ exports.addCategory = async (req, res) => {
           message: "Please upload a category image"
         });
       }
- 
+
       const result = await cloudinary.uploader.upload(cover.tempFilePath, {
         folder: 'event_category',
         width: 400,
         crop: "scale"
       });
- 
+
       category = new Category({
         name,
         cover: {
@@ -320,13 +343,13 @@ exports.addCategory = async (req, res) => {
         },
         subcategories: subcategories || []
       });
- 
+
       action = "created";
- 
+
     } else {
       // Check if new subcategories were added
       let updated = false;
- 
+
       for (const incomingSub of subcategories || []) {
         const exists = category.subcategories.some(sub => sub.name === incomingSub.name);
         if (!exists) {
@@ -334,23 +357,23 @@ exports.addCategory = async (req, res) => {
           updated = true;
         }
       }
- 
+
       action = updated ? "updated" : "exists";
     }
- 
+
     await category.save();
- 
+
     let message = {
       created: "Category created successfully",
       updated: "Category updated successfully",
       exists: "Category already exists and no changes were made"
     };
- 
+
     res.status(201).json({
       message: message[action],
       category
     });
- 
+
   } catch (error) {
     console.error('Error saving category:', error);
     res.status(500).json({ message: 'Internal Server Error', error: error.message });
@@ -360,7 +383,7 @@ exports.addCategory = async (req, res) => {
 exports.getAllCategories = async (req, res) => {
   try {
     // First fetch all categories with their subcategories
-    const categories = await Category.find({type:"page"});
+    const categories = await Category.find({ type: "page" });
 
     // Create an array to hold categories with their events
     const categoriesWithEvents = [];
@@ -397,7 +420,6 @@ exports.getAllCategories = async (req, res) => {
   }
 };
 
-// Helper function to get all category names (parent + subcategories)
 // Helper function to get all category IDs (parent + subcategories)
 function getAllCategoryIds(category) {
   const ids = [category._id.toString()]; // Convert ObjectId to string
@@ -729,7 +751,7 @@ exports.getTodayEvents = async (req, res, next) => {
 exports.getAllServiceCategories = async (req, res) => {
   try {
     // First fetch all categories with their subcategories
-    const categories = await Category.find({type:"serviceCategory"});
+    const categories = await Category.find({ type: "serviceCategory" });
 
     // Create an array to hold categories with their events
     const categoriesWithEvents = [];
