@@ -1,4 +1,5 @@
 const TicketType = require("../models/TicketType");
+const TicketConfiguration = require('../models/event-details/Ticket');
 
 exports.fetchTicketType = async (req, res) => {
   try {
@@ -120,6 +121,61 @@ exports.updateTicketType = async (req, res) => {
       success: false,
       message: "Internal server error",
       error: error.message,
+    });
+  }
+};
+
+exports.updateRefundPolicy = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const {
+      fullRefund,
+      fullRefundDaysBefore,
+      partialRefund,
+      partialRefundPercent,
+      noRefundAfterDate,
+      noRefundDate,
+      isRefundPolicyEnabled
+    } = req.body;
+ 
+    // Build refund policy object
+    const refundPolicy = {
+      fullRefund: fullRefund || false,
+      fullRefundDaysBefore: fullRefundDaysBefore || "",
+      partialRefund: partialRefund || false,
+      partialRefundPercent: partialRefundPercent || "",
+      noRefundAfterDate: noRefundAfterDate || false,
+      noRefundDate: noRefundDate || null,
+    };
+ 
+    // Update the ticket configuration for the event
+    const updated = await TicketConfiguration.findOneAndUpdate(
+      { eventId },
+      {
+        refundPolicy,
+        isRefundPolicyEnabled: isRefundPolicyEnabled || false,
+      },
+      { new: true }
+    );
+ 
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ticket configuration not found for this event.',
+      });
+    }
+ 
+    return res.status(200).json({
+      success: true,
+      message: 'Refund policy updated successfully.',
+      data: updated
+    });
+ 
+  } catch (err) {
+    console.error("Error updating refund policy:", err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Server Error',
     });
   }
 };

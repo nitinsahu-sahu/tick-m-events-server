@@ -9,7 +9,9 @@ const Visibility = require('../../models/event-details/Visibility');
 const eventReview = require('../../models/event-details/eventReview');
 const EventOrders = require('../../models/event-order/EventOrder');
 const moment = require('moment');
-
+const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
+const TicketConfiguration = require('../../models/event-details/Ticket');
+ 
 // Create Event
 exports.createEvent = async (req, res, next) => {
   try {
@@ -100,7 +102,7 @@ exports.createEvent = async (req, res, next) => {
 exports.getEvents = async (req, res, next) => {
   try {
     const currentDateTime = new Date();
-
+ 
     // Get all events that aren't deleted and are in the future
     const events = await Event.find({
       isDelete: { $ne: true },
@@ -124,7 +126,7 @@ exports.getEvents = async (req, res, next) => {
     })
       .select('-createdBy -createdAt -updatedAt -isDelete -__v')
       .lean();
-
+ 
     // Create array for basic details
     const basicDetails = events.map(event => ({
       _id: event._id,
@@ -132,10 +134,10 @@ exports.getEvents = async (req, res, next) => {
       date: event.date,
       time: event.time
     }));
-
+ 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [organizer, customization, tickets, order, review, visibility] = await Promise.all([
+      const [organizer, customization, tickets, order, review, visibility, ticketConfig, photoFrame] = await Promise.all([
         Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -148,9 +150,11 @@ exports.getEvents = async (req, res, next) => {
           })
           .lean(),
         eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
-        Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean()
+        Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+        TicketConfiguration.findOne({ eventId: event._id }).lean(),
+        CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean()
       ]);
-
+ 
       return {
         ...event,
         order,
@@ -158,10 +162,15 @@ exports.getEvents = async (req, res, next) => {
         customization,
         tickets,
         review,
-        visibility
+        visibility,
+        refundPolicy: ticketConfig?.refundPolicy || null,
+        isRefundPolicyEnabled: ticketConfig?.isRefundPolicyEnabled || false,
+        payStatus: ticketConfig?.payStatus || 'paid',
+        purchaseDeadlineDate: ticketConfig?.purchaseDeadlineDate || null,
+        photoFrame,
       };
     }));
-
+ 
     res.status(200).json({
       success: true,
       message: "Events fetched successfully.",
@@ -173,8 +182,8 @@ exports.getEvents = async (req, res, next) => {
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
-// Get single event
 
+// Get single event
 exports.getEvent = async (req, res, next) => {
   try {
     const eventId = req.params.id; // Extract event ID from URL params
@@ -300,7 +309,6 @@ exports.deleteEvent = async (req, res, next) => {
 };
 
 //Event category creation
-
 exports.addCategory = async (req, res) => {
   try {
     const { name, subcategories } = req.body;
@@ -412,7 +420,6 @@ exports.getAllCategories = async (req, res) => {
   }
 };
 
-// Helper function to get all category names (parent + subcategories)
 // Helper function to get all category IDs (parent + subcategories)
 function getAllCategoryIds(category) {
   const ids = [category._id.toString()]; // Convert ObjectId to string
