@@ -1,7 +1,6 @@
 const express = require("express");
 const validate = require("../middleware/validateRequest");
-const { ticketTypeValidation } = require("../validators/ticketTypeValidator");
-const { createTicketType, fetchTicketType, updateTicketType } = require("../controllers/TicketType");
+const { createTicketType, fetchTicketType, updateTicketType, updateRefundPolicy } = require("../controllers/TicketType");
 const { verifyToken } = require("../middleware/VerifyToken");
 const router = express.Router();
 
@@ -14,4 +13,5 @@ router.route('/:id')
     .patch(verifyToken, updateTicketType)
 //   .delete(deleteEvent);
 
+router.route('/refund-policy/:eventId').patch(verifyToken, updateRefundPolicy);
 module.exports = router;
