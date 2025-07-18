@@ -21,9 +21,11 @@ const saveSettings = require("../routes/settings");
 const adminRoutes =require("../routes/admin.routes");
 const editEventRoutes =require("../routes/organizer/eventRoutes");
 const customFrameRoutes=require("../routes/customFrame");
-
+const contactRoutes =require("../routes/contact.routes");
+  
 // Define route configuration
 exports.routesLists = {
+  '/api/v1/contact':contactRoutes,
   '/api/v1/custom-frame':customFrameRoutes,
   '/api/v1/admin':adminRoutes,
   '/api/v1/o':editEventRoutes,
