@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { getUserEventsWithDetails } = require('../../controllers/organizer/editEvent.Controller');
+const { getUserEventsWithDetails,deleteEvent,updateEvents } = require('../../controllers/organizer/editEvent.Controller');
 const { verifyToken } = require('../../middleware/VerifyToken');
 
 router.route('/edit-events')
     .get(verifyToken, getUserEventsWithDetails)
-//   .post(verifyToken, createEvent)
+
+router.delete('/edit-events/:eventId',verifyToken, deleteEvent);
+router.patch('/edit-events/:eventId',verifyToken, updateEvents);
 
 
 module.exports = router;
