@@ -3,6 +3,7 @@ const Customization = require('../../models/event-details/Customization');
 const TicketConfiguration = require('../../models/event-details/Ticket');
 const Visibility = require('../../models/event-details/Visibility');
 const Organizer = require('../../models/event-details/Organizer');
+const mongoose = require('mongoose');
 
 
 exports.getUserEventsWithDetails = async (req, res, next) => {
@@ -10,9 +11,9 @@ exports.getUserEventsWithDetails = async (req, res, next) => {
     const userId = req.user._id;
 
     // Get all non-deleted events created by the user
-    const events = await Event.find({ 
-      createdBy: userId, 
-      isDelete: false 
+    const events = await Event.find({
+      createdBy: userId,
+      isDelete: false
     }).sort({ createdAt: -1 });
 
     if (!events || events.length === 0) {
@@ -27,7 +28,7 @@ exports.getUserEventsWithDetails = async (req, res, next) => {
 
     for (const event of events) {
       const eventId = event._id.toString();
-      
+
       try {
         const relatedData = await Promise.allSettled([
           Customization.findOne({ eventId }),
@@ -37,7 +38,7 @@ exports.getUserEventsWithDetails = async (req, res, next) => {
         ]);
 
         // Process the results of Promise.allSettled
-        const [customization, tickets, visibility, organizer] = relatedData.map(result => 
+        const [customization, tickets, visibility, organizer] = relatedData.map(result =>
           result.status === 'fulfilled' ? result.value : null
         );
 
@@ -71,6 +72,161 @@ exports.getUserEventsWithDetails = async (req, res, next) => {
     res.status(400).json({
       success: false,
       message: 'Server error',
+    });
+  }
+};
+
+// controllers/eventController.js
+exports.deleteEvent = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+
+    // Verify the event belongs to the user
+    const event = await Event.findOne({ _id: eventId });
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found or you are not authorized to delete it'
+      });
+    }
+
+    // Soft delete by setting isDelete to true
+    event.isDelete = true;
+    await event.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Event deleted successfully'
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Srever error.',
+      error: error.message
+    });
+  }
+};
+
+exports.updateEvents = async (req, res, next) => {
+  const userId = req.user._id;
+  const { eventId } = req.params;
+
+  try {
+    // Verify the event exists and belongs to the user
+    const existingEvent = await Event.findOne({ _id: eventId, createdBy: userId, isDelete: false });
+
+    if (!existingEvent) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found or you do not have permission to update it'
+      });
+    }
+
+    // Extract data from request body
+    const {
+      eventData,
+      customizationData,
+      ticketConfigurationData,
+      visibilityData,
+      organizerData
+    } = req.body;
+
+    // Start a transaction to ensure all updates succeed or fail together
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Update Event data
+      const updatedEvent = await Event.findByIdAndUpdate(
+        eventId,
+        {
+          ...eventData,
+          updatedAt: new Date()
+        },
+        { new: true, session }
+      );
+
+      // Update Customization data
+      let updatedCustomization;
+      if (customizationData) {
+        updatedCustomization = await Customization.findOneAndUpdate(
+          { eventId },
+          customizationData,
+          { new: true, upsert: true, session }
+        );
+      }
+
+      // Update Ticket Configuration
+      let updatedTicketConfiguration;
+      if (ticketConfigurationData) {
+        updatedTicketConfiguration = await TicketConfiguration.findOneAndUpdate(
+          { eventId },
+          ticketConfigurationData,
+          { new: true, upsert: true, session }
+        );
+      }
+
+      // Update Visibility
+      let updatedVisibility;
+      if (visibilityData) {
+        updatedVisibility = await Visibility.findOneAndUpdate(
+          { eventId },
+          visibilityData,
+          { new: true, upsert: true, session }
+        );
+      }
+
+      // Update Organizer
+      let updatedOrganizer;
+      if (organizerData) {
+        updatedOrganizer = await Organizer.findOneAndUpdate(
+          { eventId },
+          organizerData,
+          { new: true, upsert: true, session }
+        );
+      }
+
+      // Commit the transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      // Prepare response
+      const response = {
+        success: true,
+        message: 'Event updated successfully',
+        data: {
+          event: updatedEvent,
+          customization: updatedCustomization,
+          ticketConfiguration: updatedTicketConfiguration,
+          visibility: updatedVisibility,
+          organizer: updatedOrganizer
+        }
+      };
+
+      // Remove null values from response
+      Object.keys(response.data).forEach(key => {
+        if (response.data[key] === null || response.data[key] === undefined) {
+          delete response.data[key];
+        }
+      });
+
+      return res.status(200).json(response);
+
+    } catch (error) {
+      // If any error occurs, abort the transaction
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('Error updating event:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'An error occurred while updating the event',
+      error: error.message
     });
   }
 };
