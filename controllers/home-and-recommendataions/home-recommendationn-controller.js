@@ -13,12 +13,25 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         const userId = req.user?._id; // Assuming user is authenticated and user data is in req.user
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1; // Months are 0-indexed in JS
+        const currentDateTime = new Date(); // Gets current date AND time
 
         // 1. Get upcoming events (events with date in future)
         const upcomingEvents = await Event.find({
             isDelete: { $ne: true },
             createdBy:userId,
-            date: { $gte: currentDate.toISOString().split('T')[0] } // Date is today or in future
+            $or: [
+                {
+                    date: { $gt: currentDateTime.toISOString().split('T')[0] } // Date is in future
+                },
+                {
+                    date: currentDateTime.toISOString().split('T')[0], // Date is today
+                    time: {
+                        $gt: currentDateTime.toLocaleTimeString('en-US',
+                            { hour12: false }
+                        )
+                    } // But time is in future
+                }
+            ]
         })
             .sort({ date: 1 }) // Sort by date ascending (earliest first)
             .limit(10) // Limit to 10 upcoming events

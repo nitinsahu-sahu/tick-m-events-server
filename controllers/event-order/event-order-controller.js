@@ -77,9 +77,7 @@ exports.createOrder = async (req, res) => {
 
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod } = req.body;
-console.log('====================================');
-console.log(req.body,'>>');
-console.log('====================================');
+
     // Input validation
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -265,7 +263,9 @@ exports.getOrdersByUser = async (req, res) => {
     });
 
     // 4. Fetch TicketConfiguration for those events
-    const ticketConfigs = await TicketConfiguration.find({ eventId: { $in: eventIds.map(id => id.toString()) } });
+    const ticketConfigs = await TicketConfiguration.find({ 
+      eventId: { $in: eventIds.map(id => id.toString()) } 
+    });
 
     const configMap = {};
     ticketConfigs.forEach(config => {
@@ -278,9 +278,11 @@ exports.getOrdersByUser = async (req, res) => {
     // 5. Enrich each order
     const enrichedOrders = orders.map(order => {
       const event = eventMap[order.eventId] || null;
-      const ticketConfig = configMap[order.eventId] || { refundPolicy: null, isRefundPolicyEnabled: false };
+      const ticketConfig = configMap[order.eventId] || 
+      { refundPolicy: null, isRefundPolicyEnabled: false };
       return {
         ...order.toObject(),
+        payStatus: ticketConfig.payStatus,
         eventDetails: event,
         refundPolicy: ticketConfig.refundPolicy,
         isRefundPolicyEnabled: ticketConfig.isRefundPolicyEnabled,

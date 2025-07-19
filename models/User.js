@@ -39,7 +39,7 @@ const userSchema = new Schema({
     },
     number: {
         type: String,
-        max: 10,
+        max: 15,
         unique: true,
         default: "XXXXX XXXXX",
         required: [true, "Please Enter Your Number"],
@@ -52,12 +52,17 @@ const userSchema = new Schema({
     },
     experience: {
         type: String,
+        default: "",
+
     },
     address: {
         type: String,
+        default: "",
+
     },
     website: {
         type: String,
+        default: "",
     },
     avatar: {
         public_id: {
@@ -103,6 +108,7 @@ const userSchema = new Schema({
     },
     serviceCategory: {
         type: String,
+        default: ""
     },
     averageRating: {
         type: Number,

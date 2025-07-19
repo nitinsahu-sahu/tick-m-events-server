@@ -11,7 +11,7 @@ const EventOrders = require('../../models/event-order/EventOrder');
 const moment = require('moment');
 const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const TicketConfiguration = require('../../models/event-details/Ticket');
- 
+
 // Create Event
 exports.createEvent = async (req, res, next) => {
   try {
@@ -102,31 +102,30 @@ exports.createEvent = async (req, res, next) => {
 exports.getEvents = async (req, res, next) => {
   try {
     const currentDateTime = new Date();
- 
+
     // Get all events that aren't deleted and are in the future
     const events = await Event.find({
       isDelete: { $ne: true },
-      $expr: {
-        $gt: [
-          {
-            $dateFromString: {
-              dateString: {
-                $concat: [
-                  "$date",
-                  "T",
-                  "$time",
-                  ":00.000Z"
-                ]
-              }
-            }
-          },
-          currentDateTime
-        ]
-      }
+      $or: [
+        {
+          date: { $gt: currentDateTime.toISOString().split('T')[0] }
+        },
+        {
+          date: currentDateTime.toISOString().split('T')[0],
+          time: {
+            $gt: currentDateTime.toLocaleTimeString('en-US',
+              { hour12: false }
+            )
+          }
+        }
+      ]
     })
+      .sort({ date: 1, startTime: 1 })
+      .limit(10)
       .select('-createdBy -createdAt -updatedAt -isDelete -__v')
       .lean();
- 
+
+
     // Create array for basic details
     const basicDetails = events.map(event => ({
       _id: event._id,
@@ -134,7 +133,7 @@ exports.getEvents = async (req, res, next) => {
       date: event.date,
       time: event.time
     }));
- 
+
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
       const [organizer, customization, tickets, order, review, visibility, ticketConfig, photoFrame] = await Promise.all([
@@ -154,7 +153,7 @@ exports.getEvents = async (req, res, next) => {
         TicketConfiguration.findOne({ eventId: event._id }).lean(),
         CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean()
       ]);
- 
+
       return {
         ...event,
         order,
@@ -170,7 +169,7 @@ exports.getEvents = async (req, res, next) => {
         photoFrame,
       };
     }));
- 
+
     res.status(200).json({
       success: true,
       message: "Events fetched successfully.",
@@ -792,25 +791,25 @@ exports.validateViewUpdate = async (req, res) => {
   try {
     const { validationView } = req.body;
     const { id: eventId } = req.params;
- 
-    const allowedValues = ['scan', 'listCode','listName'];
+
+    const allowedValues = ['scan', 'listCode', 'listName'];
     if (
       !Array.isArray(validationView) ||
       validationView.some(v => !allowedValues.includes(v))
     ) {
       return res.status(400).json({ message: 'Invalid validationView values. Allowed: scan, list' });
     }
- 
+
     const updatedEvent = await Event.findByIdAndUpdate(
       eventId,
       { validationView },
       { new: true, runValidators: true, select: '+validationView' }
     );
- 
+
     if (!updatedEvent) {
       return res.status(404).json({ message: 'Event not found' });
     }
- 
+
     res.status(200).json({
       message: 'Validation view updated successfully',
       validationView: updatedEvent.validationView,

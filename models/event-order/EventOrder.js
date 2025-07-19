@@ -14,7 +14,11 @@ const addressSchema = new Schema({
 });
 
 const eventOrderSchema = new Schema({
-    eventId: { type: String, required: true },
+    eventId: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "Event",
+        required: true 
+    },
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
