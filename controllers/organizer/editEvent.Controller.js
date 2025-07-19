@@ -126,13 +126,15 @@ exports.updateEvents = async (req, res, next) => {
 
     // Extract data from request body
     const {
-      eventData,
-      customizationData,
-      ticketConfigurationData,
-      visibilityData,
-      organizerData
+      event,
+      customization,
+      tickets,
+      visibility,
+      organizer
     } = req.body;
-
+    console.log('====================================');
+    console.log(req.body.organizer);
+    console.log('====================================');
     // Start a transaction to ensure all updates succeed or fail together
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -142,7 +144,7 @@ exports.updateEvents = async (req, res, next) => {
       const updatedEvent = await Event.findByIdAndUpdate(
         eventId,
         {
-          ...eventData,
+          ...event,
           updatedAt: new Date()
         },
         { new: true, session }
@@ -150,40 +152,40 @@ exports.updateEvents = async (req, res, next) => {
 
       // Update Customization data
       let updatedCustomization;
-      if (customizationData) {
+      if (customization) {
         updatedCustomization = await Customization.findOneAndUpdate(
           { eventId },
-          customizationData,
+          customization,
           { new: true, upsert: true, session }
         );
       }
 
-      // Update Ticket Configuration
-      let updatedTicketConfiguration;
-      if (ticketConfigurationData) {
-        updatedTicketConfiguration = await TicketConfiguration.findOneAndUpdate(
-          { eventId },
-          ticketConfigurationData,
-          { new: true, upsert: true, session }
-        );
-      }
+      // // Update Ticket Configuration
+      // let updatedTicketConfiguration;
+      // if (ticketConfigurationData) {
+      //   updatedTicketConfiguration = await TicketConfiguration.findOneAndUpdate(
+      //     { eventId },
+      //     ticketConfigurationData,
+      //     { new: true, upsert: true, session }
+      //   );
+      // }
 
-      // Update Visibility
+      // // Update Visibility
       let updatedVisibility;
-      if (visibilityData) {
+      if (visibility) {
         updatedVisibility = await Visibility.findOneAndUpdate(
           { eventId },
-          visibilityData,
+          visibility,
           { new: true, upsert: true, session }
         );
       }
 
-      // Update Organizer
+      // // Update Organizer
       let updatedOrganizer;
-      if (organizerData) {
+      if (organizer) {
         updatedOrganizer = await Organizer.findOneAndUpdate(
           { eventId },
-          organizerData,
+          organizer,
           { new: true, upsert: true, session }
         );
       }
@@ -192,20 +194,20 @@ exports.updateEvents = async (req, res, next) => {
       await session.commitTransaction();
       session.endSession();
 
-      // Prepare response
+      // // Prepare response
       const response = {
         success: true,
         message: 'Event updated successfully',
         data: {
           event: updatedEvent,
           customization: updatedCustomization,
-          ticketConfiguration: updatedTicketConfiguration,
+          // ticketConfiguration: updatedTicketConfiguration,
           visibility: updatedVisibility,
           organizer: updatedOrganizer
         }
       };
 
-      // Remove null values from response
+      // // Remove null values from response
       Object.keys(response.data).forEach(key => {
         if (response.data[key] === null || response.data[key] === undefined) {
           delete response.data[key];
