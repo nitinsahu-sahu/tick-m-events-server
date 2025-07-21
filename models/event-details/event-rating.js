@@ -2,7 +2,11 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const ratingSchema = new Schema({
-    eventId: { type: String, required: true },
+   eventId: {
+       type: mongoose.Schema.Types.ObjectId,
+       ref: 'Event',
+       required: true,
+     },
     ratingValue: {
         type: Number,
         required: true,

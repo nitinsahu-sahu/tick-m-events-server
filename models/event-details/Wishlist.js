@@ -7,7 +7,11 @@ const wishlistSchema = new Schema({
     ref: 'User',
     required: true
   },
-  eventId: { type: String, required: true },
+  eventId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event',
+      required: true,
+    },
   addedAt: {
     type: Date,
     default: Date.now

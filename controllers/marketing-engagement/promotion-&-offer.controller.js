@@ -2,6 +2,9 @@ const Promotion = require('../../models/marketing-engagement/promotion-&-offer.s
 const Event = require('../../models/event-details/Event');
 const EventOrder = require('../../models/event-order/EventOrder');
 const User = require('../../models/User');
+const TicketConfiguration = require('../../models/event-details/Ticket');
+const RefundRequest = require('../../models/refund-managment/RefundRequest');
+const Visibility = require('../../models/event-details/Visibility');
 
 // Create Promotion
 exports.createPromotion = async (req, res) => {
@@ -86,6 +89,7 @@ exports.deletePromotion = async (req, res) => {
 };
 
 // Event List with order and participant Id
+
 exports.eventListWithOrderAndParticipant = async (req, res) => {
     try {
         const currentDateTime = new Date();
@@ -110,33 +114,71 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
             ]
         })
             .sort({ date: 1, startTime: 1 })
-            .limit(10)
+            .select('-createdBy -createdAt -updatedAt -isDelete -__v')
             .lean();
 
-        // 2. Get orders for each event
-        const eventsWithOrders = await Promise.all(proEvents.map(async (event) => {
+        // 2. Get additional data for each event
+        const eventsWithCompleteData = await Promise.all(proEvents.map(async (event) => {
+            // Get orders for the event
             const orders = await EventOrder.find({
                 eventId: event._id.toString()
             })
                 .populate({
                     path: 'userId',
-                    select: 'name email profilePicture' // Include whatever user fields you need
+                    select: 'name email profilePicture'
                 })
                 .lean();
 
+            // Get refund requests for all orders of this event
+            const orderIds = orders.map(order => order._id);
+            const refundRequests = await RefundRequest.find({
+                orderId: { $in: orderIds }
+            }).lean();
+
+            // Get ticket configuration for the event
+            const ticketConfig = await TicketConfiguration.findOne({
+                eventId: event._id
+            }).lean();
+            const visibility = await Visibility.findOne({
+                eventId: event._id
+            }).lean();
+            // Map refund requests to their respective orders
+            const ordersWithRefunds = orders.map(order => {
+                const orderRefunds = refundRequests.filter(
+                    refund => refund.orderId === order._id
+                );
+                return {
+                    ...order,
+                    refundRequests: orderRefunds
+                };
+            });
+
             return {
                 ...event,
-                orders: orders || [] // Include empty array if no orders
+                orders: ordersWithRefunds,
+                ticketConfiguration: ticketConfig || null, // Include ticket config or null if not found
+                visibilityAccess: visibility || null, // Include ticket config or null if not found
+                refundStats: {
+                    total: refundRequests.length,
+                    pending: refundRequests.filter(r => r.refundStatus === 'pending').length,
+                    approved: refundRequests.filter(r => r.refundStatus === 'approved').length,
+                    rejected: refundRequests.filter(r => r.refundStatus === 'rejected').length,
+                    refunded: refundRequests.filter(r => r.refundStatus === 'refunded').length
+                }
             };
         }));
 
         res.status(200).json({
             success: true,
-            message: "Events with orders fetched successfully",
-            eventsWithOrdersAndParticiapnt: eventsWithOrders,
+            message: "Complete event data with orders, refunds, and ticket configuration fetched successfully",
+            eventsWithOrdersAndParticiapnt: eventsWithCompleteData,
         });
     } catch (error) {
-        console.error("Error fetching events with orders:", error);
-        res.status(500).json({ success: false, message: 'Server Error' });
+        console.error("Error fetching complete event data:", error);
+        res.status(500).json({
+            success: false,
+            message: 'Server Error',
+            error: error.message
+        });
     }
 };

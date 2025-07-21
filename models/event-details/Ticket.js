@@ -42,7 +42,11 @@ const TicketTypeSchema = new mongoose.Schema({
 });
 
 const TicketConfigurationSchema = new mongoose.Schema({
-  eventId: { type: String, required: true },
+  eventId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event',
+      required: true,
+    },
   tickets: [TicketTypeSchema],
   payStatus: {
     type: String,

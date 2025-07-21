@@ -7,7 +7,7 @@ const Activity = require('../../models/activity/activity.modal');
 exports.createPublicationVisibility = async (req, res, next) => {
 
   try {
-    const { autoShareOnSocialMedia, status, customUrl, publicEvent, privateEvent, homepageHighlighting } = req.body
+    const { autoShareOnSocialMedia, status, customUrl, visibilityType, homepageHighlighting } = req.body
     const { eventId, ticketCustomId, eventCustomizationId } = req.params
 
     await Visibility.create({
@@ -20,10 +20,7 @@ exports.createPublicationVisibility = async (req, res, next) => {
         homepageHighlighting,
         autoShareOnSocialMedia
       },
-      visibilitySettings: {
-        publicEvent,
-        privateEvent
-      }
+      visibilityType
     });
     const event = await Event.findById(eventId).select('eventName');
 
