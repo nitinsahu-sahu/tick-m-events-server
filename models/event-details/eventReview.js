@@ -7,7 +7,11 @@ const replySchema = new Schema({
 });
 
 const eventReviewSchema = new Schema({
-    eventId: { type: String, required: true },
+    eventId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Event',
+        required: true,
+      },
     name: { type: String, required: true },
     email: { type: String, required: true },
     comment: { type: String, required: true },

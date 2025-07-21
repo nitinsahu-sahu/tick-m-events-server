@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, updateCategory,
   deleteCategory, deleteEvent, addCategory, getCategoryById, updateEventPageCostomization,
-  getTodayEvents, getAllServiceCategories,
-  validateViewUpdate } = require('../controllers/event-details/eventController');
+  getTodayEvents, getAllServiceCategories, validateViewUpdate, getEventPageCustomization
+} = require('../controllers/event-details/eventController');
 const { verifyToken } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
 const { createEventCustomization } = require('../controllers/event-details/customizationController');
@@ -48,5 +48,7 @@ router.route('/tickets/pvo/:eventId/:ticketCustomId/:eventCustomizationId')
   .post(verifyToken, createPublicationVisibility)
 
 router.route('/:id/validation-view').patch(validateViewUpdate);
+
+router.get('/eventPageCustomization/:id', getEventPageCustomization);
 
 module.exports = router;

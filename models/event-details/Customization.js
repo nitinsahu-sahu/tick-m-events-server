@@ -2,8 +2,16 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const customizationSchema = new Schema({
-  eventId: { type: String, required: true },
-  ticketCustomId: { type: String, required: true },
+  eventId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
+    required: true,
+  },
+  ticketCustomId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TicketConfiguration',
+    required: true,
+  },
   themeColor: { type: String },
   customColor: { type: String },
   eventLogo: {
@@ -12,7 +20,7 @@ const customizationSchema = new Schema({
   },
   frame: {
     type: String,
-    enum: ['circle', 'square', 'rounded','triangle']
+    enum: ['circle', 'square', 'rounded', 'triangle']
   }
 }, { timestamps: true });
 

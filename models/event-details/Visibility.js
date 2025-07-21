@@ -2,12 +2,25 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const visibilitySchema = new Schema({
-  eventId: { type: String, required: true },
-  ticketCustomId: { type: String, required: true },
-  eventCustomizationId: { type: String, required: true },
-  visibilitySettings: {
-    publicEvent: { type: Boolean, default: false },
-    privateEvent: { type: Boolean, default: false }
+  eventId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
+    required: true,
+  },
+  eventCustomizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Customization',
+    required: true,
+  },
+  ticketCustomId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TicketConfiguration',
+    required: true,
+  },
+  visibilityType: {
+    type: String,
+    enum: ['public', 'private'],
+    default: "public",
   },
   customUrl: { type: String },
   promotionAndHighlight: {

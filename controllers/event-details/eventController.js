@@ -11,6 +11,8 @@ const EventOrders = require('../../models/event-order/EventOrder');
 const moment = require('moment');
 const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const TicketConfiguration = require('../../models/event-details/Ticket');
+const RefundRequest = require('../../models/refund-managment/RefundRequest');
+const mongoose = require('mongoose');
 
 // Create Event
 exports.createEvent = async (req, res, next) => {
@@ -136,7 +138,7 @@ exports.getEvents = async (req, res, next) => {
 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [organizer, customization, tickets, order, review, visibility, ticketConfig, photoFrame] = await Promise.all([
+      const [organizer, customization, tickets, order, refundRequests, review, visibility, ticketConfig, photoFrame] = await Promise.all([
         Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -151,12 +153,30 @@ exports.getEvents = async (req, res, next) => {
         eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
         Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         TicketConfiguration.findOne({ eventId: event._id }).lean(),
-        CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean()
+        CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean(),
+        RefundRequest.find({ eventId: event._id })
+          .populate({ path: 'userId', select: 'name email' })
+          .populate({ path: 'orderId', select: 'paymentStatus tickets' })
+          .lean()
       ]);
+
+      const enrichedOrders = order.map(orderItem => {
+        const matchingRefund = refundRequests.find(refund => {
+          const refundOrderId = refund.orderId?._id || refund.orderId;
+          return refundOrderId?.toString() === orderItem._id.toString();
+        });
+
+        return {
+          ...orderItem,
+          refundAmount: matchingRefund?.refundAmount || 0,
+          refundStatus: matchingRefund?.refundStatus || null
+        };
+      });
 
       return {
         ...event,
-        order,
+        order: enrichedOrders,
+        refundRequests,
         organizer,
         customization,
         tickets,
@@ -581,73 +601,105 @@ exports.deleteCategory = async (req, res) => {
 exports.updateEventPageCostomization = async (req, res) => {
   try {
     const { id } = req.params;
-    const { themeColor, customColor } = req.body;
+    const { themeColor, customColor, frame } = req.body;
     const { eventLogo, coverImage } = req.files || {};
-
-    let eventData = await Event.findById(id);
-    let customizationData = await Customization.findOne({ eventId: id });
-
+ 
+    console.log("Incoming files:", req.files);
+    const eventData = await Event.findById(id);
     if (!eventData) {
       return res.status(404).json({
         success: false,
         message: "Event not found",
       });
     }
-    if (!customizationData) {
-      return res.status(404).json({
-        success: false,
-        message: "Event not found",
-      });
+ 
+    let customizationData = await Customization.findOne({ eventId: id });
+ 
+if (!customizationData) {
+  if (!eventLogo) {
+    return res.status(400).json({
+      success: false,
+      message: "eventLogo is required to create new customization.",
+    });
+  }
+ 
+  const ticketConfig = await TicketConfiguration.findOne({ eventId: id }).lean();
+ 
+  if (!ticketConfig) {
+    return res.status(400).json({
+      success: false,
+      message: "Ticket configuration not found for this event.",
+    });
+  }
+ 
+  const result = await cloudinary.uploader.upload(eventLogo.tempFilePath, {
+    folder: 'event_logos',
+    width: 500,
+    crop: "scale",
+  });
+ 
+  customizationData = new Customization({
+    eventId: id,
+    ticketCustomId: ticketConfig._id.toString(), // ✅ Use existing ticket config ID
+    themeColor,
+    customColor,
+    frame,
+    eventLogo: {
+      public_id: result.public_id,
+      url: result.secure_url,
     }
-    // Update name if provided
-    if (themeColor) customizationData.themeColor = themeColor;
-    if (customColor) customizationData.customColor = customColor;
-
-    // // Update cover image if uploaded
-    if (eventLogo) {
-      // Delete old image if it exists
-      if (customizationData.eventLogo?.public_id) {
-        await cloudinary.uploader.destroy(customizationData.eventLogo.public_id);
+  });
+}
+ else {
+      // 🛠 Update existing fields
+      if (themeColor) customizationData.themeColor = themeColor;
+      if (customColor) customizationData.customColor = customColor;
+      if (frame) customizationData.frame = frame;
+ 
+      if (eventLogo) {
+        if (customizationData.eventLogo?.public_id) {
+          await cloudinary.uploader.destroy(customizationData.eventLogo.public_id);
+        }
+ 
+        const result = await cloudinary.uploader.upload(eventLogo.tempFilePath, {
+          folder: 'event_logos',
+          width: 500,
+          crop: "scale",
+        });
+ 
+        customizationData.eventLogo = {
+          public_id: result.public_id,
+          url: result.secure_url,
+        };
       }
-
-      // Upload new image
-      const result = await cloudinary.uploader.upload(eventLogo.tempFilePath, {
-        folder: 'event_logos',
-        width: 500,
-        crop: "scale",
-      });
-
-      customizationData.eventLogo = {
-        public_id: result.public_id,
-        url: result.secure_url,
-      };
     }
+ 
+    // ✅ Upload cover image (for event model)
     if (coverImage) {
-      // Delete old image if it exists
       if (eventData.coverImage?.public_id) {
         await cloudinary.uploader.destroy(eventData.coverImage.public_id);
       }
-
-      // Upload new image
+ 
       const result = await cloudinary.uploader.upload(coverImage.tempFilePath, {
         folder: 'event_cover_images',
         width: 1500,
         crop: "scale",
       });
-
+ 
       eventData.coverImage = {
         public_id: result.public_id,
         url: result.secure_url,
       };
     }
-
+ 
     await customizationData.save();
     await eventData.save();
-
+ 
     res.status(200).json({
       success: true,
-      message: "Changes applied successfully",
+      message: customizationData.isNew ? "Customization created successfully" : "Changes applied successfully",
     });
+ 
   } catch (error) {
     console.error("Error updating category:", error);
     res.status(500).json({
@@ -656,7 +708,7 @@ exports.updateEventPageCostomization = async (req, res) => {
       error: error.message,
     });
   }
-};
+}; 
 
 exports.getTodayEvents = async (req, res, next) => {
   try {
@@ -817,5 +869,62 @@ exports.validateViewUpdate = async (req, res) => {
   } catch (error) {
     console.error('Error updating validationView:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+//get custom data
+exports.getEventPageCustomization = async (req, res) => {
+  try {
+    const { id } = req.params;
+ 
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid event ID",
+      });
+    }
+ 
+    // Check if event exists
+    const eventData = await Event.findById(id);
+    if (!eventData) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found",
+      });
+    }
+ 
+    // Find customization for this event
+    const customizationData = await Customization.findOne({ eventId: id });
+ 
+    if (!customizationData) {
+      return res.status(200).json({
+        success: true,
+        message: "No customization found for this event",
+        customization: null,
+      });
+    }
+ 
+    // Also send coverImage from Event if you want (some are in eventData)
+    const coverImage = eventData.coverImage || null;
+ 
+    return res.status(200).json({
+      success: true,
+      customization: {
+        themeColor: customizationData.themeColor,
+        customColor: customizationData.customColor,
+        frame: customizationData.frame,
+        eventLogo: customizationData.eventLogo,
+        coverImage: coverImage,
+      },
+    });
+ 
+  } catch (error) {
+    console.error('Error fetching customization:', error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 };

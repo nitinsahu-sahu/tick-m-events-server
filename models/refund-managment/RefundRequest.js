@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { Schema } = mongoose;
+
 const RefundRequestSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -43,11 +43,6 @@ const RefundRequestSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     required: true
-  },
-  refundStatus: {
-    type: String,
-    enum: ['pending', 'approved', 'rejected', 'refunded'],
-    default: 'pending'
   },
   reason: {
     type: String
