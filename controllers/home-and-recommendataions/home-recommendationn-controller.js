@@ -18,7 +18,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         // 1. Get upcoming events (events with date in future)
         const upcomingEvents = await Event.find({
             isDelete: { $ne: true },
-            createdBy:userId,
+            createdBy: userId,
             $or: [
                 {
                     date: { $gt: currentDateTime.toISOString().split('T')[0] } // Date is in future
@@ -37,6 +37,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
             .limit(10) // Limit to 10 upcoming events
             .lean();
 
+ 
 
         // 2. Get popular trending events
         const popularEvents = await Event.aggregate([
@@ -167,7 +168,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         const currentMonthEvents = await Event.find({
             date: { $regex: `^${currentYear}-${currentMonthFormatted}` },
             isDelete: false,
-            createdBy:userId,
+            createdBy: userId,
         });
 
         // Filter events that are either:
