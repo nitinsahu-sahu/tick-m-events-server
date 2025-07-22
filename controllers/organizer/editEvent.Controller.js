@@ -133,7 +133,7 @@ exports.updateEvents = async (req, res, next) => {
       organizer
     } = req.body;
     console.log('====================================');
-    console.log(req.body.organizer);
+    console.log(req.body.tickets);
     console.log('====================================');
     // Start a transaction to ensure all updates succeed or fail together
     const session = await mongoose.startSession();
@@ -161,14 +161,14 @@ exports.updateEvents = async (req, res, next) => {
       }
 
       // // Update Ticket Configuration
-      // let updatedTicketConfiguration;
-      // if (ticketConfigurationData) {
-      //   updatedTicketConfiguration = await TicketConfiguration.findOneAndUpdate(
-      //     { eventId },
-      //     ticketConfigurationData,
-      //     { new: true, upsert: true, session }
-      //   );
-      // }
+      let updatedTicketConfiguration;
+      if (tickets) {
+        updatedTicketConfiguration = await TicketConfiguration.findOneAndUpdate(
+          { eventId },
+          tickets,
+          { new: true, upsert: true, session }
+        );
+      }
 
       // // Update Visibility
       let updatedVisibility;
@@ -201,7 +201,7 @@ exports.updateEvents = async (req, res, next) => {
         data: {
           event: updatedEvent,
           customization: updatedCustomization,
-          // ticketConfiguration: updatedTicketConfiguration,
+          ticketConfiguration: tickets,
           visibility: updatedVisibility,
           organizer: updatedOrganizer
         }
