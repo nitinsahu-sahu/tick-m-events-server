@@ -8,7 +8,11 @@ const activitySchema = new mongoose.Schema({
   activityType: {
     type: String,
     required: true,
-     enum: ['login success', 'logout success', 'event_created', 'ticket_purchased', 'profile_updated', 'password_changed']
+    enum: ['login success', 'logout success', 'event_created', 'ticket_purchased', 'profile_updated', 'password_changed']
+  },
+  location: {
+    type: String,
+    default: "-",
   },
   description: {
     type: String,

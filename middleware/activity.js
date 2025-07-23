@@ -1,4 +1,5 @@
 const Activity = require('../models/activity/activity.modal');
+const getLocationFromIP = require('../utils/getLocationFromIP');
 
 const logActivity = (activityType, descriptionFn) => {
   return async (req, res, next) => {
@@ -12,20 +13,30 @@ const logActivity = (activityType, descriptionFn) => {
       console.log(`Logging activity: ${activityType} for user ID ${user._id}`);
 
       const description = typeof descriptionFn === 'function'
-          ? descriptionFn(req)
-          : descriptionFn;
+        ? descriptionFn(req)
+        : descriptionFn;
 
       const safeBody = { ...req.body };
       if (safeBody.password) safeBody.password = '[FILTERED]';
       if (safeBody.newPassword) safeBody.newPassword = '[FILTERED]';
       if (safeBody.confirmPassword) safeBody.confirmPassword = '[FILTERED]';
+      const ip = req.headers["x-forwarded-for"]?.split(",")[0] ||
+        req.socket?.remoteAddress ||
+        req.connection?.remoteAddress;
 
+      let location = '-';
+      try {
+        location = await getLocationFromIP(ip);
+      } catch (err) {
+        console.warn('Could not fetch location info:', err.message);
+      }
       const newActivity = await Activity.create({
         userId: user._id,
         activityType,
         description,
         ipAddress: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
         userAgent: req.headers['user-agent'],
+        location,
         metadata: {
           params: req.params,
           body: safeBody,
@@ -49,9 +60,9 @@ const eventCreatedActivity = logActivity('event_created', req => `${req.user.ema
 const profileUpdatedActivity = logActivity('profile_updated', req => `${req.user.email} updated their profile`);
 
 module.exports = {
-    logActivity,
-    loginActivity,
-    logoutActivity,
-    eventCreatedActivity,
-    profileUpdatedActivity
+  logActivity,
+  loginActivity,
+  logoutActivity,
+  eventCreatedActivity,
+  profileUpdatedActivity
 };

@@ -7,6 +7,11 @@ const PromotionSchema = new mongoose.Schema({
         enum: ['percentageDiscount', 'fixedValueDiscount', 'groupOffer', 'earlyBuyerDiscount'],
         required: true
     },
+    eventId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Event",
+        required: true,
+    },
     discountValue: {
         type: String,
         required: true,
