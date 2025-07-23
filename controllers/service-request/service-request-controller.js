@@ -4,24 +4,30 @@ const cloudinary = require('cloudinary').v2;
 // Create Service Request
 exports.createServiceRequest = async (req, res) => {
     const { serviceType, eventLocation, budget, description, additionalOptions, status } = req.body;
-    
+    console.log('====================================');
+    console.log(req.body);
+    console.log(req.files);
+    console.log('====================================');
     try {
-        let coverImageData = {};
+        let imagesData = [];
 
-        // Check if coverImage exists in req.files
-        if (req.files && req.files.coverImage) {
-            const { coverImage } = req.files;
-            // Upload avatar to Cloudinary
-            const myCloud = await cloudinary.uploader.upload(coverImage.tempFilePath, {
-                folder: "service-request", // Optional: specify a folder in Cloudinary
-                width: 150,
-                crop: "scale",
-            });
+        // Process multiple images if they exist
+        if (req.files && req.files.images) {
+            const files = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
+            
+            // Upload each image to Cloudinary
+            for (const file of files) {
+                const myCloud = await cloudinary.uploader.upload(file.tempFilePath, {
+                    folder: "service-request",
+                    width: 150,
+                    crop: "scale",
+                });
 
-            coverImageData = {
-                public_id: myCloud.public_id,
-                url: myCloud.secure_url,
-            };
+                imagesData.push({
+                    public_id: myCloud.public_id,
+                    url: myCloud.secure_url,
+                });
+            }
         }
 
         const service = new ServiceRequest({
@@ -31,7 +37,7 @@ exports.createServiceRequest = async (req, res) => {
             description,
             additionalOptions,
             status,
-            coverImage: coverImageData, // This will be empty object if no image was uploaded
+            images: imagesData, // Store array of images
             createdBy: req.user?._id || req.body.createdBy
         });
 
