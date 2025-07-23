@@ -15,6 +15,7 @@ exports.createPromotion = async (req, res) => {
         validityPeriodStart,
         promotionType,
         promoCode,
+        eventId,
     } = req.body;
     try {
         const promotion = new Promotion({
@@ -24,6 +25,7 @@ exports.createPromotion = async (req, res) => {
             validityPeriodStart,
             promotionType,
             promoCode,
+            eventId,
             createdBy: req.user?._id || req.body.createdBy
         });
 
@@ -145,7 +147,7 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
             // Map refund requests to their respective orders
             const ordersWithRefunds = orders.map(order => {
                 const orderRefunds = refundRequests.filter(
-                    refund => refund.orderId === order._id
+                    refund => refund.orderId === order._id.toString()
                 );
                 return {
                     ...order,

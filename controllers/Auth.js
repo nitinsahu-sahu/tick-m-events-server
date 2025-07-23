@@ -12,6 +12,8 @@ const { generateUsername } = require("../utils/generate-username");
 const cloudinary = require('cloudinary').v2;
 const Activity = require("../models/activity/activity.modal");
 const sharp = require('sharp');
+const getLocationFromIP = require('../utils/getLocationFromIP');
+
 //register controller
 exports.signup = async (req, res) => {
     const { name, email, password, gender, number, role, experience, serviceCategory } = req.body;
@@ -145,6 +147,19 @@ exports.login = async (req, res) => {
         });
 
         // ✅ Log activity manually — since req.user is not set
+        // Get IP address
+        const ip =
+            req.headers["x-forwarded-for"]?.split(",")[0] ||
+            req.socket.remoteAddress ||
+            req.connection.remoteAddress;
+ 
+        //  Fetch location using your utility
+        let location = "-";
+        try {
+            location = await getLocationFromIP(ip);
+        } catch (err) {
+            console.warn("Could not fetch location info:", err.message);
+        }
         try {
             await Activity.create({
                 userId: existingUser._id,
@@ -156,7 +171,8 @@ exports.login = async (req, res) => {
                     body: { email },
                     query: req.query,
                     params: req.params
-                }
+                },
+                location
             });
         } catch (logErr) {
             console.error("Activity logging failed:", logErr.message);

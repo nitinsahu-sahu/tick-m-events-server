@@ -23,10 +23,10 @@ const serviceRequestSchema = new Schema({
     additionalOptions: {
         type: String,
     },
-    coverImage: {
+   images: [{
         public_id: { type: String },
         url: { type: String }
-    },
+    }],
     status: {
         type: String,
         enum: ['inActice', 'active', 'draft'],
