@@ -3,7 +3,9 @@ const {
     getRequestsByProvider, createRequest, providerRespondOnReq, updateRequestById, sendProposal,
     getPraposal, updatePraposal, getRequestsByOrganizer,
     updateRequestStatusByOrganizer,
-    markRequestAsCompleted
+    markRequestAsCompleted,
+    cancelEventReq,
+    getProviderAcceptedReq
 } = require("../controllers/event-request/event-requst-controller")
 const { verifyToken } = require("../middleware/VerifyToken")
 const router = express.Router()
@@ -17,7 +19,9 @@ router
     .get("/:id/getPraposal", getPraposal)
     .patch("/:id/proposal", updatePraposal)
     .get("/organizer-requests", verifyToken, getRequestsByOrganizer)
+    .get("/acceptedByProvider", verifyToken, getProviderAcceptedReq)
     .put("/:id/status", verifyToken, updateRequestStatusByOrganizer)
-    .patch('/mark-completed/:id', markRequestAsCompleted);
+    .patch('/mark-completed/:id', markRequestAsCompleted)
+    .delete('/:id',verifyToken, cancelEventReq);
 
 module.exports = router
