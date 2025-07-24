@@ -13,7 +13,7 @@ const eventRequestSchema = new mongoose.Schema({
   },
   contractStatus: {
     type: String,
-    enum: ['pending', 'signed', 'ongoing', 'completed'],
+    enum: ['pending', 'signed', 'ongoing', 'completed', 'cancelled'],
     default: 'pending'
   },
   orgBudget: {

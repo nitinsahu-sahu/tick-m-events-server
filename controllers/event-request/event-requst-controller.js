@@ -133,9 +133,6 @@ exports.createRequest = async (req, res) => {
 
 // Provider responds to request
 exports.providerRespondOnReq = async (req, res) => {
-    console.log('====================================');
-    console.log(req.params);
-    console.log('====================================');
     try {
         const request = await EventRequest.findOneAndUpdate(
             {
@@ -382,4 +379,91 @@ exports.markRequestAsCompleted = async (req, res) => {
         console.error('❌ Error marking request as completed:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
+};
+
+exports.cancelEventReq = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user._id; // Assuming you have user info in req.user
+        
+        // Validate ID
+        if (!id) {
+            return res.status(400).json({ success: false, message: 'Invalid request ID' });
+        }
+
+        // Find the request
+        const request = await EventRequest.findById(id);
+        
+        if (!request) {
+            return res.status(404).json({ success: false, message: 'Request not found' });
+        }
+
+        // Check if user is authorized (either organizer or provider)
+        const isOrganizer = request.organizerId.equals(userId);
+        const isProvider = request.providerId.equals(userId);
+        
+        if (!isOrganizer && !isProvider) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Unauthorized - You can only cancel your own requests' 
+            });
+        }
+
+        // Determine new status based on who is canceling
+        let newStatus;
+        if (isOrganizer) {
+            newStatus = 'rejected-by-organizer';
+        } else {
+            newStatus = 'rejected-by-provider';
+        }
+
+        // Update the status (soft delete approach - recommended)
+        const updatedRequest = await EventRequest.findByIdAndUpdate(
+            id,
+            { 
+                status: newStatus,
+                contractStatus:'cancelled',
+                discussion: req.body.reason || 'Request canceled by user' 
+            },
+            { new: true }
+        );
+
+        // Alternatively, to hard delete:
+        // await EventRequest.findByIdAndDelete(id);
+
+        res.status(200).json({ 
+            success: true, 
+            message: 'Request canceled successfully',
+            data: updatedRequest
+        });
+
+    } catch (error) {
+        console.error('❌ Error canceling request:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+exports.getProviderAcceptedReq = async (req, res) => {
+  try {
+    const query = { organizerId: req.user._id,status:"accepted-by-provider" };
+    const [requests] = await Promise.all([
+      EventRequest.find(query)
+        .populate('eventId', 'eventName date location time description averageRating')
+        .populate('organizerId', 'name email avatar')
+        .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+        .populate('providerId', 'name email avatar')
+        .lean(),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      requests
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching organizer requests'
+    });
+  }
 };
