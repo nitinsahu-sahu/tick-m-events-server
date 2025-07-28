@@ -154,33 +154,33 @@ exports.providerRespondOnReq = async (req, res) => {
 };
 
 exports.sendProposal = async (req, res) => {
-  try {
-    const { id } = req.params; 
-    const { amount, days, message } = req.body;
+    try {
+        const { id } = req.params;
+        const { amount, days, message } = req.body;
 
-    const eventRequest = await EventRequest.findById(id);
+        const eventRequest = await EventRequest.findById(id);
 
-    if (!eventRequest) {
-      return res.status(404).json({ message: "Request not found" });
+        if (!eventRequest) {
+            return res.status(404).json({ message: "Request not found" });
+        }
+
+        eventRequest.providerProposal = {
+            amount,
+            days,
+            message
+        };
+
+        eventRequest.providerHasProposed = true;
+        eventRequest.status = "accepted-by-provider";
+        // eventRequest.contractStatus="ongoing";
+
+        await eventRequest.save();
+
+        res.status(200).json({ message: "Proposal sent successfully", eventRequest });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
     }
-
-    eventRequest.providerProposal = {
-      amount,
-      days,
-      message
-    };
-
-    eventRequest.providerHasProposed = true;
-    eventRequest.status = "accepted-by-provider"; 
-    // eventRequest.contractStatus="ongoing";
-    
-    await eventRequest.save();
-
-    res.status(200).json({ message: "Proposal sent successfully", eventRequest });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
 };
 
 exports.getPraposal = async (req, res) => {
@@ -199,7 +199,7 @@ exports.getPraposal = async (req, res) => {
     }
 };
 
-exports.updatePraposal =async (req, res) => {
+exports.updatePraposal = async (req, res) => {
     try {
         const { amount, days, message } = req.body;
 
@@ -221,46 +221,46 @@ exports.updatePraposal =async (req, res) => {
 };
 
 exports.getRequestsByOrganizer = async (req, res) => {
-  try {
-    const { page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
+    try {
+        const { page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
 
-    const query = { organizerId: req.user._id };
+        const query = { organizerId: req.user._id };
 
-    // Sorting
-    const [sortField, sortOrder] = sortBy.split(':');
-    const sort = { [sortField]: sortOrder === 'desc' ? -1 : 1 };
+        // Sorting
+        const [sortField, sortOrder] = sortBy.split(':');
+        const sort = { [sortField]: sortOrder === 'desc' ? -1 : 1 };
 
-    const skip = (page - 1) * limit;
+        const skip = (page - 1) * limit;
 
-    const [requests, total] = await Promise.all([
-      EventRequest.find(query)
-        .populate('eventId', 'eventName date location time description averageRating')
-        .populate('organizerId', 'name email avatar')
-        .populate('serviceRequestId', 'serviceType budget description additionalOptions')
-        .populate('providerId', 'name email avatar')
-        .sort(sort)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(),
-      EventRequest.countDocuments(query)
-    ]);
+        const [requests, total] = await Promise.all([
+            EventRequest.find(query)
+                .populate('eventId', 'eventName date location time description averageRating')
+                .populate('organizerId', 'name email avatar')
+                .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+                .populate('providerId', 'name email avatar')
+                .sort(sort)
+                .skip(skip)
+                .limit(parseInt(limit))
+                .lean(),
+            EventRequest.countDocuments(query)
+        ]);
 
-    res.status(200).json({
-      success: true,
-      count: requests.length,
-      total,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      requests
-    });
+        res.status(200).json({
+            success: true,
+            count: requests.length,
+            total,
+            totalPages: Math.ceil(total / limit),
+            currentPage: parseInt(page),
+            requests
+        });
 
-  } catch (error) {
-    console.error('Error fetching requests by organizer:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching organizer requests'
-    });
-  }
+    } catch (error) {
+        console.error('Error fetching requests by organizer:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while fetching organizer requests'
+        });
+    }
 };
 
 async function getProviderServices(providerId) {
@@ -289,22 +289,22 @@ exports.updateRequestStatusByOrganizer = async (req, res) => {
     try {
         const { id } = req.params; // EventRequest ID
         const { status, contractStatus } = req.body;
- 
+
         // Validate status
         const validStatuses = [
             'accepted-by-organizer',
             'rejected-by-organizer',
         ];
         const validContractStatuses = ['pending', 'ongoing'];
- 
+
         if (!validStatuses.includes(status)) {
             return res.status(400).json({ success: false, message: 'Invalid status value' });
         }
- 
+
         if (!validContractStatuses.includes(contractStatus)) {
             return res.status(400).json({ success: false, message: 'Invalid contractStatus value' });
         }
- 
+
         // Find and update
         const updatedRequest = await EventRequest.findByIdAndUpdate(
             id,
@@ -314,11 +314,11 @@ exports.updateRequestStatusByOrganizer = async (req, res) => {
             },
             { new: true }
         );
- 
+
         if (!updatedRequest) {
             return res.status(404).json({ success: false, message: 'Request not found' });
         }
- 
+
         res.status(200).json({
             success: true,
             message: 'Request status updated successfully',
@@ -336,45 +336,45 @@ exports.updateRequestStatusByOrganizer = async (req, res) => {
 exports.markRequestAsCompleted = async (req, res) => {
     try {
         const { id } = req.params;
- 
+
         // Find and populate eventId to get the event date
         const request = await EventRequest.findById(id)
             .populate('eventId', 'date');
- 
+
         if (!request) {
             return res.status(404).json({ success: false, message: 'Request not found' });
         }
- 
+
         // Check status
         if (request.status !== 'accepted-by-organizer') {
             return res.status(400).json({ success: false, message: 'Request is not accepted by organizer' });
         }
- 
+
         // Check contractStatus
         if (request.contractStatus !== 'ongoing') {
             return res.status(400).json({ success: false, message: 'Only ongoing contracts can be completed' });
         }
- 
+
         const eventDate = new Date(request.eventId.date);
         const now = new Date();
- 
+
         if (now <= eventDate) {
             return res.status(400).json({
                 success: false,
                 message: 'Cannot mark as completed before the event date',
             });
         }
- 
+
         // Update contractStatus
         request.contractStatus = 'completed';
         await request.save();
- 
+
         return res.status(200).json({
             success: true,
             message: 'Contract marked as completed',
             data: request,
         });
- 
+
     } catch (error) {
         console.error('❌ Error marking request as completed:', error);
         res.status(500).json({ success: false, message: 'Server error' });
@@ -385,7 +385,7 @@ exports.cancelEventReq = async (req, res) => {
     try {
         const { id } = req.params;
         const userId = req.user._id; // Assuming you have user info in req.user
-        
+
         // Validate ID
         if (!id) {
             return res.status(400).json({ success: false, message: 'Invalid request ID' });
@@ -393,7 +393,7 @@ exports.cancelEventReq = async (req, res) => {
 
         // Find the request
         const request = await EventRequest.findById(id);
-        
+
         if (!request) {
             return res.status(404).json({ success: false, message: 'Request not found' });
         }
@@ -401,11 +401,11 @@ exports.cancelEventReq = async (req, res) => {
         // Check if user is authorized (either organizer or provider)
         const isOrganizer = request.organizerId.equals(userId);
         const isProvider = request.providerId.equals(userId);
-        
+
         if (!isOrganizer && !isProvider) {
-            return res.status(403).json({ 
-                success: false, 
-                message: 'Unauthorized - You can only cancel your own requests' 
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized - You can only cancel your own requests'
             });
         }
 
@@ -420,10 +420,10 @@ exports.cancelEventReq = async (req, res) => {
         // Update the status (soft delete approach - recommended)
         const updatedRequest = await EventRequest.findByIdAndUpdate(
             id,
-            { 
+            {
                 status: newStatus,
-                contractStatus:'cancelled',
-                discussion: req.body.reason || 'Request canceled by user' 
+                contractStatus: 'cancelled',
+                discussion: req.body.reason || 'Request canceled by user'
             },
             { new: true }
         );
@@ -431,8 +431,8 @@ exports.cancelEventReq = async (req, res) => {
         // Alternatively, to hard delete:
         // await EventRequest.findByIdAndDelete(id);
 
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             message: 'Request canceled successfully',
             data: updatedRequest
         });
@@ -444,26 +444,29 @@ exports.cancelEventReq = async (req, res) => {
 };
 
 exports.getProviderAcceptedReq = async (req, res) => {
-  try {
-    const query = { organizerId: req.user._id,status:"accepted-by-provider" };
-    const [requests] = await Promise.all([
-      EventRequest.find(query)
-        .populate('eventId', 'eventName date location time description averageRating')
-        .populate('organizerId', 'name email avatar')
-        .populate('serviceRequestId', 'serviceType budget description additionalOptions')
-        .populate('providerId', 'name email avatar')
-        .lean(),
-    ]);
+    try {
+        const query = {
+            organizerId: req.user._id,
+            status:{$in:['accepted-by-provider','accepted']}
+        };
+        const [requests] = await Promise.all([
+            EventRequest.find(query)
+                .populate('eventId', 'eventName date location time description averageRating')
+                .populate('organizerId', 'name email avatar')
+                .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+                .populate('providerId', 'name email avatar')
+                .lean(),
+        ]);
 
-    res.status(200).json({
-      success: true,
-      requests
-    });
+        res.status(200).json({
+            success: true,
+            requests
+        });
 
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching organizer requests'
-    });
-  }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Server error while fetching organizer requests'
+        });
+    }
 };
