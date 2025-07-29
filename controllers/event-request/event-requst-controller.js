@@ -447,7 +447,8 @@ exports.getProviderAcceptedReq = async (req, res) => {
     try {
         const query = {
             organizerId: req.user._id,
-            status:{$in:['accepted-by-provider','accepted']}
+            status: { $in: ['accepted-by-provider', 'accepted'] },
+            // contractStatus: { $in: ['signed', 'ongoing','completed'] }
         };
         const [requests] = await Promise.all([
             EventRequest.find(query)
