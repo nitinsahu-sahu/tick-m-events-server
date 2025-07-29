@@ -3,9 +3,6 @@ const EventRequest = require('../../models/event-request/event-requests.model');
 
 // Create a new signed contract
 exports.createSignedContract = async (req, res) => {
-  console.log(req.body);
-  console.log(req.user._id);
-
   try {
     const { eventReqId, service, providerId, location, eventTime, serviceRequestId, finalBudget, explainReq, eventId } = req.body;
 
@@ -59,16 +56,33 @@ exports.createSignedContract = async (req, res) => {
 // Get all signed contracts
 exports.getAllSignedContracts = async (req, res) => {
   try {
-    const contracts = await SignedContract.find()
-      .populate('eventReqId')
+    // Get query parameters
+    const { status } = req.query;
+    const providerId = req.user._id; // Assuming the provider is the authenticated user
+
+    // Build the base query
+    const query = { providerId };
+
+    // Add status filter if provided
+    if (status) {
+      query.contractStatus = status;
+    }
+
+    const contracts = await SignedContract.find(query)
+      .populate('eventId', 'eventName date location')
+      .populate('organizerId', 'name email avatar')
+      .populate('serviceRequestId', 'serviceType budget')
+      .populate('eventReqId', 'status')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
+      success: true,
       message: 'Signed contracts retrieved successfully',
-      data: contracts
+      contracts
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: 'Error retrieving signed contracts',
       error: error.message
     });
@@ -145,6 +159,62 @@ exports.deleteSignedContract = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: 'Error deleting signed contract',
+      error: error.message
+    });
+  }
+};
+
+// Update contract status
+exports.updateContractStatus = async (req, res) => {
+  try {
+    const { id, eventReqId } = req.params;
+    const { newStatus } = req.body;
+    // Validate input
+    if (!['signed', 'ongoing', 'completed'].includes(newStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be one of: signed, ongoing, completed'
+      });
+    }
+
+    // Find and update the contract
+    const updatedContract = await SignedContract.findByIdAndUpdate(
+      id,
+      { contractStatus: newStatus },
+      { new: true, runValidators: true }
+    ).populate('eventId organizerId serviceRequestId providerId eventReqId');
+
+    await EventRequest.findByIdAndUpdate(
+      eventReqId,
+      { contractStatus: newStatus },
+      { new: true, runValidators: true }
+    )
+
+    if (!updatedContract) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contract not found'
+      });
+    }
+
+    // Optionally update related EventRequest status
+    if (newStatus === 'completed') {
+      await EventRequest.findByIdAndUpdate(
+        updatedContract.eventReqId,
+        { status: 'completed' }
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Contract status updated successfully',
+      data: updatedContract
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error updating contract status',
       error: error.message
     });
   }
