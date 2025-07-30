@@ -48,7 +48,11 @@ const eventSchema = new Schema({
     ref: "User",
     required: true,
   },
-
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'cancelled'],
+    default: ['pending'],
+  },
   isDelete: {
     type: Boolean,
     default: false
