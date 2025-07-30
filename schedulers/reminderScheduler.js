@@ -2,8 +2,16 @@ const cron = require('node-cron');
 const ReminderSetting = require('../models/ReminderSetting');
 const Reminder = require('../models/reminder/reminder.model');
 const Notification = require('../models/reminder/notification.model');
+const NotificationTask = require('../models/marketing-engagement/notification-task');
 const { sendMail } = require('../utils/Emails');
+const { sendBulkEmails } = require('../utils/marketing-notification');
+const User = require('../models/User');
+const twilio = require('twilio');
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = twilio(accountSid, authToken);
 const moment = require('moment');
+
 
 // Constants
 const CRON_SCHEDULE = '* * * * *'; // Every minute
@@ -146,84 +154,117 @@ async function processInAppReminders() {
   }
 }
 
-// const MILLISECONDS_PER_HOUR = 60 * 60 * 1000;
-
-// async function processInAppReminders() {
-//   const now = new Date();
-//   console.log(`Current server time: ${moment(now).format('YYYY-MM-DD HH:mm:ss')}`);      // Local time
-//   console.log(`Current UTC time: ${moment(now).utc().format('YYYY-MM-DD HH:mm:ss')}`);   // UTC time
-
-//   try {
-//     const reminders = await Reminder.find().populate('userId').lean();
-
-//     for (const reminder of reminders) {
-//       const { reminders: reminderFlags = {}, sentReminders = {}, userId, _id } = reminder;
-//       if (!userId) continue;
-
-//       // For testing, eventDate is 5 minutes after "now"
-//       const eventDate = new Date(now.getTime() + 5 * 60 * 1000);
-
-//       const timeDiffHours = (eventDate - now) / MILLISECONDS_PER_HOUR;
-
-//       const schedule = [
-//         { label: '5 Minutes', hours: 5 / 60 },
-//         { label: '3 Hours', hours: 3 },
-//         { label: '3 Days', hours: 72 }
-//       ];
-
-//       for (const { label, hours } of schedule) {
-//         const isEnabled = reminderFlags[label];
-//         const alreadySent = sentReminders[label];
-
-//         console.log(`[DEBUG] ID=${_id}, Label=${label}, Enabled=${isEnabled}, Sent=${alreadySent}, DiffHours=${timeDiffHours.toFixed(4)}`);
-
-//         const margin = 0.1; // 6-minute window
-
-//         if (!isEnabled || alreadySent) continue;
-
-//         if (timeDiffHours >= hours - margin && timeDiffHours <= hours + margin) {
-//           const message = `Your event is coming up in ${label}.`;
-
-//           try {
-//             console.log(`Attempting to create notification for user ${userId._id}, label ${label}`);
-//             const notif = await Notification.create({
-//               userId: userId._id,
-//               title: `⏰ Reminder for upcoming event`,
-//               description: message,
-//             });
-//             console.log('Notification created:', notif);
-
-//             await Reminder.updateOne(
-//               { _id },
-//               { $set: { [`sentReminders.${label}`]: true } }
-//             );
-
-//             console.log(`📲 Sent in-app reminder (${label}) to user ${userId.email || userId._id}`);
-//           } catch (createErr) {
-//             console.error('Failed to create notification:', createErr);
-//           }
-//         }
-//       }
-//     }
-//   } catch (err) {
-//     console.error('❌ Error in in-app reminder check:', err.message);
-//   }
-// }
-
-
-
-// Initialize the scheduler
-// function initReminderScheduler() {
-//   cron.schedule(CRON_SCHEDULE, processReminders);
-//   console.log('🟢 Reminder scheduler initialized');
-// }
+//For SMS,EMAIL & WEB notification
+ 
+const sendSms = async (to, message) => {
+  console.log(`[📱 Sending SMS to ${to}]`);
+  try {
+    await client.messages.create({
+      body: message,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to,
+    });
+    console.log(`[✅ SMS sent to ${to}]`);
+  } catch (err) {
+    console.error(`[❌ SMS Error for ${to}]`, err.message);
+  }
+};
+ 
+const sendWebPush = async (users, subject, message, cta, eventId) => {
+  const emailList = users.map((u) => u.email);
+  const userTokens = await UserFcmToken.find({ email: { $in: emailList } });
+  const fcmTokens = userTokens.map((u) => u.fcmToken).filter(Boolean);
+ 
+  if (fcmTokens.length === 0) {
+    console.warn('[⚠️ Web Push] No FCM tokens found');
+    return;
+  }
+ 
+  const payload = {
+    data: {
+      title: subject || 'Event Notification',
+      body: message,
+      cta: cta || '',
+      eventId: eventId || '',
+      emails: emailList.join(','),
+    },
+  };
+ 
+  await admin.messaging().sendEachForMulticast({
+    tokens: fcmTokens,
+    data: payload.data,
+  });
+ 
+  console.log(`[✅ Web Push sent to ${fcmTokens.length} users]`);
+};
+ 
+const processScheduledNotifications = async () => {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - TIME_WINDOW_MS);
+  const windowEnd = new Date(now.getTime() + TIME_WINDOW_MS);
+ 
+  try {
+    const notifications = await NotificationTask.find({
+      status: 'pending',
+      scheduledAt: { $gte: windowStart, $lte: windowEnd },
+    });
+ 
+    for (const notification of notifications) {
+      const { notificationType, emails = [], subject, message, cta, eventId, eventDetails } = notification;
+ 
+      try {
+        switch (notificationType) {
+          case 'email':
+            await sendBulkEmails(
+              emails,
+              subject,
+              message,
+              { text: cta },
+              eventDetails || {
+                name: subject || 'Event',
+                date: new Date(),
+                location: 'Online',
+              },
+              'default'
+            );
+            console.log(`[📧 Email sent to] ${emails.map(u => u.email).join(', ')}`);
+            break;
+ 
+          case 'sms':
+            for (const phone of notification.phones || []) {
+              await sendSms(phone, `${message} ${cta || ''}`);
+            }
+            break;
+ 
+          case 'web-push':
+            await sendWebPush(emails, subject, message, cta, eventId);
+            break;
+ 
+          default:
+            throw new Error(`Unknown notificationType: ${notificationType}`);
+        }
+ 
+        notification.status = 'sent';
+      } catch (err) {
+        console.error(`❌ Failed to send ${notificationType}:`, err.message);
+        notification.status = 'failed';
+      }
+ 
+      notification.updatedAt = new Date();
+      await notification.save();
+    }
+  } catch (err) {
+    console.error('❌ Error processing scheduled notifications:', err.message);
+  }
+};
 
 function initReminderScheduler() {
   cron.schedule(CRON_SCHEDULE, async () => {
     await processReminders();
     await processInAppReminders();
+    await processScheduledNotifications();
   });
-
+ 
   console.log('🟢 Reminder scheduler initialized');
 }
 
