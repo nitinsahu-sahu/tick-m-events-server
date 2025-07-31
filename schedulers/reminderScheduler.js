@@ -11,7 +11,8 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken);
 const moment = require('moment');
-
+const Activity = require('../models/activity/activity.modal');
+const UserFcmToken = require('../models/userReview/UserFcmToken');
 
 // Constants
 const CRON_SCHEDULE = '* * * * *'; // Every minute
@@ -258,11 +259,28 @@ const processScheduledNotifications = async () => {
   }
 };
 
+ // Cleanup old activity logs older than 60 days
+async function cleanupOldActivities() {
+  try {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+ 
+    const result = await Activity.deleteMany({
+      timestamp: { $lt: sixtyDaysAgo }
+    });
+ 
+    console.log(`[🧹 CRON] Deleted ${result.deletedCount} old activities`);
+  } catch (err) {
+    console.error("[❌ CRON] Error deleting old activities:", err.message);
+  }
+}
+
 function initReminderScheduler() {
   cron.schedule(CRON_SCHEDULE, async () => {
     await processReminders();
     await processInAppReminders();
     await processScheduledNotifications();
+    await cleanupOldActivities();
   });
  
   console.log('🟢 Reminder scheduler initialized');
