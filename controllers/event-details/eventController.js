@@ -415,6 +415,7 @@ exports.getAllCategories = async (req, res) => {
       // Find events that match any of these category names
       const events = await Event.find({
         category: { $in: categoryNames },
+        status:'approved',
         isDelete: false // assuming you don't want deleted events
       });
 
@@ -478,7 +479,8 @@ exports.getCategoryById = async (req, res) => {
     // Find events that match any of these category names
     const events = await Event.find({
       category: { $in: categoryNames },
-      isDelete: false
+      isDelete: false,
+      status:"approved"
     }).select('-__v'); // Exclude version key
 
     res.status(200).json({
