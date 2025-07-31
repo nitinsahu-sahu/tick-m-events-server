@@ -3,6 +3,7 @@ const Customization = require('../../models/event-details/Customization');
 const TicketConfiguration = require('../../models/event-details/Ticket');
 const Visibility = require('../../models/event-details/Visibility');
 const Organizer = require('../../models/event-details/Organizer');
+const CancelledEventMsg = require('../../models/event-details/event-cancelled');
 const mongoose = require('mongoose');
 
 
@@ -34,11 +35,12 @@ exports.getUserEventsWithDetails = async (req, res, next) => {
           Customization.findOne({ eventId }),
           TicketConfiguration.findOne({ eventId }),
           Visibility.findOne({ eventId }),
-          Organizer.findOne({ eventId })
+          Organizer.findOne({ eventId }),
+          CancelledEventMsg.findOne({ eventId })
         ]);
 
         // Process the results of Promise.allSettled
-        const [customization, tickets, visibility, organizer] = relatedData.map(result =>
+        const [customization, tickets, visibility, organizer, cancelledEvent] = relatedData.map(result =>
           result.status === 'fulfilled' ? result.value : null
         );
 
@@ -47,7 +49,8 @@ exports.getUserEventsWithDetails = async (req, res, next) => {
           customization,
           tickets,
           visibility,
-          organizer
+          organizer,
+          cancelledEvent
         });
       } catch (error) {
         // Still include the event even if some details failed to load
@@ -132,9 +135,7 @@ exports.updateEvents = async (req, res, next) => {
       visibility,
       organizer
     } = req.body;
-    console.log('====================================');
-    console.log(req.body.tickets);
-    console.log('====================================');
+
     // Start a transaction to ensure all updates succeed or fail together
     const session = await mongoose.startSession();
     session.startTransaction();
