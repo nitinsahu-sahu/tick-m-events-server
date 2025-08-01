@@ -1,10 +1,14 @@
 const SignedContract = require('../../models/contract/contract.modal');
+const User = require('../../models/User');
 const EventRequest = require('../../models/event-request/event-requests.model'); // Assuming you have this model
 
 // Create a new signed contract
 exports.createSignedContract = async (req, res) => {
   try {
-    const { eventReqId, service, providerId, location, eventTime, serviceRequestId, finalBudget, explainReq, eventId } = req.body;
+    const {
+      eventReqId, service, providerId, location, eventTime, serviceRequestId, finalBudget,
+      explainReq, eventId
+    } = req.body;
 
     // Validate the event request exists
     const eventRequest = await EventRequest.findById(eventReqId);
@@ -16,6 +20,12 @@ exports.createSignedContract = async (req, res) => {
     const existingContract = await SignedContract.findOne({ eventReqId });
     if (existingContract) {
       return res.status(400).json({ message: 'Contract already exists for this event request' });
+    }
+
+    // Validate provider exists
+    const provider = await User.findById(providerId);
+    if (!provider || provider.role !== 'provider') {
+      return res.status(404).json({ message: 'Provider not found' });
     }
 
     const signedContract = new SignedContract({
@@ -36,8 +46,11 @@ exports.createSignedContract = async (req, res) => {
     // Update the event request status if needed
     eventRequest.contractStatus = 'signed';
     eventRequest.status = 'accepted';
-
     await eventRequest.save();
+
+    // Update provider's contractsCount
+    provider.contractsCount = (provider.contractsCount || 0) + 1;
+    await provider.save();
 
     res.status(201).json({
       message: 'Contract signed successfully',

@@ -39,77 +39,33 @@ exports.createSocialMediaPost = async (req, res) => {
   }
 };
 
-
-// exports.getSocialSharePage = async (req, res) => {
-//   try {
-//     const { postId } = req.params;
-//     const post = await SocialMediaPost.findById(postId).populate('event');
-//     if (!post) return res.status(404).send('Post not found');
-
-//     const { description, reservationLink, hashtag, imageUrl, event } = post;
-//     const eventName = event?.name || 'Amazing Event';
-//     const eventDate = event?.date
-//       ? new Date(event.date).toDateString()
-//       : 'Coming Soon';
-//     const fullDescription = `${description} - ${eventName} on ${eventDate}`;
-
-
-//     const shareUrl =    `https://tick-m-events-server.onrender.com/api/v1/social-share/${postId}`;
-//     const redirectUrl = `https://tick-m-events.vercel.app/our-event/${event._id}`;
-//     // const shareUrl = `http://localhost:8000/api/v1/social-share/${postId}`;
-//     // const redirectUrl = `http://localhost:3039/our-event/${event._id}`;
-
-//     // Send clean template string
-//     res.send(`<!DOCTYPE html>
-// <html lang="en">
-// <head>
-//   <meta charset="UTF-8" />
-//   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-//   <meta property="og:title" content="${eventName}" />
-//   <meta property="og:description" content="${fullDescription}" />
-//   <meta property="og:image" content="${imageUrl}" />
-//   <meta property="og:url" content="${shareUrl}" />
-//   <meta property="og:type" content="website" />
-//   <title>${eventName}</title>
-// </head>
-// <body>
-//   <h1>Redirecting…</h1>
-//   <script>
-//     window.location.href = '${redirectUrl}';
-//   </script>
-// </body>
-// </html>`);
-//   } catch (error) {
-//     console.error('getSocialSharePage error:', error);
-//     res.status(500).send('Something went wrong');
-//   }
-// };
-
 exports.getSocialSharePage = async (req, res) => {
   try {
-    // Static data to test social share preview
-    const eventName = "Test Event Title";
-    const fullDescription = "This is a test description for the event preview.";
-    const imageUrl = "https://via.placeholder.com/1200x630.png?text=Test+Image";
-    const shareUrl = "https://tick-m-events-server.onrender.com/api/v1/social-share/static-test";
-    const redirectUrl = "https://tick-m-events.vercel.app/our-event/static-test";
+    const { postId } = req.params;
+    const post = {
+      eventName: "Amazing Event 2025",
+      description: "Join us for an unforgettable experience! Get your tickets now!",
+      imageUrl: "https://res.cloudinary.com/dm624gcgg/image/upload/v1753272264/eventPost/zzhowyjob3xadnure9n1.jpg",
+      shareUrl: `https://tick-m-events.verel.app/post/${postId}`,
+      redirectUrl: "https://tick-m-events.vercel.app/our-event"
+    };
 
     res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta property="og:title" content="${eventName}" />
-  <meta property="og:description" content="${fullDescription}" />
-  <meta property="og:image" content="${imageUrl}" />
-  <meta property="og:url" content="${shareUrl}" />
+  <meta property="og:title" content="${post.eventName}" />
+  <meta property="og:description" content="${post.description}" />
+  <meta property="og:image" content="${post.imageUrl}" />
+  <meta property="og:url" content="${post.shareUrl}" />
   <meta property="og:type" content="website" />
-  <title>${eventName}</title>
+  <title>${post.eventName}</title>
 </head>
 <body>
   <h1>Redirecting…</h1>
   <script>
-    window.location.href = '${redirectUrl}';
+    window.location.href = '${post.redirectUrl}';
   </script>
 </body>
 </html>`);
