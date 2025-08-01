@@ -41,33 +41,37 @@ exports.createSocialMediaPost = async (req, res) => {
 
 exports.getSocialSharePage = async (req, res) => {
   try {
-    const { postId } = req.params;
-    const post = {
-      eventName: "Amazing Event 2025",
-      description: "Join us for an unforgettable experience! Get your tickets now!",
-      imageUrl: "https://res.cloudinary.com/dm624gcgg/image/upload/v1753272264/eventPost/zzhowyjob3xadnure9n1.jpg",
-      shareUrl: `https://tick-m-events.verel.app/post/${postId}`,
-      redirectUrl: "https://tick-m-events.vercel.app/our-event"
-    };
-
+    const { id } = req.params;
+ 
+    const post = await SocialMediaPost.findById(id);
+    if (!post) {
+      return res.status(404).send("Post not found");
+    }
+ 
+    const eventName = post.eventName || "Event";
+    const description = post.description || "Don't miss out!";
+    const imageUrl = post.imageUrl || "https://your-fallback-image.jpg";
+    const shareUrl = `https://tick-m-events.vercel.app/post/${id}`;
+    const redirectUrl = post.reservationLink || `https://tick-m-events.vercel.app/post/${id}`;
+    const userAgent = req.get("User-Agent") || "";
+   
+    const isBot = /facebookexternalhit|twitterbot|linkedinbot|WhatsApp|Slackbot/.test(userAgent);
     res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta property="og:title" content="${post.eventName}" />
-  <meta property="og:description" content="${post.description}" />
-  <meta property="og:image" content="${post.imageUrl}" />
-  <meta property="og:url" content="${post.shareUrl}" />
+  <meta property="og:title" content="${eventName}" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${imageUrl}" />
+  <meta property="og:url" content="${shareUrl}" />
   <meta property="og:type" content="website" />
-  <title>${post.eventName}</title>
+  <title>${eventName}</title>
 </head>
 <body>
-  <h1>Redirecting…</h1>
-  <script>
-    window.location.href = '${post.redirectUrl}';
-  </script>
-</body>
+        <h1>${eventName}</h1>
+        ${isBot ? "" : `<script>window.location.href = '${redirectUrl}';</script>`}
+      </body>
 </html>`);
   } catch (error) {
     console.error('getSocialSharePage error:', error);
