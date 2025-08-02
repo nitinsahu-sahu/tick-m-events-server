@@ -41,42 +41,48 @@ exports.createSocialMediaPost = async (req, res) => {
 
 exports.getSocialSharePage = async (req, res) => {
   try {
-    console.log('Incoming request for social share:');
-    console.log('Params:', req.params);
-    console.log('Query:', req.query);
-    console.log('URL:', req.originalUrl);
-
     const { postId } = req.params;
-
     const post = await SocialMediaPost.findById(postId);
-    console.log("post", post);
     if (!post) {
       return res.status(404).send("Post not found");
     }
-
-    const eventName = post.eventName || "Event";
-    const description = post.description || "Don't miss out!";
-    const imageUrl = post.imageUrl || "https://your-fallback-image.jpg";
+ 
+    const eventName = "Event"; // or fetch from related Event DB
+    const hashtag = post.hashtag || "#TickMEvents";
+    const description = `${post.description || "Don't miss out!"} | Reserve here: ${post.reservationLink || shareUrl} | ${post.hashtag || "#TickMEvents"}`;
+    const imageUrl = post.imageUrl || "https://via.placeholder.com/1200x630.png?text=Default+Image";
     const shareUrl = `https://tick-m-events.vercel.app/post/${postId}`;
-    const redirectUrl = post.reservationLink || `https://tick-m-events.vercel.app/post/${postId}`;
+    const redirectUrl = post.reservationLink || shareUrl;
     const userAgent = req.get("User-Agent") || "";
-    const isBot = /facebookexternalhit|twitterbot|linkedinbot|WhatsApp|Slackbot/.test(userAgent);
-    res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    const isBot = /facebookexternalhit|twitterbot|linkedinbot|WhatsApp|Slackbot|Discordbot|Googlebot/i.test(userAgent);
+    const metaTags = `
   <meta property="og:title" content="${eventName}" />
   <meta property="og:description" content="${description}" />
   <meta property="og:image" content="${imageUrl}" />
   <meta property="og:url" content="${shareUrl}" />
   <meta property="og:type" content="website" />
+ 
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${eventName}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${imageUrl}" />
+`;
+ 
+ 
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  ${metaTags}
   <title>${eventName}</title>
 </head>
 <body>
-        <h1>${eventName}</h1>
-        ${isBot ? "" : `<script>window.location.href = '${redirectUrl}';</script>`}
-      </body>
+  <h1>${eventName}</h1>
+  <p>${description}</p>
+  <img src="${imageUrl}" alt="Event Image" style="max-width:100%; height:auto;" />
+  ${isBot ? "" : `<script>window.location.href = '${redirectUrl}';</script>`}
+</body>
 </html>`);
   } catch (error) {
     console.error('getSocialSharePage error:', error);
