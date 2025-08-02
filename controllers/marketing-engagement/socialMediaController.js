@@ -41,20 +41,25 @@ exports.createSocialMediaPost = async (req, res) => {
 
 exports.getSocialSharePage = async (req, res) => {
   try {
-    const { id } = req.params;
- 
-    const post = await SocialMediaPost.findById(id);
+    console.log('Incoming request for social share:');
+    console.log('Params:', req.params);
+    console.log('Query:', req.query);
+    console.log('URL:', req.originalUrl);
+
+    const { postId } = req.params;
+
+    const post = await SocialMediaPost.findById(postId);
+    console.log("post", post);
     if (!post) {
       return res.status(404).send("Post not found");
     }
- 
+
     const eventName = post.eventName || "Event";
     const description = post.description || "Don't miss out!";
     const imageUrl = post.imageUrl || "https://your-fallback-image.jpg";
-    const shareUrl = `https://tick-m-events.vercel.app/post/${id}`;
-    const redirectUrl = post.reservationLink || `https://tick-m-events.vercel.app/post/${id}`;
+    const shareUrl = `https://tick-m-events.vercel.app/post/${postId}`;
+    const redirectUrl = post.reservationLink || `https://tick-m-events.vercel.app/post/${postId}`;
     const userAgent = req.get("User-Agent") || "";
-   
     const isBot = /facebookexternalhit|twitterbot|linkedinbot|WhatsApp|Slackbot/.test(userAgent);
     res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -78,3 +83,6 @@ exports.getSocialSharePage = async (req, res) => {
     res.status(500).send('Something went wrong');
   }
 };
+
+
+
