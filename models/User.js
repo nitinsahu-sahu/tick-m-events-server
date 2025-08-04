@@ -122,15 +122,26 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
-    responseStats: {
-        currentMonth: {
-            totalResponseTime: { type: Number, default: 0 }, // in milliseconds
-            responseCount: { type: Number, default: 0 },
-            averageResponseTime: { type: Number, default: 0 } // in hours
+    sessionStats: {
+        totalHours: { type: Number, default: 0 }, // Total hours logged in
+        today: {
+            date: { type: String }, // "YYYY-MM-DD"
+            hours: { type: Number, default: 0 }
         },
         history: [{
-            month: { type: String, required: true }, // Format: "YYYY-MM"
-            averageResponseTime: { type: Number, required: true }
+            date: { type: String }, // "YYYY-MM-DD"
+            hours: { type: Number }
+        }]
+    },
+    loginStats: {
+        totalLogins: { type: Number, default: 0 },
+        currentMonth: {
+            count: { type: Number, default: 0 },
+            lastLogin: { type: Date }
+        },
+        history: [{
+            month: { type: String }, // Format: "YYYY-MM"
+            count: { type: Number }
         }]
     },
     profileViews: {
