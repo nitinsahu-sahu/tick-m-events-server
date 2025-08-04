@@ -108,32 +108,51 @@ exports.signup = async (req, res) => {
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        const startTime = Date.now(); // Start measuring response time
 
         const existingUser = await User.findOne({ email });
-
-        // if (!existingUser || !(await bcrypt.compare(password, existingUser.password))) {
-        //     res.clearCookie('token');
-        //     return res.status(400).json({ message: "Invalid credentials" });
-        // }
 
         if (!existingUser) {
             res.clearCookie('token');
             return res.status(400).json({ message: "Invalid credentials" });
         }
 
-        // Block login if user status is not active
         if (existingUser.status !== 'active') {
             return res.status(403).json({
                 message: "Your account is not activated yet. Please contact the admin."
             });
         }
 
-        // Password verification
         const isPasswordMatch = await bcrypt.compare(password, existingUser.password);
         if (!isPasswordMatch) {
             res.clearCookie('token');
             return res.status(400).json({ message: "Invalid credentials" });
         }
+
+        // Update login stats
+        const now = new Date();
+        const currentMonth = now.toISOString().slice(0, 7); // "YYYY-MM"
+        
+        existingUser.loginStats.totalLogins += 1;
+        existingUser.loginStats.currentMonth.count += 1;
+        existingUser.loginStats.currentMonth.lastLogin = now;
+        
+        // Update monthly history
+        const monthIndex = existingUser.loginStats.history.findIndex(
+            entry => entry.month === currentMonth
+        );
+        
+        if (monthIndex >= 0) {
+            existingUser.loginStats.history[monthIndex].count += 1;
+        } else {
+            existingUser.loginStats.history.push({
+                month: currentMonth,
+                count: 1
+            });
+        }
+        const loginTime = new Date();
+        existingUser.lastLoginTime = loginTime;
+        await existingUser.save();
 
         const secureInfo = sanitizeUser(existingUser);
         const token = generateToken(secureInfo);
@@ -146,31 +165,33 @@ exports.login = async (req, res) => {
             secure: process.env.PRODUCTION ? true : false
         });
 
-        // ✅ Log activity manually — since req.user is not set
-        // Get IP address
-        const ip =
-            req.headers["x-forwarded-for"]?.split(",")[0] ||
-            req.socket.remoteAddress ||
-            req.connection.remoteAddress;
- 
-        //  Fetch location using your utility
+        // Calculate response time
+        const responseTime = Date.now() - startTime;
+
+        // Log activity with response time
+        const ip = req.headers["x-forwarded-for"]?.split(",")[0] ||
+                  req.socket.remoteAddress ||
+                  req.connection.remoteAddress;
+        
         let location = "-";
         try {
             location = await getLocationFromIP(ip);
         } catch (err) {
             console.warn("Could not fetch location info:", err.message);
         }
+        
         try {
             await Activity.create({
                 userId: existingUser._id,
                 activityType: 'login success',
                 description: `${existingUser.email} logged in`,
-                ipAddress: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+                ipAddress: ip,
                 userAgent: req.headers['user-agent'],
                 metadata: {
                     body: { email },
                     query: req.query,
-                    params: req.params
+                    params: req.params,
+                    responseTime: `${responseTime}ms`
                 },
                 location
             });
@@ -182,7 +203,8 @@ exports.login = async (req, res) => {
             user: secureInfo,
             token,
             expiresIn: cookieExpiry,
-            message: "Signin successfully"
+            message: "Signin successfully",
+            responseTime: `${responseTime}ms`
         });
 
     } catch (error) {
@@ -433,6 +455,39 @@ exports.resetPassword = async (req, res) => {
 
 exports.logout = async (req, res) => {
     try {
+        // Track session duration before logging out
+        if (req.user) {
+            const user = await User.findById(req.user._id);
+            if (user && user.lastLoginTime) {
+                const now = new Date();
+                const today = now.toISOString().split('T')[0];
+                const sessionDurationHours = (now - user.lastLoginTime) / (1000 * 60 * 60);
+
+                // Update stats (same as in middleware)
+                if (!user.sessionStats.today.date || user.sessionStats.today.date !== today) {
+                    user.sessionStats.today = { date: today, hours: 0 };
+                }
+                user.sessionStats.today.hours += sessionDurationHours;
+                user.sessionStats.totalHours += sessionDurationHours;
+
+                const existingDayIndex = user.sessionStats.history.findIndex(
+                    entry => entry.date === today
+                );
+                
+                if (existingDayIndex >= 0) {
+                    user.sessionStats.history[existingDayIndex].hours += sessionDurationHours;
+                } else {
+                    user.sessionStats.history.push({
+                        date: today,
+                        hours: sessionDurationHours
+                    });
+                }
+
+                user.lastLoginTime = null;
+                await user.save();
+            }
+        }
+
         // Clear the token cookie
         res.clearCookie('token', {
             sameSite: process.env.PRODUCTION === 'true' ? "None" : 'Lax',
