@@ -152,6 +152,14 @@ exports.login = async (req, res) => {
         }
         const loginTime = new Date();
         existingUser.lastLoginTime = loginTime;
+        // Initialize today's duration if needed
+        const today = new Date().toISOString().split('T')[0];
+        if (!existingUser.sessionStats.today || existingUser.sessionStats.today.date !== today) {
+            existingUser.sessionStats.today = {
+                date: today,
+                duration: { hours: 0, minutes: 0, seconds: 0 }
+            };
+        }
         await existingUser.save();
 
         const secureInfo = sanitizeUser(existingUser);
@@ -461,25 +469,38 @@ exports.logout = async (req, res) => {
             if (user && user.lastLoginTime) {
                 const now = new Date();
                 const today = now.toISOString().split('T')[0];
-                const sessionDurationHours = (now - user.lastLoginTime) / (1000 * 60 * 60);
+                const sessionDuration = calculateDuration(user.lastLoginTime, now);
 
                 // Update stats (same as in middleware)
-                if (!user.sessionStats.today.date || user.sessionStats.today.date !== today) {
-                    user.sessionStats.today = { date: today, hours: 0 };
+                if (!user.sessionStats.today || user.sessionStats.today.date !== today) {
+                    user.sessionStats.today = {
+                        date: today,
+                        duration: { hours: 0, minutes: 0, seconds: 0 }
+                    };
                 }
-                user.sessionStats.today.hours += sessionDurationHours;
-                user.sessionStats.totalHours += sessionDurationHours;
+                user.sessionStats.today.duration = addDurations(
+                    user.sessionStats.today.duration,
+                    sessionDuration
+                );
+
+                user.sessionStats.totalDuration = addDurations(
+                    user.sessionStats.totalDuration || { hours: 0, minutes: 0, seconds: 0 },
+                    sessionDuration
+                );
 
                 const existingDayIndex = user.sessionStats.history.findIndex(
                     entry => entry.date === today
                 );
                 
                 if (existingDayIndex >= 0) {
-                    user.sessionStats.history[existingDayIndex].hours += sessionDurationHours;
+                    user.sessionStats.history[existingDayIndex].duration = addDurations(
+                        user.sessionStats.history[existingDayIndex].duration,
+                        sessionDuration
+                    );
                 } else {
                     user.sessionStats.history.push({
                         date: today,
-                        hours: sessionDurationHours
+                        duration: sessionDuration
                     });
                 }
 

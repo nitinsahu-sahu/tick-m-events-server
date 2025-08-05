@@ -17,73 +17,182 @@ const mongoose = require('mongoose');
 
 // Create Event
 exports.createEvent = async (req, res, next) => {
+  // Start a mongoose session for transactions
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
     const { eventName, date, time, category, eventType, location, format, description,
       name, number, email, website, whatsapp, linkedin, facebook, tiktok } = req.body;
+      
     const { coverImage, portraitImage } = req.files || {};
+
     // Check if file was uploaded
     if (!coverImage) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         message: "Please upload a cover image"
       });
     }
 
-    // Upload image to Cloudinary
-    const result = await cloudinary.uploader.upload(coverImage.tempFilePath, {
-      folder: 'event_cover_images',
-      width: 1500,
-      crop: "scale"
-    });
-
-    // Upload portraitImage 
-    let portraitImageData = {};
-    if (portraitImage) {
-      const portraitResult = await cloudinary.uploader.upload(portraitImage.tempFilePath, {
-        folder: 'event_portrait_images',
-        width: 500,
-        height: 500,
-        crop: "fill"
+    // Validate file size and type
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+    
+    if (coverImage.size > MAX_FILE_SIZE) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: "Cover image is too large (max 5MB)"
       });
-
-      portraitImageData = {
-        public_id: portraitResult.public_id,
-        url: portraitResult.secure_url
-      };
     }
 
-    // Create the event first
-    const event = await Event.create({
-      eventName,
-      date,
-      time,
-      category,
-      eventType,
-      coverImage: {
-        public_id: result.public_id,
-        url: result.secure_url
-      },
-      location,
-      format,
-      description,
-      createdBy: req.user._id,
-      portraitImage: portraitImageData,
-    });
+    if (!ALLOWED_TYPES.includes(coverImage.mimetype)) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: "Only JPEG, PNG, and WebP images are allowed"
+      });
+    }
 
-    // Then create the organizer with the event ID
-    await Organizer.create({
-      name,
-      number,
-      email,
-      website,
-      socialMedia: {
-        "whatsapp": whatsapp,
-        "linkedin": linkedin,
-        "facebook": facebook,
-        "tiktok": tiktok
-      },
-      eventId: event._id  // Use the created event's ID
-    });
+    // Upload image to Cloudinary with error handling
+    let result;
+    try {
+      result = await cloudinary.uploader.upload(coverImage.tempFilePath, {
+        folder: 'event_cover_images',
+        width: 1000,
+        crop: "scale"
+      });
+    } catch (uploadError) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload cover image",
+        error: uploadError.message
+      });
+    }
+
+    // Upload portraitImage with error handling
+    let portraitImageData = {};
+    if (portraitImage) {
+      if (portraitImage.size > MAX_FILE_SIZE) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: "Portrait image is too large (max 5MB)"
+        });
+      }
+
+      if (!ALLOWED_TYPES.includes(portraitImage.mimetype)) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          success: false,
+          message: "Only JPEG, PNG, and WebP images are allowed for portrait"
+        });
+      }
+
+      try {
+        const portraitResult = await cloudinary.uploader.upload(portraitImage.tempFilePath, {
+          folder: 'event_portrait_images',
+          width: 500,
+          height: 500,
+          crop: "fill"
+        });
+
+        portraitImageData = {
+          public_id: portraitResult.public_id,
+          url: portraitResult.secure_url
+        };
+      } catch (portraitError) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(500).json({
+          success: false,
+          message: "Failed to upload portrait image",
+          error: portraitError.message
+        });
+      }
+    }
+
+    // Create the event within the transaction
+    let event;
+    try {
+      event = await Event.create([{
+        eventName,
+        date,
+        time,
+        category,
+        eventType,
+        coverImage: {
+          public_id: result.public_id,
+          url: result.secure_url
+        },
+        location,
+        format,
+        description,
+        createdBy: req.user._id,
+        portraitImage: portraitImageData,
+      }], { session });
+      
+      event = event[0]; // Because we used create with array
+    } catch (eventError) {
+      // Clean up uploaded images if event creation fails
+      await cloudinary.uploader.destroy(result.public_id);
+      if (portraitImageData.public_id) {
+        await cloudinary.uploader.destroy(portraitImageData.public_id);
+      }
+      
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create event",
+        error: eventError.message
+      });
+    }
+
+    // Create organizer within the same transaction
+    try {
+      await Organizer.create([{
+        name,
+        number,
+        email,
+        website,
+        socialMedia: {
+          "whatsapp": whatsapp,
+          "linkedin": linkedin,
+          "facebook": facebook,
+          "tiktok": tiktok
+        },
+        eventId: event._id
+      }], { session });
+    } catch (organizerError) {
+      // Clean up everything if organizer creation fails
+      await cloudinary.uploader.destroy(result.public_id);
+      if (portraitImageData.public_id) {
+        await cloudinary.uploader.destroy(portraitImageData.public_id);
+      }
+      await Event.deleteOne({ _id: event._id }).session(session);
+      
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(500).json({
+        success: false,
+        message: "Failed to create organizer",
+        error: organizerError.message
+      });
+    }
+
+    // If everything succeeds, commit the transaction
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(201).json({
       success: true,
@@ -92,11 +201,35 @@ exports.createEvent = async (req, res, next) => {
     });
 
   } catch (error) {
+    // This catches any unexpected errors
+    await session.abortTransaction();
+    session.endSession();
+    
     console.error("Error creating event:", error);
+    
+    // Check if it's a mongoose validation error
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    
+    // Check for duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate field value entered",
+        field: Object.keys(error.keyPattern)[0]
+      });
+    }
+    
+    // Generic server error
     res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 };

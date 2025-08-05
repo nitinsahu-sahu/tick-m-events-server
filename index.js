@@ -9,6 +9,7 @@ const cloudinary = require('cloudinary').v2;
 const bodyParser = require('body-parser');
 const fileUpload = require('express-fileupload');
 const User = require('./models/User');
+const errorHandler  = require('./utils/errorHandler');
 const initReminderScheduler = require("./schedulers/reminderScheduler")
 // const cron = require("./schedulers/reminderScheduler");
 const port = process.env.PORT || 3000;
@@ -28,7 +29,7 @@ cloudinary.config({
 
 // server init
 const server = express()
-
+server.use(errorHandler)
 // database connection
 connectToDB()
 // server.use(cron)

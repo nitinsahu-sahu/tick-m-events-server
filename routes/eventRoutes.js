@@ -10,10 +10,11 @@ const { createTicketConfiguration } = require('../controllers/event-details/tick
 const { createEventCustomization } = require('../controllers/event-details/customizationController');
 const { createPublicationVisibility } = require('../controllers/event-details/visibilityController');
 const { submitRating } = require('../controllers/event-details/eventReviewController');
+const { validateEventCreation } = require('../validators/event-validator');
 
 router.route('/')
   .get(getEvents)
-  .post(verifyToken, createEvent)
+  .post(verifyToken,validateEventCreation, createEvent)
 
 router.route('/currentDateEvents')
   .get(verifyToken, getTodayEvents)
