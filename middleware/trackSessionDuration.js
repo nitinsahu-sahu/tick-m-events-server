@@ -1,7 +1,6 @@
 const User = require("../models/User");
 
 
-// Add this middleware to track session duration
 exports.trackSessionDuration = async (req, res, next) => {
     if (!req.user) return next();
     
@@ -10,17 +9,26 @@ exports.trackSessionDuration = async (req, res, next) => {
         if (!user || !user.lastLoginTime) return next();
 
         const now = new Date();
-        const today = now.toISOString().split('T')[0]; // "YYYY-MM-DD"
-        const sessionDurationHours = (now - user.lastLoginTime) / (1000 * 60 * 60); // Convert ms to hours
+        const today = now.toISOString().split('T')[0];
+        const sessionDuration = calculateDuration(user.lastLoginTime, now);
 
         // Update today's stats
-        if (!user.sessionStats.today.date || user.sessionStats.today.date !== today) {
-            user.sessionStats.today = { date: today, hours: 0 };
+        if (!user.sessionStats.today || user.sessionStats.today.date !== today) {
+            user.sessionStats.today = {
+                date: today,
+                duration: { hours: 0, minutes: 0, seconds: 0 }
+            };
         }
-        user.sessionStats.today.hours += sessionDurationHours;
+        user.sessionStats.today.duration = addDurations(
+            user.sessionStats.today.duration,
+            sessionDuration
+        );
 
-        // Update total hours
-        user.sessionStats.totalHours += sessionDurationHours;
+        // Update total duration
+        user.sessionStats.totalDuration = addDurations(
+            user.sessionStats.totalDuration || { hours: 0, minutes: 0, seconds: 0 },
+            sessionDuration
+        );
 
         // Update history
         const existingDayIndex = user.sessionStats.history.findIndex(
@@ -28,14 +36,19 @@ exports.trackSessionDuration = async (req, res, next) => {
         );
         
         if (existingDayIndex >= 0) {
-            user.sessionStats.history[existingDayIndex].hours += sessionDurationHours;
+            user.sessionStats.history[existingDayIndex].duration = addDurations(
+                user.sessionStats.history[existingDayIndex].duration,
+                sessionDuration
+            );
         } else {
             user.sessionStats.history.push({
                 date: today,
-                hours: sessionDurationHours
+                duration: sessionDuration
             });
         }
 
+        // Update last login time to now for next request
+        user.lastLoginTime = now;
         await user.save();
         next();
     } catch (err) {
