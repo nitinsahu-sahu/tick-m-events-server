@@ -18,6 +18,12 @@ const SocialLinksSchema = new mongoose.Schema({
     },
 });
 
+const sessionDurationSchema = new Schema({
+    hours: { type: Number, default: 0 },
+    minutes: { type: Number, default: 0 },
+    seconds: { type: Number, default: 0 }
+});
+
 const userSchema = new Schema({
     socialLinks: SocialLinksSchema,
     username: {
@@ -122,17 +128,18 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
-    sessionStats: {
-        totalHours: { type: Number, default: 0 }, // Total hours logged in
+   sessionStats: {
+        totalDuration: sessionDurationSchema,
         today: {
             date: { type: String }, // "YYYY-MM-DD"
-            hours: { type: Number, default: 0 }
+            duration: sessionDurationSchema
         },
         history: [{
             date: { type: String }, // "YYYY-MM-DD"
-            hours: { type: Number }
+            duration: sessionDurationSchema
         }]
     },
+    lastLoginTime: { type: Date },
     loginStats: {
         totalLogins: { type: Number, default: 0 },
         currentMonth: {

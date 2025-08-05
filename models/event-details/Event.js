@@ -2,8 +2,21 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const eventSchema = new Schema({
-  eventName: { type: String, required: true },
-  date: { type: String, required: true },
+  eventName: {
+    type: String,
+    required: [true, 'Event name is required'],
+    maxlength: [100, 'Event name cannot exceed 100 characters']
+  },
+  date: {
+    type: String,
+    required: [true, 'Date is required'],
+    validate: {
+      validator: function (v) {
+        return /^\d{4}-\d{2}-\d{2}$/.test(v); // Simple date format validation
+      },
+      message: props => `${props.value} is not a valid date format (YYYY-MM-DD)`
+    }
+  },
   time: { type: String, required: true },
   category: {
     type: String,
@@ -16,8 +29,7 @@ const eventSchema = new Schema({
   validationView: {
     type: [String],
     enum: ['scan', 'listCode', 'listName'],
-    default: ['scan'],
-    select: false
+    default: 'scan',
   },
   averageRating: {
     type: Number,
@@ -51,7 +63,7 @@ const eventSchema = new Schema({
   status: {
     type: String,
     enum: ['pending', 'approved', 'cancelled'],
-    default: ['pending'],
+    default: 'pending',
   },
   isDelete: {
     type: Boolean,
