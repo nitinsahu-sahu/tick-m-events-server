@@ -101,6 +101,8 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
         const proEvents = await Event.find({
             isDelete: { $ne: true },
             createdBy: userId,
+            status: "approved",
+
             $or: [
                 {
                     date: { $gt: currentDateTime.toISOString().split('T')[0] }
