@@ -44,41 +44,37 @@ exports.getSocialSharePage = async (req, res) => {
   try {
     const { postId } = req.params;
     const post = await SocialMediaPost.findById(postId);
-    if (!post) {
-      return res.status(404).send("Post not found");
-    }
-
+    if (!post) return res.status(404).send("Post not found");
+ 
     const event = await Event.findById(post.event);
     const eventName = event?.eventName || "Event";
-
-    const hashtag = post.hashtag || "#TickMEvents";
-    const descriptionText = post.description || "Join us for an unforgettable experience! Get your tickets now!";
-    const reservationLink = post.reservationLink || shareUrl;
-    const hashtagText = post.hashtag || "#TickMEvents";
-    const fullDescription = `${descriptionText}. ${reservationLink}. ${hashtagText}`;
-
-
-    const imageUrl = post.imageUrl || "https://via.placeholder.com/1200x630.png?text=Default+Image";
+ 
     const shareUrl = `https://tick-m-events.vercel.app/post/${postId}`;
-    const redirectUrl = post.reservationLink || shareUrl;
+    const imageUrl = post.imageUrl || "https://via.placeholder.com/1200x630.png?text=Default+Image";
+    const hashtag = post.hashtag || "#TickMEvents";
+    const descriptionText = post.description?.replace(/"/g, '&quot;') || "Join us for an unforgettable experience! Get your tickets now!";
+    const reservationLink = post.reservationLink || shareUrl;
+    const fullDescription = `${descriptionText}. ${reservationLink}. ${hashtag}`;
+ 
     const userAgent = req.get("User-Agent") || "";
     const isBot = /facebookexternalhit|twitterbot|linkedinbot|WhatsApp|Slackbot|Discordbot|Googlebot/i.test(userAgent);
-    const metaTags = `
-   
-  <meta property="og:title" content="${eventName}" />
-  <meta property="og:description" content="${fullDescription}" />
-  <meta property="og:image" content="${imageUrl}" />
-  <meta property="og:url" content="${shareUrl}" />
-  <meta property="og:type" content="website" />
  
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${eventName}" />
-  <meta name="twitter:description" content="${fullDescription}" />
-  <meta name="twitter:image" content="${imageUrl}" />
-`;
-
-
-
+    // Set correct content type
+    res.set("Content-Type", "text/html; charset=utf-8");
+ 
+    const metaTags = `
+      <meta property="og:title" content="${eventName}" />
+      <meta property="og:description" content="${fullDescription}" />
+      <meta property="og:image" content="${imageUrl}" />
+      <meta property="og:url" content="${shareUrl}" />
+      <meta property="og:type" content="website" />
+ 
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="${eventName}" />
+      <meta name="twitter:description" content="${fullDescription}" />
+      <meta name="twitter:image" content="${imageUrl}" />
+    `;
+ 
     res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -90,16 +86,15 @@ exports.getSocialSharePage = async (req, res) => {
 <body>
   <h1>${eventName}</h1>
   <p>${descriptionText}</p>
- <p><a href="${reservationLink}">${reservationLink}</a></p>
-  <p>${hashtagText}</p>
+  <p><a href="${reservationLink}">${reservationLink}</a></p>
+  <p>${hashtag}</p>
   <img src="${imageUrl}" alt="Event Image" style="max-width:100%; height:auto;" />
-  ${isBot ? "" : `<script>window.location.href = '${redirectUrl}';</script>`}
+  ${isBot ? "" : `<script>window.location.href = '${reservationLink}';</script>`}
 </body>
- 
 </html>`);
   } catch (error) {
-    console.error('getSocialSharePage error:', error);
-    res.status(500).send('Something went wrong');
+    console.error("getSocialSharePage error:", error);
+    res.status(500).send("Something went wrong");
   }
 };
 
