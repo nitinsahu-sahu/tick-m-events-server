@@ -218,7 +218,7 @@ exports.login = async (req, res) => {
     } catch (error) {
         console.error("Login error:", error.message);
         return res.status(500).json({
-            message: 'Some error occurred while logging in, please try again later'
+            message: 'Server busy. Please try again later.'
         });
     }
 };
