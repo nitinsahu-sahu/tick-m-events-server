@@ -22,7 +22,7 @@ const visibilitySchema = new Schema({
     enum: ['public', 'private'],
     default: "public",
   },
-  customUrl: { type: String },
+  customUrl: { type: String, default: 'https://tick-m-events.vercel.app/our-event' },
   promotionAndHighlight: {
     homepageHighlighting: { type: Boolean, default: false },
     autoShareOnSocialMedia: { type: Boolean, default: false }
