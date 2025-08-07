@@ -233,3 +233,54 @@ exports.updateEvents = async (req, res, next) => {
     });
   }
 };
+
+exports.updateEventVisibility = async (req, res, next) => {
+  const userId = req.user._id;
+  const { eventId } = req.params;
+  const { visibilityState } = req.body;
+
+  try {
+    // Validate event exists and belongs to user
+    const event = await Event.findOne({ _id: eventId, createdBy: userId });
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found or you are not authorized'
+      });
+    }
+
+    // Find or create visibility settings
+    let visibility = await Visibility.findOne({ eventId, _id: visibilityState._id });
+
+    // Update fields
+    if (visibilityState.visibilityType) visibility.visibilityType = visibilityState.visibilityType;
+    if (visibilityState.customUrl) visibility.customUrl = visibilityState.customUrl;
+
+    // Update promotion settings if provided
+    if (visibilityState.promotionAndHighlight !== undefined) {
+      visibility.promotionAndHighlight = visibilityState.promotionAndHighlight;
+    }
+
+    // Generate custom URL if visibility type changed to private
+    if (visibilityState.visibilityType === 'private' && !visibilityState.customUrl) {
+      visibility.customUrl = `https://tick-m-events.vercel.app/our-event/${eventId}`;
+    }
+
+    // Save changes
+    await visibility.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Visibility settings updated successfully',
+      data: visibility
+    });
+
+  } catch (error) {
+    console.error('Error updating event visibility:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error while updating visibility settings',
+      error: error.message
+    });
+  }
+};
