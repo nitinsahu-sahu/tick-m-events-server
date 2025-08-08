@@ -9,6 +9,7 @@ const EventOrders = require('../../models/event-order/EventOrder');
 const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const TicketConfiguration = require('../../models/event-details/Ticket');
 const RefundRequest = require('../../models/refund-managment/RefundRequest');
+const EventsRequest = require('../../models/event-request/event-requests.model');
 
 
 exports.fetchEventOrganizerSelect = async (req, res, next) => {
@@ -41,7 +42,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
         // Helper function to get full event details
         const eventsWithDetails = await Promise.all(upcomingEvents.map(async (event) => {
-            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests] = await Promise.all([
+            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests] = await Promise.all([
                 Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -60,6 +61,21 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 RefundRequest.find({ eventId: event._id })
                     .populate({ path: 'userId', select: 'name email' })
                     .populate({ path: 'orderId', select: 'paymentStatus tickets' })
+                    .lean(),
+                EventsRequest.find({
+                    eventId: event._id,
+                    status: { $ne: 'requested-by-organizer' }
+                })
+                    .populate({
+                        path: 'providerId',
+                        select: 'serviceCategory reviewCount averageRating name email avatar isVerified socialLinks email experience address username',
+                        model: 'User'
+                    })
+                    .populate({
+                        path: 'serviceRequestId',
+                        select: 'serviceName category',
+                        model: 'ServiceRequest'
+                    })
                     .lean()
             ]);
 
@@ -90,6 +106,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 payStatus: ticketConfig?.payStatus || 'paid',
                 purchaseDeadlineDate: ticketConfig?.purchaseDeadlineDate || null,
                 photoFrame,
+                eventRequests
             };
         }));
 
@@ -101,7 +118,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
     } catch (error) {
         console.log(error);
-        
+
         res.status(400).json({
             success: false,
             message: 'Server error',
