@@ -128,7 +128,7 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
-   sessionStats: {
+    sessionStats: {
         totalDuration: sessionDurationSchema,
         today: {
             date: { type: String }, // "YYYY-MM-DD"
