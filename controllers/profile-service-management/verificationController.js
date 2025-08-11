@@ -7,6 +7,7 @@ const { sendMail } = require('../../utils/Emails');
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = require('twilio')(accountSid, authToken);
+const mongoose = require("mongoose")
 
 exports.sendEmailOtp = async (req, res) => {
     try {
@@ -142,7 +143,7 @@ exports.sendWhatsAppOTP = async (req, res) => {
             { upsert: true, new: true }
         );
 
-        await client.messages
+        const otpWhatsapp = await client.messages
             .create({
                 from: `whatsapp:+14155238886`,
                 contentSid: process.env.TWILIO_CONTENT_SID,
@@ -214,6 +215,8 @@ exports.verifyWhatsAppOTP = async (req, res) => {
 
 exports.verifyIdentity = async (req, res) => {
     const { identity } = req.files;
+    const { type } = req.body;
+  
     try {
         if (!identity) {
             return res.status(400).json({ 
@@ -238,6 +241,7 @@ exports.verifyIdentity = async (req, res) => {
             const newVerification = await Verification.create({
                 userId,
                 identityDocuments: [{
+                    type,
                     url: result.secure_url,
                     public_id: result.public_id,
                     status: 'pending'
@@ -265,6 +269,7 @@ exports.verifyIdentity = async (req, res) => {
 
             // Update existing document (first in array)
             verification.identityDocuments[0] = {
+                type,
                 url: result.secure_url,
                 public_id: result.public_id,
                 status: 'pending',
@@ -275,7 +280,8 @@ exports.verifyIdentity = async (req, res) => {
             verification.identityDocuments.push({
                 url: result.secure_url,
                 public_id: result.public_id,
-                status: 'pending'
+                status: 'pending',
+                 type,
             });
         }
 
@@ -299,77 +305,71 @@ exports.verifyIdentity = async (req, res) => {
     }
 };
 
-// exports.verifyIdentity = async (req, res) => {
-
-//     const { identity } = req.files
-//     try {
-//         if (!identity) {
-//             return res.status(400).json({ success: false, message: 'No file uploaded' });
-//         }
-
-//         const userId = req.user._id;
-
-//         // Upload to Cloudinary
-//         const result = await cloudinary.uploader.upload(identity.tempFilePath, {
-//             folder: 'identity_documents',
-//             resource_type: 'auto'
-//         });
-
-//         // Save document to verification record
-//         const verification = await Verification.findOneAndUpdate(
-//             { userId },
-//             {
-//                 $push: {
-//                     identityDocuments: {
-//                         url: result.secure_url,
-//                         public_id: result.public_id,
-//                         status: 'pending'
-//                     }
-//                 }
-//             },
-//             { upsert: true, new: true }
-//         );
-
-//         res.status(200).json({
-//             success: true,
-//             message: 'Identity document submitted for verification',
-//             data: verification
-//         });
-//     } catch (error) {
-//         console.log('====================================');
-//         console.log(error.message);
-//         console.log('====================================');
-//         res.status(500).json({
-//             success: false,
-//             message: 'Failed to upload identity',
-//             error: error.message
-//         });
-//     }
-// };
-
 // Admin endpoint to approve identity
 exports.approveIdentity = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        const verification = await Verification.findOneAndUpdate(
-            { userId },
-            {
-                identityVerified: true,
-                $set: { 'identityDocuments.$[].status': 'approved' }
-            },
-            { new: true }
-        );
+        // Start a transaction to ensure both updates succeed or fail together
+        const session = await mongoose.startSession();
+        session.startTransaction();
 
-        if (!verification) {
-            return res.status(404).json({ success: false, message: 'Verification record not found' });
+        try {
+            // 1. Update verification status
+            const verification = await Verification.findOneAndUpdate(
+                { userId },
+                {
+                    identityVerified: true,
+                    $set: { 'identityDocuments.$[].status': 'approved' }
+                },
+                { new: true, session } // Include session in the operation
+            );
+
+            if (!verification) {
+                await session.abortTransaction();
+                session.endSession();
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'Verification record not found' 
+                });
+            }
+
+            // 2. Update user's isVerified status
+            const user = await User.findByIdAndUpdate(
+                userId,
+                { isVerified: true },
+                { new: true, session } // Include session in the operation
+            );
+
+            if (!user) {
+                await session.abortTransaction();
+                session.endSession();
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'User not found' 
+                });
+            }
+
+            // Commit the transaction if both operations succeeded
+            await session.commitTransaction();
+            session.endSession();
+
+            res.status(200).json({
+                success: true,
+                message: 'Identity approved and user verification updated successfully',
+                data: {
+                    verification,
+                    user
+                }
+            });
+
+        } catch (error) {
+            // If any error occurs, abort the transaction
+            await session.abortTransaction();
+            session.endSession();
+            throw error;
         }
 
-        res.status(200).json({
-            success: true,
-            message: 'Identity approved successfully',
-            data: verification
-        });
     } catch (error) {
         res.status(500).json({
             success: false,
