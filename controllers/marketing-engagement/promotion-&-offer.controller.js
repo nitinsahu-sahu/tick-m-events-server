@@ -149,7 +149,7 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
             // Map refund requests to their respective orders
             const ordersWithRefunds = orders.map(order => {
                 const orderRefunds = refundRequests.filter(
-                    refund => refund.orderId === order._id.toString()
+                    refund => refund.orderId.toString() === order._id.toString()
                 );
                 return {
                     ...order,

@@ -46,6 +46,9 @@ const verificationSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  docCancelReason: {
+    type: String,
+  },
   paymentVerified: {
     type: Boolean,
     default: false
