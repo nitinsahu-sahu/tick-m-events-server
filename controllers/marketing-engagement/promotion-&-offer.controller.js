@@ -103,19 +103,19 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
             createdBy: userId,
             status: "approved",
 
-            $or: [
-                {
-                    date: { $gt: currentDateTime.toISOString().split('T')[0] }
-                },
-                {
-                    date: currentDateTime.toISOString().split('T')[0],
-                    time: {
-                        $gt: currentDateTime.toLocaleTimeString('en-US',
-                            { hour12: false }
-                        )
-                    }
-                }
-            ]
+            // $or: [
+            //     {
+            //         date: { $gt: currentDateTime.toISOString().split('T')[0] }
+            //     },
+            //     {
+            //         date: currentDateTime.toISOString().split('T')[0],
+            //         time: {
+            //             $gt: currentDateTime.toLocaleTimeString('en-US',
+            //                 { hour12: false }
+            //             )
+            //         }
+            //     }
+            // ]
         })
             .sort({ date: 1, startTime: 1 })
             .select('-createdBy -createdAt -updatedAt -isDelete -__v')
