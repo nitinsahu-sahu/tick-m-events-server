@@ -3,21 +3,25 @@ const mongoose = require("mongoose")
 const { Schema } = mongoose
 
 const addressSchema = new Schema({
-    name: { type: String, required: true, },
     email: { type: String, required: true, },
     number: { type: String, required: true, },
     city: { type: String, required: true, },
-    gender: { type: String, required: true, },
-    age: { type: String, required: true, },
     hearAboutEvent: { type: String },
     eventSpacificInfo: { type: String },
 });
 
+const participantSchema = new Schema({
+    name: { type: String, required: true },
+    age: { type: String, required: true },
+    gender: { type: String, required: true },
+    validation: { type: Boolean, required: false, default: false }
+});
+
 const eventOrderSchema = new Schema({
-    eventId: { 
-        type: mongoose.Schema.Types.ObjectId, 
+    eventId: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: "Event",
-        required: true 
+        required: true
     },
     userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -25,6 +29,7 @@ const eventOrderSchema = new Schema({
         required: true,
     },
     orderAddress: addressSchema,
+    participantDetails: [participantSchema],
     qrCode: { type: String }, // Base64 image
     tickets: [
         {
