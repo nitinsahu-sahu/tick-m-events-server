@@ -118,6 +118,7 @@ exports.selectedFarme = async (req, res) => {
 };
 
 exports.deleteFrame = async (req, res) => {
+
   try {
     const { eventId, frameUrl } = req.query;
 
@@ -137,7 +138,8 @@ exports.deleteFrame = async (req, res) => {
 
     res.status(200).json({ message: 'Frame deleted successfully', updatedUrls: event.photoFrame.frameUrls });
   } catch (error) {
-    console.error('Delete frame error:', error);
+    console.error('===>>Delete frame error:', error);
+    console.error('============>:');
     res.status(500).json({ message: 'Internal server error' });
   }
 };
