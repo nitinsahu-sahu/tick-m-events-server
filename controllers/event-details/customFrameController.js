@@ -118,28 +118,37 @@ exports.selectedFarme = async (req, res) => {
 };
 
 exports.deleteFrame = async (req, res) => {
-
   try {
     const { eventId, frameUrl } = req.query;
-
+ 
     if (!eventId || !frameUrl) {
       return res.status(400).json({ message: 'Missing eventId or frameUrl' });
     }
-
-    const event = await Event.findById(eventId);
-    if (!event) {
-      return res.status(404).json({ message: 'Event not found' });
+ 
+    // Find the CustomPhotoFrame document by eventId
+    const frameDoc = await CustomPhotoFrame.findOne({ eventId });
+ 
+    if (!frameDoc) {
+      return res.status(404).json({ message: 'Frame document not found for this event' });
     }
-
-    // Remove the frame URL from photoFrame.frameUrls
-    event.photoFrame.frameUrls = event.photoFrame.frameUrls.filter(url => url !== frameUrl);
-
-    await event.save();
-
-    res.status(200).json({ message: 'Frame deleted successfully', updatedUrls: event.photoFrame.frameUrls });
+ 
+    // Remove the frame URL from frameUrls
+    frameDoc.frameUrls = frameDoc.frameUrls.filter(url => url !== frameUrl);
+ 
+    // If the deleted URL was the selectedFrameUrl, clear it or set a fallback
+    if (frameDoc.selectedFrameUrl === frameUrl) {
+      frameDoc.selectedFrameUrl = frameDoc.frameUrls[0] || null;
+    }
+ 
+    await frameDoc.save();
+ 
+    res.status(200).json({
+      message: 'Frame deleted successfully',
+      updatedUrls: frameDoc.frameUrls,
+      selectedFrameUrl: frameDoc.selectedFrameUrl,
+    });
   } catch (error) {
-    console.error('===>>Delete frame error:', error);
-    console.error('============>:');
+    console.error('Delete frame error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
