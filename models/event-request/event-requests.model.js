@@ -4,8 +4,10 @@ const mongoose = require("mongoose")
 const eventRequestSchema = new mongoose.Schema({
   eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
   organizerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  serviceRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceRequest', required: true },
-  providerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  serviceRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'ServiceRequest' },
+  serviceCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
+  providerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  eventLocation: { type: String, required: true },
   status: {
     type: String,
     enum: ['accepted', 'requested-by-organizer', 'accepted-by-provider', 'rejected-by-provider', 'rejected-by-organizer', 'accepted-by-organizer'],
@@ -23,10 +25,14 @@ const eventRequestSchema = new mongoose.Schema({
   orgRequirement: {
     type: String,
     required: true
-  }, // Custom message from organizer
+  },
+  
+  orgAdditionalRequirement: {
+    type: String,
+  },
   discussion: {
     type: String,
-  }, // Custom message from organizer
+  },
   providerResponse: { type: String },
   providerProposal: {
     amount: { type: Number },
@@ -36,7 +42,8 @@ const eventRequestSchema = new mongoose.Schema({
   providerHasProposed: {
     type: Boolean,
     default: false
-  }
+  },
+  serviceTime: { type: Date }
 }, { timestamps: true });
 
 module.exports = mongoose.model('EventRequest', eventRequestSchema);

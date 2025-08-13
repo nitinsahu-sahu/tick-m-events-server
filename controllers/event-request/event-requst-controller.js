@@ -8,8 +8,12 @@ exports.getRequestsByProvider = async (req, res) => {
         const { status, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
 
         // Build query
-        // const query = { providerId: req.user._id, status: "requested-by-organizer" };
-        const query = { providerId: req.user._id };
+        const query = {
+            $or: [
+                { providerId: req.user._id },
+                { providerId: null }
+            ]
+        };
         if (status) {
             query.status = status;
         }
@@ -86,33 +90,47 @@ exports.updateRequestById = async (req, res) => {
 // Organizer sends request to provider
 exports.createRequest = async (req, res) => {
     try {
-        const { eventId, serviceRequestId, orgRequirement, orgBudget } = req.body;
+        const { serviceTime, status, eventId, serviceRequestId, orgRequirement, 
+                orgBudget, eventLocation, orgAdditionalRequirement } = req.body;
         const organizerId = req.user._id;
 
         // Check for existing request
-        const existingRequest = await EventRequest.findOne({
-            eventId,
-            organizerId,
-            serviceRequestId
-        });
+//         const existingRequest = await EventRequest.findOne({
+//             serviceRequestId
+//         });
+// console.log(existingRequest);
+// console.log('body',req.body);
 
-        const existingServiceRequest = await ProviderService.findOne({
-            _id: serviceRequestId
-        });
-        if (existingRequest) {
-            return res.status(400).json({
-                success: false,
-                message: "You have already requested this service for this event"
+//         if (existingRequest) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: "You have already requested this service for this event"
+//             });
+//         }
+
+        // Try to find the service request but don't fail if not found
+        let providerId = null;
+        try {
+            const existingServiceRequest = await ProviderService.findOne({
+                _id: serviceRequestId
             });
+            providerId = existingServiceRequest?.createdBy || null;
+        } catch (err) {
+            console.log('Error finding service request, proceeding without providerId:', err.message);
         }
 
-        // Create new request
+        // Create new request (providerId will be null if not found)
         const request = await EventRequest.create({
             eventId,
             organizerId,
             serviceRequestId,
-            orgRequirement, orgBudget,
-            providerId: existingServiceRequest.createdBy
+            status,
+            orgRequirement,
+            orgBudget,
+            eventLocation,
+            orgAdditionalRequirement,
+            serviceTime,
+            providerId // This will be null if service request not found
         });
 
         res.status(201).json({

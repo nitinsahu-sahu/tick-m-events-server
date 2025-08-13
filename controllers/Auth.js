@@ -13,6 +13,7 @@ const cloudinary = require('cloudinary').v2;
 const Activity = require("../models/activity/activity.modal");
 const sharp = require('sharp');
 const getLocationFromIP = require('../utils/getLocationFromIP');
+const calculateDuration = require('../utils/helperFunction');
 
 //register controller
 exports.signup = async (req, res) => {
