@@ -26,10 +26,17 @@ const eventSchema = new Schema({
     type: String,
     required: true,
   },
-  validationView: {
-    type: [String],
-    enum: ['scan', 'listCode', 'listName'],
-    default: 'scan',
+  validationOptions: {
+    selectedView: {
+      type: String,
+      enum: ['scan', 'list'],
+      default: 'scan'
+    },
+    listViewMethods: {
+      type: [String],
+      enum: ['manualCode', 'nameList', 'accountId'],
+      default: []
+    }
   },
   averageRating: {
     type: Number,
