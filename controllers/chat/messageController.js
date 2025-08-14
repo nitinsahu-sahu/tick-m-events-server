@@ -55,43 +55,116 @@ exports.msgByConversationId = async (req, res) => {
 }
 
 exports.sendMessage = async (req, res) => {
-    try {
-        const senderId = req.user._id
-        const { conversationId, message, receiverId = '', type } = req.body;
-        console.log('>>', req.body);
+        console.log(req.files);
+        console.log(req.body);
 
-        if (conversationId === 'new' && receiverId) {
-            const newCoversation = new Conversation(
-                {
-                    members: [senderId, receiverId],
-                    receiverId,
-                    senderId
-                }
-            );
-            await newCoversation.save();
-            const newMessage = new Messages(
-                {
-                    conversationId: newCoversation._id,
-                    receiverId,
-                    senderId,
-                    message,
-                    type
-                }
-            );
-            await newMessage.save();
-            return res.status(200).send('Message sent successfully');
-        } else if (!conversationId && !receiverId) {
-            return res.status(400).send({ errors: 'Please fill all required fields' })
+    try {
+        const senderId = req.user._id;
+        const { conversationId, message, receiverId = '', type } = req.body;
+        console.log();
+        
+        let files = [];
+        
+        // Process uploaded files if they exist
+        if (req.files && req.files.length > 0) {
+            // Upload files to Cloudinary
+            const uploadPromises = req.files.map(file => {
+                return cloudinary.uploader.upload(file.path, {
+                    resource_type: 'auto',
+                    folder: 'chat_attachments'
+                });
+            });
+
+            // Wait for all uploads to complete
+            const cloudinaryResults = await Promise.all(uploadPromises);
+            
+            // Map results to files array
+            files = cloudinaryResults.map(result => ({
+                public_id: result.public_id,
+                url: result.secure_url,
+                fileType: determineFileType(result.resource_type),
+                fileName: result.original_filename || `file-${Date.now()}`,
+                fileSize: result.bytes
+            }));
         }
-        const newMessage = new Messages(
-            {
-                conversationId, senderId, message, type, receiverId
+
+        // Determine message type
+        let finalType = type;
+        if (!finalType) {
+            if (message && files.length) {
+                finalType = 'mixed';
+            } else if (files.length) {
+                finalType = 'file';
+            } else {
+                finalType = 'text';
             }
-        );
+        }
+
+        // Handle new conversation case
+        if (conversationId === 'new' && receiverId) {
+            const newConversation = new Conversation({
+                members: [senderId, receiverId],
+                receiverId,
+                senderId
+            });
+            await newConversation.save();
+            
+            const newMessage = new Messages({
+                conversationId: newConversation._id,
+                receiverId,
+                senderId,
+                message,
+                files,
+                type: finalType
+            });
+            
+            await newMessage.save();
+            return res.status(200).json({ 
+                success: true,
+                message: 'Message sent successfully',
+                data: newMessage
+            });
+        } 
+        else if (!conversationId && !receiverId) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'Please fill all required fields' 
+            });
+        }
+
+        // Handle existing conversation case
+        const newMessage = new Messages({
+            conversationId, 
+            senderId, 
+            message, 
+            files,
+            type: finalType, 
+            receiverId
+        });
+        
         await newMessage.save();
-        res.status(200).send('Message sent successfully');
+        res.status(200).json({ 
+            success: true,
+            message: 'Message sent successfully',
+            data: newMessage
+        });
+
     } catch (error) {
-        res.status(400).send({ error: error.message });
+        console.error('Error sending message:', error);
+        res.status(400).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+};
+
+// Helper function to determine file type from Cloudinary resource_type
+function determineFileType(resourceType) {
+    switch (resourceType) {
+        case 'image': return 'image';
+        case 'video': return 'video';
+        case 'raw': return 'document';
+        default: return 'document';
     }
 }
 

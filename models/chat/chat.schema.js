@@ -11,19 +11,32 @@ const messageSchema = mongoose.Schema({
         ref: "User",
         required: true,
     },
-    file: {
+    files: [{
         public_id: {
             type: String,
         },
         url: {
             type: String,
+        },
+        fileType: {
+            type: String,
+            enum: ['image', 'video', 'document', 'audio'],
+            required: true
+        },
+        fileName: {
+            type: String
+        },
+        fileSize: {
+            type: Number
         }
-    },
+    }],
     message: {
         type: String
     },
     type: {
-        type: String
+        type: String,
+        enum: ['text', 'file', 'mixed'], // 'mixed' for when both text and files are sent
+        default: 'text'
     },
     receiverId: {
         type: mongoose.Schema.Types.ObjectId,

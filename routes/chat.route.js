@@ -2,12 +2,13 @@ const express = require('express');
 const router = express.Router();
 
 const { verifyToken } = require('../middleware/VerifyToken');
-const { conversationByuserId, conversation, conversationByLoginUser,getAllActiveUsers } = require('../controllers/chat/convController');
+const { conversationByuserId, conversation, conversationByLoginUser, getAllActiveUsers } = require('../controllers/chat/convController');
 const { sendMessage, msgByConversationId, uploadsFile } = require('../controllers/chat/messageController');
+const { uploadCov } = require('../middleware/conv_file_check');
 
 // Send a new message
 router.get('/message/:conversationId', verifyToken, msgByConversationId)
-router.post('/message', verifyToken, sendMessage)
+router.post('/message', verifyToken, uploadCov.array('files'), sendMessage)
 
 // Conversation Routes
 router.get('/conversations', verifyToken, conversationByuserId)
