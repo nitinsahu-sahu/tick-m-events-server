@@ -975,23 +975,63 @@ exports.getAllServiceCategories = async (req, res) => {
   }
 };
 
+// exports.validateViewUpdate = async (req, res) => {
+//   try {
+//     const { validationView } = req.body;
+//     const { id: eventId } = req.params;
+
+//     const allowedValues = ['scan', 'listCode', 'listName'];
+//     if (
+//       !Array.isArray(validationView) ||
+//       validationView.some(v => !allowedValues.includes(v))
+//     ) {
+//       return res.status(400).json({ message: 'Invalid validationView values. Allowed: scan, list' });
+//     }
+
+//     const updatedEvent = await Event.findByIdAndUpdate(
+//       eventId,
+//       { validationView },
+//       { new: true, runValidators: true, select: '+validationView' }
+//     );
+
+//     if (!updatedEvent) {
+//       return res.status(404).json({ message: 'Event not found' });
+//     }
+
+//     res.status(200).json({
+//       message: 'Validation view updated successfully',
+//       validationView: updatedEvent.validationView,
+//     });
+//   } catch (error) {
+//     console.error('Error updating validationView:', error);
+//     res.status(500).json({ message: 'Server error' });
+//   }
+// };
+
+//get custom data
+
 exports.validateViewUpdate = async (req, res) => {
   try {
-    const { validationView } = req.body;
+    const { validationOptions } = req.body;
     const { id: eventId } = req.params;
 
-    const allowedValues = ['scan', 'listCode', 'listName'];
-    if (
-      !Array.isArray(validationView) ||
-      validationView.some(v => !allowedValues.includes(v))
-    ) {
-      return res.status(400).json({ message: 'Invalid validationView values. Allowed: scan, list' });
+    // Validate the input
+    if (!validationOptions || 
+        !['scan', 'list'].includes(validationOptions.selectedView)) {
+      return res.status(400).json({ message: 'Invalid validation options' });
+    }
+
+    // If list view is selected but no methods are chosen
+    if (validationOptions.selectedView === 'list' && 
+        (!Array.isArray(validationOptions.listViewMethods) || 
+         validationOptions.listViewMethods.length === 0)) {
+      return res.status(400).json({ message: 'Please select at least one list view method' });
     }
 
     const updatedEvent = await Event.findByIdAndUpdate(
       eventId,
-      { validationView },
-      { new: true, runValidators: true, select: '+validationView' }
+      { validationOptions },
+      { new: true, runValidators: true }
     );
 
     if (!updatedEvent) {
@@ -999,16 +1039,15 @@ exports.validateViewUpdate = async (req, res) => {
     }
 
     res.status(200).json({
-      message: 'Validation view updated successfully',
-      validationView: updatedEvent.validationView,
+      message: 'Validation options updated successfully',
+      validationOptions: updatedEvent.validationOptions,
     });
   } catch (error) {
-    console.error('Error updating validationView:', error);
+    console.error('Error updating validation options:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-//get custom data
 exports.getEventPageCustomization = async (req, res) => {
   try {
     const { id } = req.params;
