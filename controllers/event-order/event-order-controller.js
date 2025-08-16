@@ -76,7 +76,7 @@ exports.createOrder = async (req, res) => {
   const session = await mongoose.startSession();
  
   try {
-    const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails } = req.body;
+    const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails,deviceUsed } = req.body;
  
     // Input validation
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
@@ -188,7 +188,8 @@ exports.createOrder = async (req, res) => {
       paymentMethod,
       transactionId,
       ticketCode,
-      qrCode: qrImage
+      qrCode: qrImage,
+      deviceUsed
     });
  
     const savedOrder = await newOrder.save({ session });
