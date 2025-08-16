@@ -74,6 +74,11 @@ const eventOrderSchema = new Schema({
     entryTime: {  // Add this new field
         type: Date
     },
+    deviceUsed: {
+        type: String,
+        enum: ['Smartphones', 'Tablets', 'Laptops', 'Desktops', 'Unknown'],
+        default: 'Unknown'
+    },
     createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
