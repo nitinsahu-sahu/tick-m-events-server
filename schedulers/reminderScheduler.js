@@ -24,8 +24,6 @@ const MILLISECONDS_PER_HOUR = 60 * 60 * 1000;
 async function processReminders() {
   const now = new Date();
   const filterTime = moment(now).format('YYYY-MM-DD hh:mm A');
-  console.log(`🔄 Running reminder check at: ${filterTime}`);
-
   try {
     const pendingReminders = await ReminderSetting.find({
       notificationMethod: 'email',
@@ -57,38 +55,30 @@ async function sendReminderEmail(reminder) {
   `;
 
   await sendMail(reminder.recipient, subject, htmlBody);
-  console.log(`✅ Reminder sent to ${reminder.recipient}`);
 }
 
 // Helper function to update reminder status
 async function markReminderAsSent(reminder) {
   reminder.sent = true;
   await reminder.save();
-  console.log(`📝 Marked reminder as sent for ${reminder.recipient}`);
 }
 
 //Notication Cron
 async function processInAppReminders() {
   const now = new Date();
-  console.log(`🔔 Checking in-app reminders at: ${moment(now).format('YYYY-MM-DD HH:mm:ss')}`);
-
   try {
     const reminders = await Reminder.find()
       .populate('userId')
       .populate('eventId')
       .lean();
 
-    console.log(`[DEBUG] Total reminders fetched: ${reminders.length}`);
-
     for (const reminder of reminders) {
       const { reminders: reminderFlags, sentReminders = {}, userId, eventId } = reminder;
 
       if (!userId) {
-        console.log(`[WARN] Skipping reminder ${reminder._id} because userId is missing`);
         continue;
       }
       if (!eventId || !eventId.date || !eventId.time) {
-        console.log(`[WARN] Skipping reminder ${reminder._id} because eventId or event date/time is missing`);
         continue;
       }
 
@@ -96,17 +86,10 @@ async function processInAppReminders() {
       const eventDate = new Date(eventDateTimeString);
 
       if (isNaN(eventDate)) {
-        console.warn(`[WARN] Invalid event date/time for event ${eventId._id}: ${eventId.date} ${eventId.time}`);
         continue;
       }
 
       const timeDiffHours = (eventDate - now) / MILLISECONDS_PER_HOUR;
-
-      console.log(`[DEBUG] Processing reminder ${reminder._id} for event ${eventId._id}`);
-      console.log(`[DEBUG] Event date/time: ${eventDate.toISOString()}, Now: ${now.toISOString()}`);
-      console.log(`[DEBUG] Time difference (hours): ${timeDiffHours.toFixed(4)}`);
-      console.log(`[DEBUG] Reminder flags: ${JSON.stringify(reminderFlags)}`);
-      console.log(`[DEBUG] Sent reminders: ${JSON.stringify(sentReminders)}`);
 
       const schedule = [
         { label: '1 Week', hours: 168 },
@@ -119,10 +102,7 @@ async function processInAppReminders() {
         const alreadySent = sentReminders?.[label];
         const isEnabled = reminderFlags?.[label];
 
-        console.log(`  [DEBUG] Checking schedule "${label}": enabled=${isEnabled}, alreadySent=${alreadySent}`);
-
         if (!isEnabled || alreadySent) {
-          console.log(`  [DEBUG] Skipping "${label}" reminder: ${!isEnabled ? 'not enabled' : 'already sent'}`);
           continue;
         }
 
@@ -130,8 +110,6 @@ async function processInAppReminders() {
 
         if (timeDiffHours >= hours - margin && timeDiffHours <= hours + margin) {
           const message = `Your event is coming up in ${label}.`;
-          console.log(`  [INFO] Time difference within margin for "${label}". Creating notification...`);
-
           await Notification.create({
             userId: userId._id,
             eventId: eventId._id,
@@ -143,8 +121,6 @@ async function processInAppReminders() {
             { _id: reminder._id },
             { $set: { [`sentReminders.${label}`]: true } }
           );
-
-          console.log(`  📲 Sent in-app notification for "${label}" to ${userId.email || userId._id}`);
         } else {
           console.log(`  [DEBUG] Time difference NOT within margin for "${label}".`);
         }
@@ -158,14 +134,12 @@ async function processInAppReminders() {
 //For SMS,EMAIL & WEB notification
  
 const sendSms = async (to, message) => {
-  console.log(`[📱 Sending SMS to ${to}]`);
   try {
     await client.messages.create({
       body: message,
       from: process.env.TWILIO_PHONE_NUMBER,
       to,
     });
-    console.log(`[✅ SMS sent to ${to}]`);
   } catch (err) {
     console.error(`[❌ SMS Error for ${to}]`, err.message);
   }
@@ -196,7 +170,6 @@ const sendWebPush = async (users, subject, message, cta, eventId) => {
     data: payload.data,
   });
  
-  console.log(`[✅ Web Push sent to ${fcmTokens.length} users]`);
 };
  
 const processScheduledNotifications = async () => {
@@ -228,7 +201,6 @@ const processScheduledNotifications = async () => {
               },
               'default'
             );
-            console.log(`[📧 Email sent to] ${emails.map(u => u.email).join(', ')}`);
             break;
  
           case 'sms':
@@ -247,7 +219,6 @@ const processScheduledNotifications = async () => {
  
         notification.status = 'sent';
       } catch (err) {
-        console.error(`❌ Failed to send ${notificationType}:`, err.message);
         notification.status = 'failed';
       }
  
@@ -269,7 +240,6 @@ async function cleanupOldActivities() {
       timestamp: { $lt: sixtyDaysAgo }
     });
  
-    console.log(`[🧹 CRON] Deleted ${result.deletedCount} old activities`);
   } catch (err) {
     console.error("[❌ CRON] Error deleting old activities:", err.message);
   }
