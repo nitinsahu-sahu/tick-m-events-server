@@ -33,7 +33,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 EventOrders.find({ eventId: event._id })
-                    .select('-qrCode -orderAddress -updatedAt -__v')
+                    .select('-qrCode -updatedAt -__v')
                     .populate({
                         path: 'userId',
                         select: 'name email', // Only get the name field from User

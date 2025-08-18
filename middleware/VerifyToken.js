@@ -55,3 +55,14 @@ exports.verifyAdmin = (req, res, next) => {
     }
     next();
 };
+
+// New middleware to check admin role
+exports.verifyOrganizer = (req, res, next) => {
+    if (req.user?.role !== 'organizer') {
+        return res.status(403).json({
+            success: false,
+            message: "Access denied. Organizer privileges required."
+        });
+    }
+    next();
+};
