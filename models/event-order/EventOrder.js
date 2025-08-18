@@ -5,7 +5,10 @@ const { Schema } = mongoose
 const addressSchema = new Schema({
     email: { type: String, required: true, },
     number: { type: String, required: true, },
+    country: { type: String, required: true, },
+    state: { type: String, required: true, },
     city: { type: String, required: true, },
+    address: { type: String, required: true, },
     hearAboutEvent: { type: String },
     eventSpacificInfo: { type: String },
 });
