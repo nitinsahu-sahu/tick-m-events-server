@@ -4,8 +4,8 @@ const Category = require("../event-details/Category");
 // event-requests.model.js
 const placeABidSchema = new mongoose.Schema({
     eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
-    categoryId: { 
-        type: mongoose.Schema.Types.ObjectId, 
+    categoryId: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'Category',
         required: true
     },
@@ -13,7 +13,7 @@ const placeABidSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         required: true,
         validate: {
-            validator: async function(value) {
+            validator: async function (value) {
                 const category = await Category.findOne({
                     _id: this.categoryId,
                     'subcategories._id': value
@@ -31,8 +31,16 @@ const placeABidSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'signed', 'ongoing', 'completed', 'cancelled'],
-        default: 'pending'
+        enum: ['open', 'signed', 'ongoing', 'completed', 'cancelled','closed'],
+        default: 'open'
+    },
+    bidsCount: {
+        type: Number,
+        default: 0
+    },
+    avgBids: {
+        type: Number,
+        default: 0
     },
     orgBudget: {
         type: String,
@@ -59,6 +67,7 @@ const placeABidSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+
     serviceTime: { type: Date }
 }, { timestamps: true });
 

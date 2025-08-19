@@ -16,7 +16,7 @@ router.get('/event-com', verifyToken, fetchEventOrganizerSelect);
 // Place a Bid
 router.post('/place-a-bid', verifyToken, verifyOrganizer, postPlaceABid)
 router.get('/place-a-bid', verifyToken, getBids)
-router.get('/place-a-bid/:serviceId', verifyToken, getBidById)
+router.get('/place-a-bid/:projectId', verifyToken, getBidById)
 
 
 module.exports = router;
