@@ -92,24 +92,49 @@ exports.getBids = async (req, res) => {
         // Get bids with pagination
         const projects = await PlaceABidModal.find(query)
             .populate([
-                { path: 'eventId', select: 'date location eventName' },
+                { path: 'eventId', select: 'date location eventName averageRating' },
                 { path: 'categoryId', select: 'name' },
-                { path: 'createdBy', select: 'name email profile' }
+                { path: 'createdBy', select: '-serviceCategory -cover -loginStats -profileViews -sessionStats -role -socketId -__v -password -isAdmin -updatedAt -experience -website' }
             ])
             .sort(sort)
             .skip(skip)
-            .limit(Number(limit));
+            .limit(Number(limit))
+            .lean();
+
+        // Get all unique subcategory IDs
+        const subcategoryIds = [...new Set(projects.map(p => p.subcategoryId))];
+
+        // Find all matching subcategories in one query
+        const categoriesWithSubcategories = await Category.find({
+            'subcategories._id': { $in: subcategoryIds }
+        }, {
+            'subcategories.$': 1
+        });
+
+        // Create a map of subcategory IDs to names
+        const subcategoryMap = {};
+        categoriesWithSubcategories.forEach(cat => {
+            cat.subcategories.forEach(subcat => {
+                subcategoryMap[subcat._id.toString()] = subcat.name;
+            });
+        });
+
+        // Add subcategory names to projects
+        const projectsWithSubcategoryNames = projects.map(project => ({
+            ...project,
+            subcategoryName: subcategoryMap[project.subcategoryId.toString()] || null
+        }));
 
         // Count total documents for pagination info
         const total = await PlaceABidModal.countDocuments(query);
 
         res.status(200).json({
             success: true,
-            count: projects.length,
+            count: projectsWithSubcategoryNames.length,
             total,
             pages: Math.ceil(total / limit),
             currentPage: page,
-            projects
+            projects: projectsWithSubcategoryNames
         });
 
     } catch (err) {
@@ -124,23 +149,46 @@ exports.getBids = async (req, res) => {
 
 exports.getBidById = async (req, res) => {
     try {
-        const bid = await PlaceABidModal.findById(req.params.id)
+        const project = await PlaceABidModal.findById(req.params.projectId)
             .populate([
-                { path: 'eventId', select: 'title date location organizer' },
-                { path: 'serviceCategoryId', select: 'name description' },
-                { path: 'createdBy', select: 'name email profile phone' }
+                { path: 'eventId', select: 'date location eventName averageRating' },
+                { path: 'categoryId', select: 'name' },
+                { path: 'createdBy', select: '-serviceCategory -cover -loginStats -profileViews -sessionStats -role -socketId -__v -password -isAdmin -updatedAt -experience -website' }
             ]);
 
-        if (!bid) {
+        if (!project) {
             return res.status(404).json({
                 success: false,
-                message: 'Bid not found'
+                message: 'Project not found'
             });
         }
 
+        // Since it's a single project, get its subcategory ID
+        const subcategoryId = project.subcategoryId;
+
+        // Find the category that contains this subcategory
+        const categoryWithSubcategory = await Category.findOne({
+            'subcategories._id': subcategoryId
+        }, {
+            'subcategories.$': 1
+        });
+
+        // Get the subcategory name
+        let subcategoryName = null;
+        if (categoryWithSubcategory && categoryWithSubcategory.subcategories.length > 0) {
+            subcategoryName = categoryWithSubcategory.subcategories[0].name;
+        }
+
+        // Add subcategory name to the project object
+        const projectWithSubcategory = {
+            ...project.toObject(), // Convert mongoose document to plain object
+            subcategoryName: subcategoryName
+        };
+
         res.status(200).json({
+            message: "Fetched successfully...",
             success: true,
-            data: bid
+            project: projectWithSubcategory
         });
 
     } catch (err) {
