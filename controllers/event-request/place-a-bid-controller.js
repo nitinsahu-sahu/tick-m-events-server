@@ -1,5 +1,8 @@
 const PlaceABidModal = require("../../models/event-request/placeBid.modal");
+const Bid = require("../../models/event-request/bid.modal");
 const Category = require("../../models/event-details/Category");
+const Verification = require("../../models/profile-service-maagement/Verification");
+const mongoose = require("mongoose")
 
 // Organizer Place a Custome Service For Event
 exports.postPlaceABid = async (req, res) => {
@@ -163,6 +166,14 @@ exports.getBidById = async (req, res) => {
             });
         }
 
+        // Get verification data for the createdBy user
+        let verificationData = null;
+        if (project.createdBy) {
+            verificationData = await Verification.findOne({
+                userId: project.createdBy._id
+            });
+        }
+
         // Since it's a single project, get its subcategory ID
         const subcategoryId = project.subcategoryId;
 
@@ -181,8 +192,21 @@ exports.getBidById = async (req, res) => {
 
         // Add subcategory name to the project object
         const projectWithSubcategory = {
-            ...project.toObject(), // Convert mongoose document to plain object
-            subcategoryName: subcategoryName
+            ...project.toObject(),
+            subcategoryName: subcategoryName,
+            createdBy: {
+                ...project.createdBy.toObject(),
+                verification: verificationData ? {
+                    emailVerified: verificationData.emailVerified,
+                    whatsappVerified: verificationData.whatsappVerified,
+                    identityVerified: verificationData.identityVerified,
+                    paymentVerified: verificationData.paymentVerified,
+                    overallVerified: verificationData.emailVerified &&
+                        verificationData.whatsappVerified &&
+                        verificationData.identityVerified &&
+                        verificationData.paymentVerified
+                } : null
+            }
         };
 
         res.status(200).json({
@@ -199,4 +223,358 @@ exports.getBidById = async (req, res) => {
             error: process.env.NODE_ENV === 'development' ? err.message : undefined
         });
     }
+};
+
+exports.placeBid = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    const { projectId } = req.params;
+    const {
+      bidAmount,
+      deliveryTime,
+      deliveryUnit,
+      proposal,
+      milestones
+    } = req.body;
+    
+    const providerId = req.user._id;
+
+    // Validate project exists and is open for bidding
+    const project = await PlaceABidModal.findById(projectId);
+    if (!project) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+    }
+
+    if (project.status !== 'active') {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'Project is not open for bidding'
+      });
+    }
+
+    // Check if user has already placed a bid on this project
+    const existingBid = await Bid.findOne({ 
+      projectId, 
+      providerId 
+    });
+    
+    if (existingBid) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'You have already placed a bid on this project'
+      });
+    }
+
+    // Validate proposal length
+    if (proposal.length < 100) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'Proposal must be at least 100 characters long'
+      });
+    }
+
+    // Validate milestones
+    if (milestones && milestones.length > 0) {
+      for (let milestone of milestones) {
+        if (!milestone.description || !milestone.amount) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            success: false,
+            message: 'All milestones must have a description and amount'
+          });
+        }
+        
+        if (isNaN(milestone.amount) || milestone.amount <= 0) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            success: false,
+            message: 'Milestone amount must be a positive number'
+          });
+        }
+      }
+    }
+
+    // Create the bid
+    const bid = await Bid.create([{
+      projectId,
+      providerId,
+      bidAmount,
+      deliveryTime,
+      deliveryUnit,
+      proposal,
+      milestones: milestones || []
+    }], { session });
+
+    // Update project bid count
+    await PlaceABidModal.findByIdAndUpdate(
+      projectId,
+      { $inc: { bidsCount: 1 } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      success: true,
+      message: 'Bid placed successfully',
+      data: bid[0]
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    
+    console.error('Error placing bid:', error);
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: messages
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// @desc    Get all bids for a project
+// @route   GET /api/projects/:projectId/bids
+// @access  Private (Project owner only)
+exports.getProjectBids = async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user._id;
+
+    // Verify user owns the project
+    const project = await PlaceABidModal.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+    }
+
+    if (project.clientId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view bids for this project'
+      });
+    }
+
+    const bids = await Bid.find({ projectId })
+      .populate('providerId', 'name profilePicture rating reviewCount')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: bids.length,
+      data: bids
+    });
+
+  } catch (error) {
+    console.error('Error fetching bids:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// @desc    Get user's bids
+// @route   GET /api/bids/my-bids
+// @access  Private
+exports.getMyBids = async (req, res, next) => {
+  try {
+    const providerId = req.user._id;
+    
+    const bids = await Bid.find({ providerId })
+      .populate('projectId', 'title description budget')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: bids.length,
+      data: bids
+    });
+
+  } catch (error) {
+    console.error('Error fetching user bids:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// @desc    Update a bid
+// @route   PUT /api/bids/:bidId
+// @access  Private (Bid owner only)
+exports.updateBid = async (req, res, next) => {
+  try {
+    const { bidId } = req.params;
+    const userId = req.user._id;
+    const updateData = req.body;
+
+    // Find the bid
+    const bid = await Bid.findById(bidId);
+    if (!bid) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bid not found'
+      });
+    }
+
+    // Check if user owns the bid
+    if (bid.freelancerId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this bid'
+      });
+    }
+
+    // Check if bid can still be updated
+    const project = await PlaceABidModal.findById(bid.projectId);
+    if (project.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot update bid as project is no longer active'
+      });
+    }
+
+    // Validate proposal length if being updated
+    if (updateData.proposal && updateData.proposal.length < 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Proposal must be at least 100 characters long'
+      });
+    }
+
+    const updatedBid = await Bid.findByIdAndUpdate(
+      bidId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Bid updated successfully',
+      data: updatedBid
+    });
+
+  } catch (error) {
+    console.error('Error updating bid:', error);
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: messages
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// @desc    Withdraw a bid
+// @route   DELETE /api/bids/:bidId
+// @access  Private (Bid owner only)
+exports.withdrawBid = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    const { bidId } = req.params;
+    const userId = req.user._id;
+
+    // Find the bid
+    const bid = await Bid.findById(bidId).session(session);
+    if (!bid) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: 'Bid not found'
+      });
+    }
+
+    // Check if user owns the bid
+    if (bid.freelancerId.toString() !== userId.toString()) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to withdraw this bid'
+      });
+    }
+
+    // Check if bid can be withdrawn
+    if (bid.status !== 'pending') {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: 'Only pending bids can be withdrawn'
+      });
+    }
+
+    // Update bid status
+    bid.status = 'withdrawn';
+    await bid.save({ session });
+
+    // Decrement project bid count
+    await Project.findByIdAndUpdate(
+      bid.projectId,
+      { $inc: { bidCount: -1 } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      success: true,
+      message: 'Bid withdrawn successfully'
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    
+    console.error('Error withdrawing bid:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
 };

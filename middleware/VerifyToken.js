@@ -56,12 +56,23 @@ exports.verifyAdmin = (req, res, next) => {
     next();
 };
 
-// New middleware to check admin role
+// New middleware to check organizer role
 exports.verifyOrganizer = (req, res, next) => {
     if (req.user?.role !== 'organizer') {
         return res.status(403).json({
             success: false,
             message: "Access denied. Organizer privileges required."
+        });
+    }
+    next();
+};
+
+// New middleware to check provider role
+exports.verifyProvider = (req, res, next) => {
+    if (req.user?.role !== 'provider') {
+        return res.status(403).json({
+            success: false,
+            message: "Access denied. Provider privileges required."
         });
     }
     next();

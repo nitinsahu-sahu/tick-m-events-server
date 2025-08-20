@@ -17,7 +17,7 @@ const calculateDuration = require('../utils/helperFunction');
 
 //register controller
 exports.signup = async (req, res) => {
-    const { name, email, password, gender, number, role, experience, serviceCategory } = req.body;
+    const { address, name, email, password, gender, number, role, experience, serviceCategory } = req.body;
     const { avatar } = req.files;
 
     // Input validation
@@ -64,6 +64,7 @@ exports.signup = async (req, res) => {
             email,
             password, // Ensure password is hashed in pre-save hook
             gender,
+            address,
             number,
             avatar: {
                 public_id: cloudinaryResult.public_id,
