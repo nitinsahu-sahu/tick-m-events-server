@@ -186,3 +186,159 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
         });
     }
 };
+
+exports.validatePromo = async (req, res) => {
+  try {
+    const { promoCode, eventId, selectedTickets } = req.body;
+    if (!promoCode || !eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Promo code and Event ID are required",
+      });
+    }
+ 
+    const promo = await Promotion.findOne({
+      promoCode: promoCode.toUpperCase(),
+    });
+ 
+    if (!promo) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Invalid or expired promo code" });
+    }
+ 
+    // Status check
+    if (promo.status !== "active") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Promo code is not active" });
+    }
+ 
+    // Validity period check
+    const now = new Date();
+    const start = new Date(promo.validityPeriodStart);
+    const end = new Date(promo.validityPeriodEnd);
+ 
+    if (now < start || now > end) {
+      return res.status(400).json({
+        success: false,
+        message: "Promo code expired or not yet valid",
+      });
+    }
+ 
+    // Event check
+    if (promo.eventId.toString() !== eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Promo not valid for this event",
+      });
+    }
+ 
+    // Ticket selection check
+    if (promo.ticketSelection) {
+      const selectedTicketIds = selectedTickets.map((t) =>
+        typeof t === "string" ? t : t.ticketId
+      );
+ 
+      const isTicketValid = selectedTicketIds.includes(
+        promo.ticketSelection.toString()
+      );
+ 
+      if (!isTicketValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Promo not valid for selected tickets",
+        });
+      }
+    }
+ 
+    // ===================== 💰 Discount Calculation =====================
+    let subtotal = 0;
+    let discount = 0;
+ 
+    for (const ticket of selectedTickets) {
+      const totalForThisTicket = ticket.unitPrice * ticket.quantity;
+      subtotal += totalForThisTicket;
+ 
+      const isApplicable =
+        !promo.ticketSelection ||
+        promo.ticketSelection.toString() === ticket.ticketId.toString();
+ 
+      if (isApplicable) {
+        switch (promo.promotionType) {
+          case "percentageDiscount":
+            discount +=
+              (totalForThisTicket * Number(promo.discountValue)) / 100;
+            break;
+ 
+          case "flatDiscount":
+            if (!promo.minPurchase || subtotal >= promo.minPurchase) {
+              discount += Number(promo.discountValue);
+            }
+            break;
+ 
+          case "groupOffer":
+            const freeTickets =
+              Math.floor(ticket.quantity / promo.groupBuy) *
+              promo.groupGet;
+            discount += freeTickets * ticket.unitPrice;
+            break;
+ 
+          case "earlyBuyerDiscount":
+            const earlyDeadline = new Date(promo.earlyBuyerDeadline);
+            if (now <= earlyDeadline) {
+              discount +=
+                (totalForThisTicket * Number(promo.discountValue)) / 100;
+            }
+            break;
+        }
+      }
+    }
+ 
+    const netAmount = Math.max(0, subtotal - discount);
+    let promoType;
+    switch (promo.promotionType) {
+      case "percentageDiscount":
+        promoType = "percentage";
+        break;
+      case "flatDiscount":
+        promoType = "simple";
+        break;
+      case "groupOffer":
+        promoType = "group";
+        break;
+      case "earlyBuyerDiscount":
+        promoType = "earlyBuyer";
+        break;
+      default:
+        promoType = "unknown";
+    }
+    return res.json({
+      success: true,
+      message: "Promo applied successfully",
+      promo: {
+        id: promo._id,
+        code: promo.promoCode,
+        type: promoType,
+        value: promo.discountValue,
+        groupBuy: promo.groupBuy,
+        groupGet: promo.groupGet,
+        eventId: promo.eventId,
+        ticketSelection: promo.ticketSelection,
+        validityPeriodStart: promo.validityPeriodStart,
+        validityPeriodEnd: promo.validityPeriodEnd,
+        minPurchase: promo.minPurchase,
+      },
+      calculation: {
+        subtotal,
+        discount,
+        netAmount,
+      },
+    });
+  } catch (error) {
+    console.error("Promo validation error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error" });
+  }
+};

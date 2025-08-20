@@ -16,6 +16,6 @@ router
     .post('/send-user-notification', saveNotification)
     .post('/save-fcm-token', saveFcmToken)
     .get("/notifications/user", verifyToken, getUserNotifications)
-    .post("/mark-notification-read", verifyToken, markNotificationRead);
-    
+    .post("/mark-notification-read", verifyToken, markNotificationRead)
+     .post("/validate", promotionController.validatePromo)
 module.exports = router
