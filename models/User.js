@@ -59,12 +59,10 @@ const userSchema = new Schema({
     experience: {
         type: String,
         default: "",
-
     },
     address: {
         type: String,
         default: "",
-
     },
     website: {
         type: String,

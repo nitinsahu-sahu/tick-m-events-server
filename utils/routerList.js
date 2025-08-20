@@ -23,9 +23,11 @@ const editEventRoutes =require("../routes/organizer/eventRoutes");
 const customFrameRoutes=require("../routes/customFrame");
 const contactRoutes =require("../routes/contact.routes");
 const contractRoutes =require("../routes/contract");
+const providerRoutes =require("../routes/provider/providerRoutes");
   
 // Define route configuration
 exports.routesLists = {
+  '/api/v1/p':providerRoutes,
   '/api/v1/contact':contactRoutes,
   '/api/v1/contract':contractRoutes,
   '/api/v1/custom-frame':customFrameRoutes,
