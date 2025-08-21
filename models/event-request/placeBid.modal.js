@@ -31,14 +31,23 @@ const placeABidSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['open', 'signed', 'ongoing', 'completed', 'cancelled','closed'],
+        enum: ['pending','signed', 'ongoing', 'completed', 'cancelled'],
+        default: 'pending'
+    },
+    bidStatus: {
+        type: String,
+        enum: ['open', 'closed','cancelled'],
         default: 'open'
     },
     bidsCount: {
         type: Number,
         default: 0
     },
-    avgBids: {
+    avgBidAmount: {
+        type: Number,
+        default: 0
+    },
+    totalBidAmount: {
         type: Number,
         default: 0
     },
