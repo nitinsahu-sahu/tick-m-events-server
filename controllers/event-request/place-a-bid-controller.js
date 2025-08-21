@@ -6,229 +6,229 @@ const mongoose = require("mongoose")
 
 // Organizer Place a Custome Service For Event
 exports.postPlaceABid = async (req, res) => {
-    try {
-        const { serviceTime, status, eventId, serviceCategoryId, orgRequirement,
-            orgBudget, eventLocation, orgAdditionalRequirement } = req.body;
-        const createdBy = req.user._id;
-        // First find the parent category that contains this subcategory
-        const parentCategory = await Category.findOne({
-            'subcategories._id': serviceCategoryId
-        });
-        if (!parentCategory) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid subcategory ID'
-            });
-        }
-
-        const request = await PlaceABidModal.create({
-            eventId,
-            categoryId: parentCategory._id, // Store parent category ID
-            subcategoryId: serviceCategoryId, // Optionally store subcategory ID too
-            status,
-            orgRequirement,
-            orgBudget,
-            eventLocation,
-            orgAdditionalRequirement,
-            serviceTime,
-            createdBy
-        });
-
-        res.status(201).json({
-            success: true,
-            request,
-            message: "Request sent successfully!"
-        });
-
-    } catch (err) {
-        console.error('Error creating request:', err);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to create service request',
-            error: process.env.NODE_ENV === 'development' ? err.message : undefined
-        });
+  try {
+    const { serviceTime, status, eventId, serviceCategoryId, orgRequirement,
+      orgBudget, eventLocation, orgAdditionalRequirement } = req.body;
+    const createdBy = req.user._id;
+    // First find the parent category that contains this subcategory
+    const parentCategory = await Category.findOne({
+      'subcategories._id': serviceCategoryId
+    });
+    if (!parentCategory) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid subcategory ID'
+      });
     }
+
+    const request = await PlaceABidModal.create({
+      eventId,
+      categoryId: parentCategory._id, // Store parent category ID
+      subcategoryId: serviceCategoryId, // Optionally store subcategory ID too
+      status,
+      orgRequirement,
+      orgBudget,
+      eventLocation,
+      orgAdditionalRequirement,
+      serviceTime,
+      createdBy
+    });
+
+    res.status(201).json({
+      success: true,
+      request,
+      message: "Request sent successfully!"
+    });
+
+  } catch (err) {
+    console.error('Error creating request:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create service request',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
 };
 
 exports.getBids = async (req, res) => {
-    try {
-        // Extract query parameters
-        const {
-            eventId,
-            createdBy,
-            status,
-            minBudget,
-            maxBudget,
-            hasProposal,
-            sortBy,
-            limit = 10,
-            page = 1
-        } = req.query;
+  try {
+    // Extract query parameters
+    const {
+      eventId,
+      createdBy,
+      status,
+      minBudget,
+      maxBudget,
+      hasProposal,
+      sortBy,
+      limit = 10,
+      page = 1
+    } = req.query;
 
-        // Build query object
-        const query = {};
+    // Build query object
+    const query = {};
 
-        if (eventId) query.eventId = eventId;
-        if (createdBy) query.createdBy = createdBy;
-        if (status) query.status = status;
-        if (hasProposal) query.providerHasProposed = hasProposal === 'true';
+    if (eventId) query.eventId = eventId;
+    if (createdBy) query.createdBy = createdBy;
+    if (status) query.status = status;
+    if (hasProposal) query.providerHasProposed = hasProposal === 'true';
 
-        // Budget range filtering
-        if (minBudget || maxBudget) {
-            query.orgBudget = {};
-            if (minBudget) query.orgBudget.$gte = Number(minBudget);
-            if (maxBudget) query.orgBudget.$lte = Number(maxBudget);
-        }
-
-        // Build sort object
-        const sort = {};
-        if (sortBy) {
-            const parts = sortBy.split(':');
-            sort[parts[0]] = parts[1] === 'desc' ? -1 : 1;
-        } else {
-            sort.createdAt = -1; // Default: newest first
-        }
-
-        // Pagination
-        const skip = (Number(page) - 1) * Number(limit);
-
-        // Get bids with pagination
-        const projects = await PlaceABidModal.find(query)
-            .populate([
-                { path: 'eventId', select: 'date location eventName averageRating' },
-                { path: 'categoryId', select: 'name' },
-                { path: 'createdBy', select: '-serviceCategory -cover -loginStats -profileViews -sessionStats -role -socketId -__v -password -isAdmin -updatedAt -experience -website' }
-            ])
-            .sort(sort)
-            .skip(skip)
-            .limit(Number(limit))
-            .lean();
-
-        // Get all unique subcategory IDs
-        const subcategoryIds = [...new Set(projects.map(p => p.subcategoryId))];
-
-        // Find all matching subcategories in one query
-        const categoriesWithSubcategories = await Category.find({
-            'subcategories._id': { $in: subcategoryIds }
-        }, {
-            'subcategories.$': 1
-        });
-
-        // Create a map of subcategory IDs to names
-        const subcategoryMap = {};
-        categoriesWithSubcategories.forEach(cat => {
-            cat.subcategories.forEach(subcat => {
-                subcategoryMap[subcat._id.toString()] = subcat.name;
-            });
-        });
-
-        // Add subcategory names to projects
-        const projectsWithSubcategoryNames = projects.map(project => ({
-            ...project,
-            subcategoryName: subcategoryMap[project.subcategoryId.toString()] || null
-        }));
-
-        // Count total documents for pagination info
-        const total = await PlaceABidModal.countDocuments(query);
-
-        res.status(200).json({
-            success: true,
-            count: projectsWithSubcategoryNames.length,
-            total,
-            pages: Math.ceil(total / limit),
-            currentPage: page,
-            projects: projectsWithSubcategoryNames
-        });
-
-    } catch (err) {
-        console.error('Error fetching bids:', err);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch bids',
-            error: process.env.NODE_ENV === 'development' ? err.message : undefined
-        });
+    // Budget range filtering
+    if (minBudget || maxBudget) {
+      query.orgBudget = {};
+      if (minBudget) query.orgBudget.$gte = Number(minBudget);
+      if (maxBudget) query.orgBudget.$lte = Number(maxBudget);
     }
+
+    // Build sort object
+    const sort = {};
+    if (sortBy) {
+      const parts = sortBy.split(':');
+      sort[parts[0]] = parts[1] === 'desc' ? -1 : 1;
+    } else {
+      sort.createdAt = -1; // Default: newest first
+    }
+
+    // Pagination
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Get bids with pagination
+    const projects = await PlaceABidModal.find(query)
+      .populate([
+        { path: 'eventId', select: 'date location eventName averageRating' },
+        { path: 'categoryId', select: 'name' },
+        { path: 'createdBy', select: '-serviceCategory -cover -loginStats -profileViews -sessionStats -role -socketId -__v -password -isAdmin -updatedAt -experience -website' }
+      ])
+      .sort(sort)
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    // Get all unique subcategory IDs
+    const subcategoryIds = [...new Set(projects.map(p => p.subcategoryId))];
+
+    // Find all matching subcategories in one query
+    const categoriesWithSubcategories = await Category.find({
+      'subcategories._id': { $in: subcategoryIds }
+    }, {
+      'subcategories.$': 1
+    });
+
+    // Create a map of subcategory IDs to names
+    const subcategoryMap = {};
+    categoriesWithSubcategories.forEach(cat => {
+      cat.subcategories.forEach(subcat => {
+        subcategoryMap[subcat._id.toString()] = subcat.name;
+      });
+    });
+
+    // Add subcategory names to projects
+    const projectsWithSubcategoryNames = projects.map(project => ({
+      ...project,
+      subcategoryName: subcategoryMap[project.subcategoryId.toString()] || null
+    }));
+
+    // Count total documents for pagination info
+    const total = await PlaceABidModal.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      count: projectsWithSubcategoryNames.length,
+      total,
+      pages: Math.ceil(total / limit),
+      currentPage: page,
+      projects: projectsWithSubcategoryNames
+    });
+
+  } catch (err) {
+    console.error('Error fetching bids:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch bids',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
 };
 
 exports.getBidById = async (req, res) => {
-    try {
-        const project = await PlaceABidModal.findById(req.params.projectId)
-            .populate([
-                { path: 'eventId', select: 'date location eventName averageRating' },
-                { path: 'categoryId', select: 'name' },
-                { path: 'createdBy', select: '-serviceCategory -cover -loginStats -profileViews -sessionStats -role -socketId -__v -password -isAdmin -updatedAt -experience -website' }
-            ]);
+  try {
+    const project = await PlaceABidModal.findById(req.params.projectId)
+      .populate([
+        { path: 'eventId', select: 'date location eventName averageRating' },
+        { path: 'categoryId', select: 'name' },
+        { path: 'createdBy', select: '-serviceCategory -cover -loginStats -profileViews -sessionStats -role -socketId -__v -password -isAdmin -updatedAt -experience -website' }
+      ]);
 
-        if (!project) {
-            return res.status(404).json({
-                success: false,
-                message: 'Project not found'
-            });
-        }
-
-        // Get verification data for the createdBy user
-        let verificationData = null;
-        if (project.createdBy) {
-            verificationData = await Verification.findOne({
-                userId: project.createdBy._id
-            });
-        }
-
-        // Since it's a single project, get its subcategory ID
-        const subcategoryId = project.subcategoryId;
-
-        // Find the category that contains this subcategory
-        const categoryWithSubcategory = await Category.findOne({
-            'subcategories._id': subcategoryId
-        }, {
-            'subcategories.$': 1
-        });
-
-        // Get the subcategory name
-        let subcategoryName = null;
-        if (categoryWithSubcategory && categoryWithSubcategory.subcategories.length > 0) {
-            subcategoryName = categoryWithSubcategory.subcategories[0].name;
-        }
-
-        // Add subcategory name to the project object
-        const projectWithSubcategory = {
-            ...project.toObject(),
-            subcategoryName: subcategoryName,
-            createdBy: {
-                ...project.createdBy.toObject(),
-                verification: verificationData ? {
-                    emailVerified: verificationData.emailVerified,
-                    whatsappVerified: verificationData.whatsappVerified,
-                    identityVerified: verificationData.identityVerified,
-                    paymentVerified: verificationData.paymentVerified,
-                    overallVerified: verificationData.emailVerified &&
-                        verificationData.whatsappVerified &&
-                        verificationData.identityVerified &&
-                        verificationData.paymentVerified
-                } : null
-            }
-        };
-
-        res.status(200).json({
-            message: "Fetched successfully...",
-            success: true,
-            project: projectWithSubcategory
-        });
-
-    } catch (err) {
-        console.error('Error fetching bid:', err);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch bid',
-            error: process.env.NODE_ENV === 'development' ? err.message : undefined
-        });
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
     }
+
+    // Get verification data for the createdBy user
+    let verificationData = null;
+    if (project.createdBy) {
+      verificationData = await Verification.findOne({
+        userId: project.createdBy._id
+      });
+    }
+
+    // Since it's a single project, get its subcategory ID
+    const subcategoryId = project.subcategoryId;
+
+    // Find the category that contains this subcategory
+    const categoryWithSubcategory = await Category.findOne({
+      'subcategories._id': subcategoryId
+    }, {
+      'subcategories.$': 1
+    });
+
+    // Get the subcategory name
+    let subcategoryName = null;
+    if (categoryWithSubcategory && categoryWithSubcategory.subcategories.length > 0) {
+      subcategoryName = categoryWithSubcategory.subcategories[0].name;
+    }
+
+    // Add subcategory name to the project object
+    const projectWithSubcategory = {
+      ...project.toObject(),
+      subcategoryName: subcategoryName,
+      createdBy: {
+        ...project.createdBy.toObject(),
+        verification: verificationData ? {
+          emailVerified: verificationData.emailVerified,
+          whatsappVerified: verificationData.whatsappVerified,
+          identityVerified: verificationData.identityVerified,
+          paymentVerified: verificationData.paymentVerified,
+          overallVerified: verificationData.emailVerified &&
+            verificationData.whatsappVerified &&
+            verificationData.identityVerified &&
+            verificationData.paymentVerified
+        } : null
+      }
+    };
+
+    res.status(200).json({
+      message: "Fetched successfully...",
+      success: true,
+      project: projectWithSubcategory
+    });
+
+  } catch (err) {
+    console.error('Error fetching bid:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch bid',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
 };
 
 exports.placeBid = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { projectId } = req.params;
     const {
@@ -238,7 +238,7 @@ exports.placeBid = async (req, res, next) => {
       proposal,
       milestones
     } = req.body;
-    
+
     const providerId = req.user._id;
 
     // Validate project exists and is open for bidding
@@ -252,7 +252,7 @@ exports.placeBid = async (req, res, next) => {
       });
     }
 
-    if (project.status !== 'active') {
+    if (project.status !== 'open') {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
@@ -262,11 +262,11 @@ exports.placeBid = async (req, res, next) => {
     }
 
     // Check if user has already placed a bid on this project
-    const existingBid = await Bid.findOne({ 
-      projectId, 
-      providerId 
+    const existingBid = await Bid.findOne({
+      projectId,
+      providerId
     });
-    
+
     if (existingBid) {
       await session.abortTransaction();
       session.endSession();
@@ -289,15 +289,15 @@ exports.placeBid = async (req, res, next) => {
     // Validate milestones
     if (milestones && milestones.length > 0) {
       for (let milestone of milestones) {
-        if (!milestone.description || !milestone.amount) {
+        if (!milestone.milestorneName || !milestone.amount) {
           await session.abortTransaction();
           session.endSession();
           return res.status(400).json({
             success: false,
-            message: 'All milestones must have a description and amount'
+            message: 'All milestones must have a milestornename and amount'
           });
         }
-        
+
         if (isNaN(milestone.amount) || milestone.amount <= 0) {
           await session.abortTransaction();
           session.endSession();
@@ -323,10 +323,33 @@ exports.placeBid = async (req, res, next) => {
     // Update project bid count
     await PlaceABidModal.findByIdAndUpdate(
       projectId,
-      { $inc: { bidsCount: 1 } },
+      {
+        $inc: {
+          bidsCount: 1,
+          totalBidAmount: bidAmount
+        }
+      },
       { session }
     );
 
+    // Then calculate and update the average
+    await PlaceABidModal.findByIdAndUpdate(
+      projectId,
+      [
+        {
+          $set: {
+            avgBidAmount: {
+              $cond: {
+                if: { $gt: ["$bidsCount", 0] },
+                then: { $divide: ["$totalBidAmount", "$bidsCount"] },
+                else: 0
+              }
+            }
+          }
+        }
+      ],
+      { session }
+    );
     await session.commitTransaction();
     session.endSession();
 
@@ -339,9 +362,9 @@ exports.placeBid = async (req, res, next) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    
+
     console.error('Error placing bid:', error);
-    
+
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
@@ -350,7 +373,7 @@ exports.placeBid = async (req, res, next) => {
         errors: messages
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -367,8 +390,16 @@ exports.getProjectBids = async (req, res, next) => {
     const { projectId } = req.params;
     const userId = req.user._id;
 
-    // Verify user owns the project
-    const project = await PlaceABidModal.findById(projectId);
+    // Check if projectId is provided and valid
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid project ID is required'
+      });
+    }
+
+    // Verify project exists and user owns it
+    const project = await PlaceABidModal.findById(projectId); // Use your actual Project model
     if (!project) {
       return res.status(404).json({
         success: false,
@@ -376,7 +407,8 @@ exports.getProjectBids = async (req, res, next) => {
       });
     }
 
-    if (project.clientId.toString() !== userId.toString()) {
+    // Check if user owns the project or is admin
+    if (project.createdBy.toString() !== userId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to view bids for this project'
@@ -384,7 +416,7 @@ exports.getProjectBids = async (req, res, next) => {
     }
 
     const bids = await Bid.find({ projectId })
-      .populate('providerId', 'name profilePicture rating reviewCount')
+      .populate('providerId', 'name profilePicture rating reviewCount') // Fixed field name
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -395,6 +427,14 @@ exports.getProjectBids = async (req, res, next) => {
 
   } catch (error) {
     console.error('Error fetching bids:', error);
+
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid project ID format'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -409,7 +449,7 @@ exports.getProjectBids = async (req, res, next) => {
 exports.getMyBids = async (req, res, next) => {
   try {
     const providerId = req.user._id;
-    
+
     const bids = await Bid.find({ providerId })
       .populate('projectId', 'title description budget')
       .sort({ createdAt: -1 });
@@ -422,6 +462,64 @@ exports.getMyBids = async (req, res, next) => {
 
   } catch (error) {
     console.error('Error fetching user bids:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+// @desc    Get user's bids
+// @route   GET /api/bids/my-bids
+// @access  Private
+exports.getMyBidByProject = async (req, res, next) => {
+  try {
+    const providerId = req.user._id;
+    const { projectId } = req.params;
+
+    // Check if projectId is provided and valid
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid project ID is required'
+      });
+    }
+
+    // Verify project exists
+    const project = await PlaceABidModal.findById(projectId); // Use your actual Project model
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+    }
+
+    // Check if provider has bid on this project
+    const hasBid = await Bid.exists({
+      projectId: projectId,
+      providerId: providerId
+    });
+    const bid = await Bid.findOne({  projectId: projectId,
+      providerId: providerId })
+      .sort({ createdAt: -1 });
+    res.status(200).json({
+      success: true,
+      bid,
+      hasBid: !!hasBid, // Convert to boolean
+      message: hasBid ? 'You have placed a bid on this project' : 'You have not bid on this project yet'
+    });
+
+  } catch (error) {
+    console.error('Error fetching user bid:', error);
+
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid ID format'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -487,7 +585,7 @@ exports.updateBid = async (req, res, next) => {
 
   } catch (error) {
     console.error('Error updating bid:', error);
-    
+
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
@@ -496,7 +594,7 @@ exports.updateBid = async (req, res, next) => {
         errors: messages
       });
     }
-    
+
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -511,7 +609,7 @@ exports.updateBid = async (req, res, next) => {
 exports.withdrawBid = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { bidId } = req.params;
     const userId = req.user._id;
@@ -569,7 +667,7 @@ exports.withdrawBid = async (req, res, next) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    
+
     console.error('Error withdrawing bid:', error);
     res.status(500).json({
       success: false,

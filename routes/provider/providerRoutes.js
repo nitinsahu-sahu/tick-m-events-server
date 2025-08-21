@@ -1,17 +1,20 @@
 const express = require('express');
-const { verifyToken, verifyProvider } = require('../../middleware/VerifyToken');
-const { placeBid,getProjectBids,getMyBids,updateBid,withdrawBid } = require('../../controllers/event-request/place-a-bid-controller');
+const { verifyToken, verifyProvider, verifyOrganizer } = require('../../middleware/VerifyToken');
+const { placeBid,getProjectBids,getMyBids,updateBid,withdrawBid,getMyBidByProject } = require('../../controllers/event-request/place-a-bid-controller');
 const router = express.Router()
 
 
 // Place a bid on a project
-router.post('/', verifyToken, verifyProvider, placeBid);
+router.post('/project/:projectId/bids', verifyToken, verifyProvider, placeBid);
 
 // Get all bids for a project (project owner only)
-router.get('/', verifyToken, verifyProvider, getProjectBids);
+router.get('/project/:projectId/bids', verifyToken, verifyProvider, getProjectBids);
 
 // Get user's bids
-router.get('/my-bids', verifyToken, verifyProvider, getMyBids);
+router.get('/project/my-bids', verifyToken, verifyOrganizer, getMyBids);
+
+// Get specifict project bid
+router.get('/project/:projectId/my-bid', verifyToken, verifyProvider, getMyBidByProject);
 
 // Update a bid
 router.put('/:bidId', verifyToken, verifyProvider, updateBid);

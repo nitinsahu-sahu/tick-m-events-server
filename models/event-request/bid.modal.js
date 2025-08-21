@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const milestoneSchema = new Schema({
-  description: { type: String, required: true },
+  milestorneName: { type: String, required: true },
   amount: { type: Number, required: true },
   currency: { type: String, required: true, default: 'XAF' }
 });
