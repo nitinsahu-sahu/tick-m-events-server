@@ -11,15 +11,15 @@ router.post('/project/:projectId/bids', verifyToken, verifyProvider, placeBid);
 router.get('/project/:projectId/bids', verifyToken, verifyProvider, getProjectBids);
 
 // Get user's bids
-router.get('/project/my-bids', verifyToken, verifyOrganizer, getMyBids);
+router.get('/project/my-bids', verifyToken, verifyProvider, getMyBids);
 
 // Get specifict project bid
 router.get('/project/:projectId/my-bid', verifyToken, verifyProvider, getMyBidByProject);
 
 // Update a bid
-router.put('/:bidId', verifyToken, verifyProvider, updateBid);
+router.put('/project/:bidId', verifyToken, verifyProvider, updateBid);
 
 // Withdraw a bid
-router.delete('/:bidId', verifyToken, verifyProvider, withdrawBid);
+router.delete('/project/:bidId', verifyToken, verifyProvider, withdrawBid);
 
 module.exports = router

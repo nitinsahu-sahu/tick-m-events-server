@@ -450,14 +450,56 @@ exports.getMyBids = async (req, res, next) => {
   try {
     const providerId = req.user._id;
 
-    const bids = await Bid.find({ providerId })
-      .populate('projectId', 'title description budget')
+    const mybids = await Bid.find({ providerId })
+      .populate({
+        path: 'projectId',
+        select: 'eventId eventLocation status bidsCount orgBudget serviceTime bidStatus createdBy',
+        populate: [
+          {
+            path: 'eventId',
+            model: 'Event',
+            select: 'eventName eventDate location description'
+          },
+          {
+            path: 'createdBy',
+            model: 'User',
+          }
+        ]
+      })
       .sort({ createdAt: -1 });
+
+    // Enhance each bid with additional information
+    const enhancedBids = await Promise.all(
+      mybids.map(async (bid) => {
+        // Get all bids for this project, sorted by bid amount (lowest first)
+        const allBidsForProject = await Bid.find({ 
+          projectId: bid.projectId._id 
+        }).sort({ bidAmount: 1, createdAt: 1 }); // Sort by amount then by date
+
+        // Find the position/rank of the current bid
+        const bidIndex = allBidsForProject.findIndex(
+          b => b._id.toString() === bid._id.toString()
+        );
+        
+        const bidRank = bidIndex !== -1 ? bidIndex + 1 : null;
+        const totalBids = allBidsForProject.length;
+
+        return {
+          ...bid.toObject(),
+          bidInfo: {
+            totalBidsOnProject: totalBids,
+            yourBidRank: bidRank,
+            isLowestBid: bidRank === 1,
+            lowestBidAmount: totalBids > 0 ? allBidsForProject[0].bidAmount : null
+          }
+        };
+      })
+    );
 
     res.status(200).json({
       success: true,
-      count: bids.length,
-      data: bids
+      count: enhancedBids.length,
+      mybids: enhancedBids
     });
 
   } catch (error) {
@@ -500,8 +542,10 @@ exports.getMyBidByProject = async (req, res, next) => {
       projectId: projectId,
       providerId: providerId
     });
-    const bid = await Bid.findOne({  projectId: projectId,
-      providerId: providerId })
+    const bid = await Bid.findOne({
+      projectId: projectId,
+      providerId: providerId
+    })
       .sort({ createdAt: -1 });
     res.status(200).json({
       success: true,
@@ -626,7 +670,7 @@ exports.withdrawBid = async (req, res, next) => {
     }
 
     // Check if user owns the bid
-    if (bid.freelancerId.toString() !== userId.toString()) {
+    if (bid.providerId.toString() !== userId.toString()) {
       await session.abortTransaction();
       session.endSession();
       return res.status(403).json({
@@ -650,9 +694,9 @@ exports.withdrawBid = async (req, res, next) => {
     await bid.save({ session });
 
     // Decrement project bid count
-    await Project.findByIdAndUpdate(
+    await PlaceABidModal.findByIdAndUpdate(
       bid.projectId,
-      { $inc: { bidCount: -1 } },
+      { $inc: { bidsCount: -1 } },
       { session }
     );
 
