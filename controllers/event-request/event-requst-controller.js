@@ -489,3 +489,38 @@ exports.getProviderAcceptedReq = async (req, res) => {
         });
     }
 };
+
+exports.getActiveContractsByProvider = async (req, res) => {
+    try {
+        const providerId = new mongoose.Types.ObjectId(req.user._id); // force ObjectId
+ 
+        const query = {
+            providerId,
+            contractStatus: { $in: ['signed', 'ongoing', 'completed'] }
+        };
+ 
+        console.log("Query being used:", query);
+ 
+        const requests = await EventRequest.find(query)
+            .populate('eventId', 'eventName date location time description experience averageRating website certified')
+            .populate('organizerId', 'name email avatar')
+            .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+            .sort({ createdAt: -1 })
+            .lean();
+ 
+        console.log("Found requests:", requests.length);
+ 
+        res.status(200).json({
+            success: true,
+            count: requests.length,
+            requests
+        });
+ 
+    } catch (error) {
+        console.error('Error fetching active provider contracts:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while fetching active contracts'
+        });
+    }
+};
