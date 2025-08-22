@@ -11,7 +11,7 @@ router.post('/project/:projectId/bids', verifyToken, verifyProvider, placeBid);
 router.get('/project/:projectId/bids', verifyToken, verifyProvider, getProjectBids);
 
 // Get user's bids
-router.get('/project/my-bids', verifyToken, verifyOrganizer, getMyBids);
+router.get('/project/my-bids', verifyToken, verifyProvider, getMyBids);
 
 // Get specifict project bid
 router.get('/project/:projectId/my-bid', verifyToken, verifyProvider, getMyBidByProject);
