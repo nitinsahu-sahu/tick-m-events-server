@@ -17,9 +17,9 @@ router.get('/project/my-bids', verifyToken, verifyProvider, getMyBids);
 router.get('/project/:projectId/my-bid', verifyToken, verifyProvider, getMyBidByProject);
 
 // Update a bid
-router.put('/:bidId', verifyToken, verifyProvider, updateBid);
+router.put('/project/:bidId', verifyToken, verifyProvider, updateBid);
 
 // Withdraw a bid
-router.delete('/:bidId', verifyToken, verifyProvider, withdrawBid);
+router.delete('/project/:bidId', verifyToken, verifyProvider, withdrawBid);
 
 module.exports = router
