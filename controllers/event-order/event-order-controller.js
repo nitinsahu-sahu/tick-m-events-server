@@ -763,7 +763,7 @@ exports.verifyTicket = async (req, res) => {
 
     // Find ticket in database
     const ticket = await EventOrder.findOne(query)
-      .select('userId _id eventId tickets verifyEntry entryTime')
+      .select('userId _id eventId tickets verifyEntry entryTime participantDetails paymentStatus')
       .populate('userId', 'name email')
       .populate({
         path: 'eventId',
@@ -820,52 +820,72 @@ exports.updateOrderVerifyEntryStatus = async (req, res) => {
   try {
     const { entryTime, verifyEntry } = req.body;
     const { ticketCode, participantId, name } = req.body.verifyData;
-
+ 
     // Check if at least one identifier is provided
     if (!ticketCode && !participantId && !name) {
       return res.status(400).json({
         message: "Please provide at least one identifier (ticketCode, participantId, or name)"
       });
     }
-
+ 
     // Check if verifyEntry is provided
     if (typeof verifyEntry !== 'boolean') {
       return res.status(400).json({
         message: "Please provide a valid verifyEntry status (true/false)"
       });
     }
-
-    // Create a filter object based on provided identifiers
-    const filter = {};
-    if (ticketCode) filter.ticketCode = ticketCode;
-    if (participantId) filter.participantId = participantId;
-    if (name) filter.name = name;
-
-    // Update the verifyEntry status
-    const updatedOrder = await EventOrder.findOneAndUpdate(
-      filter,
-      { $set: { verifyEntry: verifyEntry, entryTime: entryTime } },
-      { new: true }
-    );
-
+ 
+    let updatedOrder;
+ 
+    if (participantId || name) {
+     
+      // const filter = { ticketCode };
+      const filter = {};
+      // if (participantId) filter["participantDetails._id"] = participantId;
+      // if (name) filter["participantDetails.name"] = name;
+      if (ticketCode) filter.ticketCode = ticketCode; 
+      if (participantId) filter["participantDetails._id"] = participantId;
+      if (name) filter["participantDetails.name"] = name;
+ 
+      updatedOrder = await EventOrder.findOneAndUpdate(
+        filter,
+        {
+          $set: {
+            "participantDetails.$.validation": verifyEntry,
+            "participantDetails.$.entryTime": entryTime
+          }
+        },
+        { new: true }
+      )
+        ;
+    } else {
+      // ✅ Update order-level verification
+      updatedOrder = await EventOrder.findOneAndUpdate(
+        { ticketCode },
+        { $set: { verifyEntry: verifyEntry, entryTime: entryTime } },
+        { new: true }
+      );
+    }
+ 
     if (!updatedOrder) {
       return res.status(404).json({
-        message: "No matching order found with the provided identifiers"
+        message: "No matching order/participant found with the provided identifiers"
       });
     }
-
+ 
     res.status(200).json({
       message: "Entry status updated successfully",
       data: {
         ticketCode: updatedOrder.ticketCode,
         verifyEntry: updatedOrder.verifyEntry,
-        entryTime: updatedOrder.entryTime
+        entryTime: updatedOrder.entryTime,
+        participantDetails: updatedOrder.participantDetails // includes updated participant
       }
     });
   } catch (error) {
-    console.error('Error updating order:', error);
+    console.error("Error updating order:", error);
     res.status(500).json({
-      message: 'Server error',
+      message: "Server error",
       error: error.message
     });
   }
