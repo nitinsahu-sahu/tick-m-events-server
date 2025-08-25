@@ -29,11 +29,13 @@ const placeABidSchema = new mongoose.Schema({
         ref: "User",
         required: true,
     },
+    // Project ka status kya chal rha hai
     status: {
         type: String,
         enum: ['pending','signed', 'ongoing', 'completed', 'cancelled'],
         default: 'pending'
     },
+    //Project is open for bidding
     bidStatus: {
         type: String,
         enum: ['open', 'closed','cancelled'],

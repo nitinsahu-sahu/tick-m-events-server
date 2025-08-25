@@ -252,7 +252,7 @@ exports.placeBid = async (req, res, next) => {
       });
     }
 
-    if (project.status !== 'open') {
+    if (project.bidStatus !== 'open') {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
@@ -580,7 +580,7 @@ exports.updateBid = async (req, res, next) => {
     const { bidId } = req.params;
     const userId = req.user._id;
     const updateData = req.body;
-
+ 
     // Find the bid
     const bid = await Bid.findById(bidId);
     if (!bid) {
@@ -589,24 +589,24 @@ exports.updateBid = async (req, res, next) => {
         message: 'Bid not found'
       });
     }
-
+ 
     // Check if user owns the bid
-    if (bid.freelancerId.toString() !== userId.toString()) {
+    if (bid.providerId.toString() !== userId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this bid'
       });
     }
-
+ 
     // Check if bid can still be updated
     const project = await PlaceABidModal.findById(bid.projectId);
-    if (project.status !== 'active') {
+    if (project.bidStatus !== 'open') {
       return res.status(400).json({
         success: false,
         message: 'Cannot update bid as project is no longer active'
       });
     }
-
+ 
     // Validate proposal length if being updated
     if (updateData.proposal && updateData.proposal.length < 100) {
       return res.status(400).json({
@@ -614,22 +614,22 @@ exports.updateBid = async (req, res, next) => {
         message: 'Proposal must be at least 100 characters long'
       });
     }
-
+ 
     const updatedBid = await Bid.findByIdAndUpdate(
       bidId,
       updateData,
       { new: true, runValidators: true }
     );
-
+ 
     res.status(200).json({
       success: true,
       message: 'Bid updated successfully',
       data: updatedBid
     });
-
+ 
   } catch (error) {
     console.error('Error updating bid:', error);
-
+ 
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
@@ -638,7 +638,7 @@ exports.updateBid = async (req, res, next) => {
         errors: messages
       });
     }
-
+ 
     res.status(500).json({
       success: false,
       message: 'Server error',
