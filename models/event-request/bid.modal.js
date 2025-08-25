@@ -25,6 +25,10 @@ const bidSchema = new Schema({
     required: true,
     enum: ['Days', 'Weeks']
   },
+  winningBid:{
+    type: Number, 
+    default: 0
+  },
   proposal: { 
     type: String, 
     required: true,

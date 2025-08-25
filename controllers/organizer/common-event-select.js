@@ -1,4 +1,3 @@
-
 const Event = require('../../models/event-details/Event');
 const Organizer = require('../../models/event-details/Organizer');
 const Customization = require('../../models/event-details/Customization');
@@ -10,7 +9,9 @@ const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const TicketConfiguration = require('../../models/event-details/Ticket');
 const RefundRequest = require('../../models/refund-managment/RefundRequest');
 const EventsRequest = require('../../models/event-request/event-requests.model');
-
+const mongoose = require("mongoose")
+const PlaceABid = require('../../models/event-request/placeBid.modal');
+const Bid = require('../../models/event-request/bid.modal');
 
 exports.fetchEventOrganizerSelect = async (req, res, next) => {
     try {
@@ -111,3 +112,180 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
         });
     }
 }
+
+
+exports.fetchEventWithPlaceABidData = async (req, res, next) => {
+    try {
+        const userId = req.user?._id;
+        const { eventId, categoryId } = req.params; // Get eventId and categoryId from URL params
+
+        // Validate input
+        if (!eventId || !categoryId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Event ID and Category ID are required',
+            });
+        }
+
+        // Validate ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(eventId) || !mongoose.Types.ObjectId.isValid(categoryId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Event ID or Category ID format',
+            });
+        }
+
+        // Fetch the place a bid data for the specific event and category
+        const placeABidData = await PlaceABid.findOne({
+            eventId: eventId,
+            categoryId: categoryId
+        })
+            .populate('eventId', 'eventName eventDate location description') // Populate event details
+            .populate('categoryId', 'name') // Populate category details
+            .populate('subcategoryId', 'name') // Populate subcategory details
+            .populate('createdBy', 'name email') // Populate creator details
+            .lean();
+
+        if (!placeABidData) {
+            return res.status(404).json({
+                success: false,
+                message: 'No project found for this event and category',
+            });
+        }
+
+        // Fetch all bids placed on this project (placeABid)
+        const bids = await Bid.find({
+            projectId: placeABidData._id
+        })
+            .populate('providerId', 'name email') // Populate provider details
+            .sort({ bidAmount: 1, createdAt: 1 }) // Sort by bid amount (lowest first) then by date
+            .lean();
+
+        // Calculate bid statistics
+        const bidStats = {
+            totalBids: bids.length,
+            lowestBid: bids.length > 0 ? bids[0].bidAmount : 0,
+            highestBid: bids.length > 0 ? bids[bids.length - 1].bidAmount : 0,
+            averageBid: bids.length > 0 ? bids.reduce((sum, bid) => sum + bid.bidAmount, 0) / bids.length : 0
+        };
+
+        // Check if current user has placed a bid on this project
+        const userBid = userId ? bids.find(bid => bid.providerId._id.toString() === userId.toString()) : null;
+
+        // Prepare response data
+        const responseData = {
+            project: placeABidData,
+            bids: {
+                data: bids,
+                statistics: bidStats
+            },
+            userBid: userBid || null,
+            userHasBid: !!userBid
+        };
+
+        res.status(200).json({
+            success: true,
+            data: responseData
+        });
+
+    } catch (error) {
+        console.error('Error fetching event with bid data:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
+
+exports.fetchEventWithAllPlaceABidData = async (req, res, next) => {
+    try {
+        const userId = req.user?._id;
+        const { eventId } = req.params; // Get eventId from URL params
+
+        // Validate input
+        if (!eventId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Event ID is required',
+            });
+        }
+
+        // Validate ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(eventId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Event ID format',
+            });
+        }
+
+        // Fetch all place a bid data for the specific event
+        const placeABidData = await PlaceABid.find({
+            eventId: eventId
+        })
+        .populate('eventId', 'eventName eventDate location description')
+        .populate('categoryId', 'name')
+        .populate('subcategoryId', 'name')
+        .populate('createdBy', 'name email')
+        .lean();
+
+        if (!placeABidData || placeABidData.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No projects found for this event',
+            });
+        }
+
+        // Get all project IDs
+        const projectIds = placeABidData.map(project => project._id);
+
+        // Fetch all bids for these projects
+        const bids = await Bid.find({
+            projectId: { $in: projectIds }
+        })
+        .populate('providerId', 'name email')
+        .populate('projectId', 'categoryId subcategoryId orgBudget')
+        .sort({ bidAmount: 1, createdAt: 1 })
+        .lean();
+
+        // Organize bids by project and calculate statistics
+        const projectsWithBids = placeABidData.map(project => {
+            const projectBids = bids.filter(bid => bid.projectId._id.toString() === project._id.toString());
+            
+            const bidStats = {
+                totalBids: projectBids.length,
+                lowestBid: projectBids.length > 0 ? projectBids[0].bidAmount : 0,
+                highestBid: projectBids.length > 0 ? projectBids[projectBids.length - 1].bidAmount : 0,
+                averageBid: projectBids.length > 0 ? 
+                    projectBids.reduce((sum, bid) => sum + bid.bidAmount, 0) / projectBids.length : 0
+            };
+
+            // Check if current user has placed a bid on this project
+            const userBid = userId ? projectBids.find(bid => bid.providerId._id.toString() === userId.toString()) : null;
+
+            return {
+                project: project,
+                bids: {
+                    data: projectBids,
+                    statistics: bidStats
+                },
+                userBid: userBid || null,
+                userHasBid: !!userBid
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: projectsWithBids,
+            totalProjects: projectsWithBids.length
+        });
+
+    } catch (error) {
+        console.error('Error fetching event with bid data:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
