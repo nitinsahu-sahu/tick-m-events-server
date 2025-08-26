@@ -13,7 +13,7 @@ router.patch('/edit-events/:eventId', verifyToken, updateEvents);
 router.patch('/edit-event-visibility/:eventId', verifyToken, updateEventVisibility);
 router.get('/event-com', verifyToken, fetchEventOrganizerSelect);
 router.get('/event/:eventId/category/:categoryId/bid-data', verifyToken, fetchEventWithPlaceABidData);
-router.get('/event/:eventId/bid-data', verifyToken, fetchEventWithAllPlaceABidData);
+router.get('/place-a-bid/:projectId/bid-data', verifyToken, fetchEventWithAllPlaceABidData);
 
 // Place a Bid
 router.post('/place-a-bid', verifyToken, verifyOrganizer, postPlaceABid)
