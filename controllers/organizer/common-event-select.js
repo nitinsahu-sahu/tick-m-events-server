@@ -4,6 +4,7 @@ const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
 const Visibility = require('../../models/event-details/Visibility');
 const eventReview = require('../../models/event-details/eventReview');
+const Category = require('../../models/event-details/Category');
 const EventOrders = require('../../models/event-order/EventOrder');
 const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const TicketConfiguration = require('../../models/event-details/Ticket');
@@ -29,7 +30,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
         // Helper function to get full event details
         const eventsWithDetails = await Promise.all(upcomingEvents.map(async (event) => {
-            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests] = await Promise.all([
+            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests, placeABid] = await Promise.all([
                 Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -63,6 +64,9 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                         select: 'serviceName category',
                         model: 'ServiceRequest'
                     })
+                    .lean(),
+                PlaceABid.find({ eventId: event._id })
+                    .populate('categoryId', 'name')
                     .lean()
             ]);
 
@@ -79,6 +83,32 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 };
             });
 
+            // Enrich placeABid with subcategory names
+            const enrichedPlaceABid = await Promise.all(placeABid.map(async (bid) => {
+                if (bid.subcategoryId) {
+                    // Find the category that contains this subcategory
+                    const category = await Category.findOne(
+                        {
+                            "subcategories._id": bid.subcategoryId
+                        },
+                        {
+                            "subcategories.$": 1
+                        }
+                    ).lean();
+
+                    if (category && category.subcategories && category.subcategories.length > 0) {
+                        return {
+                            ...bid,
+                            subcategoryId: {
+                                _id: bid.subcategoryId,
+                                name: category.subcategories[0].name
+                            }
+                        };
+                    }
+                }
+                return bid;
+            }));
+
             return {
                 ...event,
                 order: enrichedOrders,
@@ -93,7 +123,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 payStatus: ticketConfig?.payStatus || 'paid',
                 purchaseDeadlineDate: ticketConfig?.purchaseDeadlineDate || null,
                 photoFrame,
-                eventRequests
+                eventRequests,
+                placeABid: enrichedPlaceABid || []
             };
         }));
 
@@ -201,87 +232,96 @@ exports.fetchEventWithPlaceABidData = async (req, res, next) => {
 exports.fetchEventWithAllPlaceABidData = async (req, res, next) => {
     try {
         const userId = req.user?._id;
-        const { eventId } = req.params; // Get eventId from URL params
+        const { projectId } = req.params; // Get projectId from URL params
 
         // Validate input
-        if (!eventId) {
+        if (!projectId) {
             return res.status(400).json({
                 success: false,
-                message: 'Event ID is required',
+                message: 'Project ID is required',
             });
         }
 
         // Validate ObjectId format
-        if (!mongoose.Types.ObjectId.isValid(eventId)) {
+        if (!mongoose.Types.ObjectId.isValid(projectId)) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid Event ID format',
+                message: 'Invalid Project ID format',
             });
         }
 
-        // Fetch all place a bid data for the specific event
-        const placeABidData = await PlaceABid.find({
-            eventId: eventId
-        })
-        .populate('eventId', 'eventName eventDate location description')
-        .populate('categoryId', 'name')
-        .populate('subcategoryId', 'name')
-        .populate('createdBy', 'name email')
-        .lean();
+        // 1. Fetch the project from PlaceABid model
+        const project = await PlaceABid.findById(projectId)
+            .populate('eventId', 'eventName date time location description')
+            .populate('categoryId', 'name')
+            .populate('createdBy', 'name email')
+            .lean();
 
-        if (!placeABidData || placeABidData.length === 0) {
+        if (!project) {
             return res.status(404).json({
                 success: false,
-                message: 'No projects found for this event',
+                message: 'Project not found',
             });
         }
 
-        // Get all project IDs
-        const projectIds = placeABidData.map(project => project._id);
-
-        // Fetch all bids for these projects
-        const bids = await Bid.find({
-            projectId: { $in: projectIds }
-        })
-        .populate('providerId', 'name email')
-        .populate('projectId', 'categoryId subcategoryId orgBudget')
-        .sort({ bidAmount: 1, createdAt: 1 })
-        .lean();
-
-        // Organize bids by project and calculate statistics
-        const projectsWithBids = placeABidData.map(project => {
-            const projectBids = bids.filter(bid => bid.projectId._id.toString() === project._id.toString());
-            
-            const bidStats = {
-                totalBids: projectBids.length,
-                lowestBid: projectBids.length > 0 ? projectBids[0].bidAmount : 0,
-                highestBid: projectBids.length > 0 ? projectBids[projectBids.length - 1].bidAmount : 0,
-                averageBid: projectBids.length > 0 ? 
-                    projectBids.reduce((sum, bid) => sum + bid.bidAmount, 0) / projectBids.length : 0
-            };
-
-            // Check if current user has placed a bid on this project
-            const userBid = userId ? projectBids.find(bid => bid.providerId._id.toString() === userId.toString()) : null;
-
-            return {
-                project: project,
-                bids: {
-                    data: projectBids,
-                    statistics: bidStats
+        // 2. Fetch subcategory name from Category model
+        let subcategoryName = null;
+        if (project.subcategoryId) {
+            const categoryWithSubcategory = await Category.findOne(
+                { 
+                    _id: project.categoryId,
+                    "subcategories._id": project.subcategoryId 
                 },
-                userBid: userBid || null,
-                userHasBid: !!userBid
-            };
-        });
+                { 
+                    "subcategories.$": 1 
+                }
+            ).lean();
+            
+            if (categoryWithSubcategory && categoryWithSubcategory.subcategories && categoryWithSubcategory.subcategories.length > 0) {
+                subcategoryName = categoryWithSubcategory.subcategories[0].name;
+            }
+        }
+
+        // Add subcategory name to project object
+        const projectWithSubcategory = {
+            ...project,
+            subcategoryId: project.subcategoryId ? {
+                _id: project.subcategoryId,
+                name: subcategoryName
+            } : null
+        };
+
+        // 3. Fetch all bids for this project
+        const bids = await Bid.find({
+            projectId: projectId
+        })
+            .populate('providerId', 'name email avatar experience rating reviewCount')
+            .sort({ bidAmount: 1, createdAt: 1 })
+            .lean();
+
+        // 4. Calculate bid statistics
+        const bidStats = {
+            totalBids: bids.length,
+            averageBid: bids.length > 0 ? 
+                bids.reduce((sum, bid) => sum + bid.bidAmount, 0) / bids.length : 0,
+            lowestBid: bids.length > 0 ? 
+                Math.min(...bids.map(bid => bid.bidAmount)) : 0,
+            highestBid: bids.length > 0 ? 
+                Math.max(...bids.map(bid => bid.bidAmount)) : 0
+        };
 
         res.status(200).json({
             success: true,
-            data: projectsWithBids,
-            totalProjects: projectsWithBids.length
+            message: "Project and bids fetched successfully",
+            data: {
+                project: projectWithSubcategory,
+                bids: bids,
+                bidStats: bidStats
+            }
         });
 
     } catch (error) {
-        console.error('Error fetching event with bid data:', error);
+        console.error('Error fetching project with bid data:', error);
         res.status(500).json({
             success: false,
             message: 'Server error',
