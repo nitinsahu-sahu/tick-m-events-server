@@ -20,17 +20,24 @@ const bidSchema = new Schema({
   },
   bidAmount: { type: Number, required: true },
   deliveryTime: { type: Number, required: true },
-  deliveryUnit: { 
-    type: String, 
+  deliveryUnit: {
+    type: String,
     required: true,
     enum: ['Days', 'Weeks']
   },
-  winningBid:{
-    type: Number, 
+  winningBid: {
+    type: Number,
     default: 0
   },
-  proposal: { 
-    type: String, 
+  rejectionReason: {
+    type: String,
+    required: function () {
+      return this.status === 'rejected';
+    }
+  },
+
+  proposal: {
+    type: String,
     required: true,
     minlength: 100
   },
