@@ -30,15 +30,19 @@ const placeABidSchema = new mongoose.Schema({
         required: true,
     },
     // Project ka status kya chal rha hai
+    isSigned: {
+        type: Boolean,
+        default: false
+    },
     status: {
         type: String,
-        enum: ['pending','signed', 'ongoing', 'completed', 'cancelled'],
+        enum: ['pending', 'ongoing', 'completed', 'cancelled'],
         default: 'pending'
     },
     //Project is open for bidding
     bidStatus: {
         type: String,
-        enum: ['open', 'closed','cancelled'],
+        enum: ['open', 'closed', 'cancelled'],
         default: 'open'
     },
     bidsCount: {
