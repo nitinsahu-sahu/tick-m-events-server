@@ -14,6 +14,132 @@ const mongoose = require("mongoose")
 const PlaceABid = require('../../models/event-request/placeBid.modal');
 const Bid = require('../../models/event-request/bid.modal');
 
+exports.updateBidStatus = async (req, res, next) => {
+  try {
+    const { bidId } = req.params;
+    const { status, rejectionReason, acceptedAmount } = req.body;
+
+    // Validate input
+    if (!bidId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bid ID is required',
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(bidId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Bid ID format',
+      });
+    }
+
+    // Validate status
+    if (!status || !['accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid status (accepted or rejected) is required',
+      });
+    }
+
+    // Find the bid
+    const bid = await Bid.findById(bidId);
+    if (!bid) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bid not found',
+      });
+    }
+
+    // Check if bid is already decided
+    if (bid.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Bid has already been ${bid.status}`,
+      });
+    }
+
+    // Prepare update object
+    const updateData = {
+      status,
+    };
+
+    // Add validation based on status
+    if (status === 'rejected') {
+      if (!rejectionReason || rejectionReason.trim().length < 10) {
+        return res.status(400).json({
+          success: false,
+          message: 'Rejection reason is required and must be at least 10 characters long',
+        });
+      }
+      updateData.rejectionReason = rejectionReason;
+    }
+
+    if (status === 'accepted') {
+      if (!acceptedAmount || isNaN(acceptedAmount) || acceptedAmount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Valid accepted amount is required',
+        });
+      }
+
+      if (acceptedAmount > bid.bidAmount) {
+        return res.status(400).json({
+          success: false,
+          message: 'Accepted amount cannot be higher than the original bid amount',
+        });
+      }
+
+      updateData.winningBid = acceptedAmount;
+    }
+
+    // Update the bid
+    const updatedBid = await Bid.findByIdAndUpdate(
+      bidId,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('providerId', 'name email')
+
+    // If bid is accepted, update the project to mark it as closed
+    if (status === 'accepted') {
+      await PlaceABid.findByIdAndUpdate(
+        bid.projectId,
+        { 
+          bidStatus: 'closed',
+          isSigned: true
+        }
+      );
+
+      // Reject all other bids for this project
+      await Bid.updateMany(
+        {
+          projectId: bid.projectId,
+          _id: { $ne: bidId },
+          status: 'pending'
+        },
+        {
+          status: 'rejected',
+          rejectionReason: 'Another bid was accepted for this project',
+        }
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Bid ${status} successfully`,
+      data: updatedBid
+    });
+
+  } catch (error) {
+    console.error('Error updating bid status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 exports.fetchEventOrganizerSelect = async (req, res, next) => {
     try {
         const userId = req.user?._id; // Assuming user is authenticated and user data is in req.user
