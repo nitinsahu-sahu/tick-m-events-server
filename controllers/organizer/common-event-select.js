@@ -13,131 +13,184 @@ const EventsRequest = require('../../models/event-request/event-requests.model')
 const mongoose = require("mongoose")
 const PlaceABid = require('../../models/event-request/placeBid.modal');
 const Bid = require('../../models/event-request/bid.modal');
+const { createBidStatusEmailTemplate } = require('../../utils/Emails-template');
+const { sendMail } = require('../../utils/Emails');
 
 exports.updateBidStatus = async (req, res, next) => {
-  try {
-    const { bidId } = req.params;
-    const { status, rejectionReason, acceptedAmount } = req.body;
+    try {
+        const { bidId } = req.params;
+        const { status, rejectionReason, acceptedAmount } = req.body.data;
 
-    // Validate input
-    if (!bidId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Bid ID is required',
-      });
-    }
 
-    if (!mongoose.Types.ObjectId.isValid(bidId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid Bid ID format',
-      });
-    }
-
-    // Validate status
-    if (!status || !['accepted', 'rejected'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Valid status (accepted or rejected) is required',
-      });
-    }
-
-    // Find the bid
-    const bid = await Bid.findById(bidId);
-    if (!bid) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bid not found',
-      });
-    }
-
-    // Check if bid is already decided
-    if (bid.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: `Bid has already been ${bid.status}`,
-      });
-    }
-
-    // Prepare update object
-    const updateData = {
-      status,
-    };
-
-    // Add validation based on status
-    if (status === 'rejected') {
-      if (!rejectionReason || rejectionReason.trim().length < 10) {
-        return res.status(400).json({
-          success: false,
-          message: 'Rejection reason is required and must be at least 10 characters long',
-        });
-      }
-      updateData.rejectionReason = rejectionReason;
-    }
-
-    if (status === 'accepted') {
-      if (!acceptedAmount || isNaN(acceptedAmount) || acceptedAmount <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Valid accepted amount is required',
-        });
-      }
-
-      if (acceptedAmount > bid.bidAmount) {
-        return res.status(400).json({
-          success: false,
-          message: 'Accepted amount cannot be higher than the original bid amount',
-        });
-      }
-
-      updateData.winningBid = acceptedAmount;
-    }
-
-    // Update the bid
-    const updatedBid = await Bid.findByIdAndUpdate(
-      bidId,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('providerId', 'name email')
-
-    // If bid is accepted, update the project to mark it as closed
-    if (status === 'accepted') {
-      await PlaceABid.findByIdAndUpdate(
-        bid.projectId,
-        { 
-          bidStatus: 'closed',
-          isSigned: true
+        // Validate input
+        if (!bidId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Bid ID is required',
+            });
         }
-      );
 
-      // Reject all other bids for this project
-      await Bid.updateMany(
-        {
-          projectId: bid.projectId,
-          _id: { $ne: bidId },
-          status: 'pending'
-        },
-        {
-          status: 'rejected',
-          rejectionReason: 'Another bid was accepted for this project',
+        if (!mongoose.Types.ObjectId.isValid(bidId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid Bid ID format',
+            });
         }
-      );
+
+        // Validate status
+        if (!status || !['accepted', 'rejected'].includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Valid status (accepted or rejected) is required',
+            });
+        }
+
+        // Find the bid
+        const bid = await Bid.findById(bidId);
+        if (!bid) {
+            return res.status(404).json({
+                success: false,
+                message: 'Bid not found',
+            });
+        }
+
+        // Check if bid is already decided
+        if (bid.status !== 'pending') {
+            return res.status(400).json({
+                success: false,
+                message: `Bid has already been ${bid.status}`,
+            });
+        }
+
+        // Prepare update object
+        const updateData = {
+            status,
+        };
+
+        // Add validation based on status
+        if (status === 'rejected') {
+            if (!rejectionReason || rejectionReason.trim().length < 10) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Rejection reason is required and must be at least 10 characters long',
+                });
+            }
+            updateData.rejectionReason = rejectionReason;
+        }
+
+        if (status === 'accepted') {
+            if (!acceptedAmount || isNaN(acceptedAmount) || acceptedAmount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Valid accepted amount is required',
+                });
+            }
+
+            if (acceptedAmount > bid.bidAmount) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Accepted amount cannot be higher than the original bid amount',
+                });
+            }
+
+            updateData.winningBid = acceptedAmount;
+        }
+
+        // Update the bid
+        const updatedBid = await Bid.findByIdAndUpdate(
+            bidId,
+            updateData,
+            { new: true, runValidators: true }
+        ).populate('providerId', 'name email')
+
+        // If bid is accepted, update the project to mark it as closed
+        if (status === 'accepted') {
+            const placeProject = await PlaceABid.findByIdAndUpdate(
+                bid.projectId,
+                {
+                    bidStatus: 'closed',
+                    isSigned: true
+                },
+                { new: true } // Return the updated document
+            )
+                .populate('eventId') // Populate event details
+                .populate('categoryId') // Populate category details
+                .populate('createdBy'); // Populate user details
+
+            // Reject all other bids for this project
+            const placeBid = await Bid.updateMany(
+                {
+                    projectId: bid.projectId,
+                    _id: { $ne: bidId },
+                    status: 'pending'
+                },
+                {
+                    status: 'rejected',
+                    rejectionReason: 'Another bid was accepted for this project',
+                }
+            );
+            // Get the updated bids count and other statistics if needed
+            const updatedBids = await Bid.findOne({
+                projectId: placeProject._id,
+                status: "accepted"
+            }).populate('providerId')
+
+            const projectDetails = {
+                eventName: placeProject.eventId.eventName,
+                eventDate: placeProject.eventId.date,
+                eventTime: placeProject.eventId.time,
+                catName: placeProject.categoryId.name,
+                eventLocation: placeProject.eventLocation,
+                req: placeProject.orgRequirement,
+                isSigned: placeProject.isSigned,
+                orgName: placeProject.createdBy.name,
+                orgEmail: placeProject.createdBy.email,
+            }
+            const bidDetails = {
+                providerName: updatedBids.providerId.name,
+                providerEmail: updatedBids.providerId.email,
+                bidAmt: updatedBids.bidAmount,
+                deliveryTime: updatedBids.deliveryTime,
+                proposal: updatedBids.proposal,
+                deliveryUnit: updatedBids.deliveryUnit,
+                milestones:updatedBids.milestones,
+                status:updatedBids.status,
+                winningBid:updatedBids.winningBid,
+            }
+            // Send confirmation email (don't fail if email fails)
+            try {
+                const emailHtml = await createBidStatusEmailTemplate(
+                    projectDetails,
+                    bidDetails,
+                    status,
+                );;
+                await sendMail(
+                    // 'polydabra12@gmail.com',
+                    updatedBids.providerId.email,
+                    'Congratulation your bid is accepted...',
+                    emailHtml
+                );
+            } catch (emailError) {
+                console.error('Email sending failed:', emailError);
+            }
+        }
+
+
+
+        res.status(200).json({
+            success: true,
+            message: `Bid ${status} successfully`,
+            data: updatedBid
+        });
+
+    } catch (error) {
+        console.error('Error updating bid status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
-
-    res.status(200).json({
-      success: true,
-      message: `Bid ${status} successfully`,
-      data: updatedBid
-    });
-
-  } catch (error) {
-    console.error('Error updating bid status:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-    });
-  }
 };
 
 exports.fetchEventOrganizerSelect = async (req, res, next) => {
@@ -394,15 +447,15 @@ exports.fetchEventWithAllPlaceABidData = async (req, res, next) => {
         let subcategoryName = null;
         if (project.subcategoryId) {
             const categoryWithSubcategory = await Category.findOne(
-                { 
+                {
                     _id: project.categoryId,
-                    "subcategories._id": project.subcategoryId 
+                    "subcategories._id": project.subcategoryId
                 },
-                { 
-                    "subcategories.$": 1 
+                {
+                    "subcategories.$": 1
                 }
             ).lean();
-            
+
             if (categoryWithSubcategory && categoryWithSubcategory.subcategories && categoryWithSubcategory.subcategories.length > 0) {
                 subcategoryName = categoryWithSubcategory.subcategories[0].name;
             }
@@ -428,11 +481,11 @@ exports.fetchEventWithAllPlaceABidData = async (req, res, next) => {
         // 4. Calculate bid statistics
         const bidStats = {
             totalBids: bids.length,
-            averageBid: bids.length > 0 ? 
+            averageBid: bids.length > 0 ?
                 bids.reduce((sum, bid) => sum + bid.bidAmount, 0) / bids.length : 0,
-            lowestBid: bids.length > 0 ? 
+            lowestBid: bids.length > 0 ?
                 Math.min(...bids.map(bid => bid.bidAmount)) : 0,
-            highestBid: bids.length > 0 ? 
+            highestBid: bids.length > 0 ?
                 Math.max(...bids.map(bid => bid.bidAmount)) : 0
         };
 
