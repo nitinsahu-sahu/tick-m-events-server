@@ -159,6 +159,26 @@ const userSchema = new Schema({
             count: { type: Number, required: true }
         }]
     },
+    rewardPoints: {
+        type: Number,
+        default: 0
+    },
+    rewardTier: {
+        type: String,
+        enum: ['Bronze', 'Silver', 'Gold', 'Platinum'],
+        default: 'Bronze'
+    },
+    rewardsHistory: [{
+        date: Date,
+        action: String,
+        points: Number,
+        description: String
+    }],
+    redeemedRewards: [{
+        date: Date,
+        rewardId: mongoose.Schema.Types.ObjectId,
+        pointsSpent: Number
+    }],
     createdAt: { type: Date, default: Date.now },
     socketId: { type: String }
 }, { timestamps: true })
