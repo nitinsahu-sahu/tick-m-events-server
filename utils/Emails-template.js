@@ -1,29 +1,6 @@
 exports.createBidStatusEmailTemplate = async (projectDetails, bidDetails, status, reason = null, acceptedAmount = null) => {
   const statusColor = status === 'accepted' ? '#4CAF50' : '#F44336';
   const statusText = status === 'accepted' ? 'Accepted' : 'Rejected';
-  
-  // Format milestones as a table if they exist
-  const milestonesTable = bidDetails.milestones && bidDetails.milestones.length > 0 ? `
-    <h4 style="margin-top: 20px; margin-bottom: 10px;">Milestones:</h4>
-    <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-      <thead>
-        <tr style="background-color: #f2f2f2;">
-          <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Description</th>
-          <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Amount</th>
-          <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Due Date</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${bidDetails.milestones.map(milestone => `
-          <tr>
-            <td style="padding: 10px; border: 1px solid #ddd;">${milestone.description || 'N/A'}</td>
-            <td style="padding: 10px; border: 1px solid #ddd;">$${milestone.amount || '0'}</td>
-            <td style="padding: 10px; border: 1px solid #ddd;">${milestone.dueDate ? new Date(milestone.dueDate).toLocaleDateString() : 'N/A'}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  ` : '';
 
   return `
     <!DOCTYPE html>
@@ -473,3 +450,23 @@ exports.createEmailVerificationTemplate = (otp, otpExpires, name) => {
     </html>
   `;
 };
+
+exports.createResendOtpTemplate = async (resetCode) => {
+  return `
+<h2>Password Reset Request</h2>
+        <p>You requested to reset your password. Use the code below to reset your password:</p>
+        <h3 style="background: #f4f4f4; padding: 10px; display: inline-block; letter-spacing: 5px;">
+          ${resetCode}
+        </h3>
+        <p>This code will expire in 15 minutes.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+`
+}
+
+exports.resetPasswordSuccessfullyTemplate = async () => {
+  return `
+<h2>Password Reset Successful</h2>
+        <p>Your password has been successfully reset.</p>
+        <p>If you didn't perform this action, please contact support immediately.</p>
+`
+}
