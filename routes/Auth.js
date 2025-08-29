@@ -9,14 +9,18 @@ const { logoutActivity, profileUpdatedActivity } = require('../middleware/activi
 
 router
     .post("/signup", authController.signup)
+    .get("/validate-referral/:code", authController.validateReffral)
     .patch("/:id", verifyToken, profileUpdatedActivity, authController.updateUser)
     .get("/profile/:id", authController.getUserProfile)
     .get("/users/:role", authController.getOrganizer)
     .post('/login', validate(loginValidation), authController.login)
-    .post("/verify-otp", authController.verifyOtp)
-    .post("/resend-otp", authController.resendOtp)
+
+    .post("/verify-reset-code", authController.verifyOtp)
+    .post("/send-reset-code", authController.sendResetCode)
+    .post('/reset-password', authController.resetPasswordWithCode)
+
     .post("/forgot-password", authController.forgotPassword)
-    .post("/reset-password", authController.resetPassword)
+    // .post("/reset-password", authController.resetPassword)
     .get("/check-auth", verifyToken, authController.checkAuth)
     .post('/logout', verifyToken, logoutActivity, authController.logout)
     .get('/providers', verifyToken, getAllServiceProvider)

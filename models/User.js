@@ -1,6 +1,7 @@
 const mongoose = require("mongoose")
 const { Schema } = mongoose
 const bcrypt = require("bcryptjs");
+const RewardTransaction = require("./RewardTrans");
 
 
 const SocialLinksSchema = new mongoose.Schema({
@@ -159,28 +160,29 @@ const userSchema = new Schema({
             count: { type: Number, required: true }
         }]
     },
+    createdAt: { type: Date, default: Date.now },
+    socketId: { type: String },
+    referralCode: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
+    referredBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'User'
+    },
     rewardPoints: {
         type: Number,
         default: 0
     },
-    rewardTier: {
-        type: String,
-        enum: ['Bronze', 'Silver', 'Gold', 'Platinum'],
-        default: 'Bronze'
+    referralCount: {
+        type: Number,
+        default: 0
     },
-    rewardsHistory: [{
-        date: Date,
-        action: String,
-        points: Number,
-        description: String
-    }],
-    redeemedRewards: [{
-        date: Date,
-        rewardId: mongoose.Schema.Types.ObjectId,
-        pointsSpent: Number
-    }],
-    createdAt: { type: Date, default: Date.now },
-    socketId: { type: String }
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
+    resetPasswordCode: String,
+    resetCodeExpires: Date
 }, { timestamps: true })
 
 // Hash password before saving
@@ -212,5 +214,83 @@ userSchema.methods.updateAverageRating = async function () {
 
     const result = await this.save();
     return result;
+};
+
+userSchema.pre("save", async function (next) {
+    if (!this.isModified("password")) {
+        return next();
+    }
+    this.password = await bcrypt.hash(this.password, 10);
+
+    // Generate referral code for participants
+    if (this.role === 'participant' && !this.referralCode) {
+        this.referralCode = await this.generateReferralCode();
+    }
+    next();
+});
+
+//Add a method to generate a unique referral code before saving:
+userSchema.methods.generateReferralCode = async function () {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    let isUnique = false;
+
+    while (!isUnique) {
+        code = '';
+        for (let i = 0; i < 8; i++) {
+            code += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+
+        // Check if code is unique
+        const existingUser = await mongoose.model('User').findOne({ referralCode: code });
+        if (!existingUser) {
+            isUnique = true;
+        }
+    }
+
+    return code;
+};
+
+//Add methods to handle rewards:
+userSchema.methods.addRewardPoints = async function (points, reason) {
+    this.rewardPoints += points;
+    await this.save();
+
+    // Create a reward transaction record (you'll need to create this model)
+    await RewardTransaction.create({
+        userId: this._id,
+        points: points,
+        type: 'credit',
+        reason: reason
+    });
+
+    return this;
+};
+
+userSchema.statics.processReferral = async function (referralCode, userName) {
+    try {
+        // Find the referrer
+        const referrer = await this.findOne({ referralCode, role: 'participant' });
+        if (!referrer) {
+            return { success: false, message: 'Invalid referral code' };
+        }
+
+        // Add reward points to referrer
+        const rewardPoints = 100; // Adjust as needed
+        await referrer.addRewardPoints(rewardPoints, `Referral bonus for ${userName}`);
+
+        // Increment referral count
+        referrer.referralCount += 1;
+        await referrer.save();
+
+        return {
+            success: true,
+            message: 'Referral processed successfully',
+            referrerName: referrer.name
+        };
+    } catch (error) {
+        console.error('Error processing referral:', error);
+        return { success: false, message: 'Error processing referral' };
+    }
 };
 module.exports = mongoose.model("User", userSchema)

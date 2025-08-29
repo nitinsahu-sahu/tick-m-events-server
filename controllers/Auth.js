@@ -14,10 +14,16 @@ const Activity = require("../models/activity/activity.modal");
 const sharp = require('sharp');
 const getLocationFromIP = require('../utils/getLocationFromIP');
 const calculateDuration = require('../utils/helperFunction');
+const { createResendOtpTemplate } = require('../utils/Emails-template');
+
+// Generate random 6-digit code
+const generateResetCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
 
 //register controller
 exports.signup = async (req, res) => {
-    const { address, name, email, password, gender, number, role, experience, serviceCategory } = req.body;
+    const { address, name, email, password, gender, number, role, experience, serviceCategory, referralCode } = req.body;
     const { avatar } = req.files;
 
     // Input validation
@@ -27,7 +33,9 @@ exports.signup = async (req, res) => {
             message: "All fields are required including avatar"
         });
     }
+
     const username = generateUsername(name, 5);
+
     try {
         // Check for existing user in a single query
         const existingUser = await User.findOne({
@@ -41,7 +49,23 @@ exports.signup = async (req, res) => {
             return res.status(400).json({ success: false, message });
         }
 
-        // Optimized Cloudinary upload with error handling
+        let referrer = null;
+        // Validate referral code if provided
+        if (referralCode) {
+            referrer = await User.findOne({
+                referralCode,
+                role: 'participant'
+            });
+
+            if (!referrer) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid referral code"
+                });
+            }
+        }
+
+        // Upload avatar to Cloudinary
         let cloudinaryResult;
         try {
             cloudinaryResult = await cloudinary.uploader.upload(avatar.tempFilePath, {
@@ -57,12 +81,12 @@ exports.signup = async (req, res) => {
             });
         }
 
-        // Create and save user
-        const newUser = await User.create({
+        // Create user data object
+        const userData = {
             name,
             username,
             email,
-            password, // Ensure password is hashed in pre-save hook
+            password,
             gender,
             address,
             number,
@@ -70,8 +94,23 @@ exports.signup = async (req, res) => {
                 public_id: cloudinaryResult.public_id,
                 url: cloudinaryResult.secure_url
             },
-            role, experience, serviceCategory
-        });
+            role,
+            experience,
+            serviceCategory
+        };
+
+        // Only add referredBy if referrer exists
+        if (referrer) {
+            userData.referredBy = referrer._id;
+        }
+
+        // Create and save user
+        const newUser = await User.create(userData);
+
+        // Process referral reward if applicable
+        if (referrer) {
+            await User.processReferral(referralCode, newUser.name);
+        }
 
         // Omit sensitive data in response
         const userResponse = {
@@ -92,11 +131,10 @@ exports.signup = async (req, res) => {
         console.error('Signup error:', error);
 
         if (error.name === 'ValidationError') {
-            // Extract all validation errors into an array or string
             const messages = Object.values(error.errors).map(err => err.message);
             return res.status(400).json({
                 success: false,
-                message: messages.join(', ') // or send as array
+                message: messages.join(', ')
             });
         }
 
@@ -106,6 +144,37 @@ exports.signup = async (req, res) => {
         });
     }
 };
+
+//validate referral
+exports.validateReffral = async (req, res) => {
+    try {
+        const { code } = req.params;
+
+        const referrer = await User.findOne({
+            referralCode: code,
+            role: 'participant'
+        });
+
+        if (!referrer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Invalid referral code'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Valid referral code',
+            referrerName: referrer.name
+        });
+    } catch (error) {
+        console.error('Error validating referral code:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server error validating referral code'
+        });
+    }
+}
 
 exports.login = async (req, res) => {
     try {
@@ -134,16 +203,16 @@ exports.login = async (req, res) => {
         // Update login stats
         const now = new Date();
         const currentMonth = now.toISOString().slice(0, 7); // "YYYY-MM"
-        
+
         existingUser.loginStats.totalLogins += 1;
         existingUser.loginStats.currentMonth.count += 1;
         existingUser.loginStats.currentMonth.lastLogin = now;
-        
+
         // Update monthly history
         const monthIndex = existingUser.loginStats.history.findIndex(
             entry => entry.month === currentMonth
         );
-        
+
         if (monthIndex >= 0) {
             existingUser.loginStats.history[monthIndex].count += 1;
         } else {
@@ -180,16 +249,16 @@ exports.login = async (req, res) => {
 
         // Log activity with response time
         const ip = req.headers["x-forwarded-for"]?.split(",")[0] ||
-                  req.socket.remoteAddress ||
-                  req.connection.remoteAddress;
-        
+            req.socket.remoteAddress ||
+            req.connection.remoteAddress;
+
         let location = "-";
         try {
             location = await getLocationFromIP(ip);
         } catch (err) {
             console.warn("Could not fetch location info:", err.message);
         }
-        
+
         try {
             await Activity.create({
                 userId: existingUser._id,
@@ -311,70 +380,158 @@ exports.updateUser = async (req, res) => {
 
 exports.verifyOtp = async (req, res) => {
     try {
-        // checks if user id is existing in the user collection
-        const isValidUserId = await User.findById(req.body.userId)
+        const { email, code } = req.body;
 
-        // if user id does not exists then returns a 404 response
-        if (!isValidUserId) {
-            return res.status(404).json({ message: 'User not Found, for which the otp has been generated' })
+        if (!email || !code) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and code are required'
+            });
         }
 
-        // checks if otp exists by that user id
-        const isOtpExisting = await Otp.findOne({ user: isValidUserId._id })
+        const user = await User.findOne({
+            email,
+            resetPasswordCode: code,
+            resetCodeExpires: { $gt: Date.now() }
+        });
 
-        // if otp does not exists then returns a 404 response
-        if (!isOtpExisting) {
-            return res.status(404).json({ message: 'Otp not found' })
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid or expired reset code'
+            });
         }
 
-        // checks if the otp is expired, if yes then deletes the otp and returns response accordinly
-        if (isOtpExisting.expiresAt < new Date()) {
-            await Otp.findByIdAndDelete(isOtpExisting._id)
-            return res.status(400).json({ message: "Otp has been expired" })
-        }
-
-        // checks if otp is there and matches the hash value then updates the user verified status to true and returns the updated user
-        if (isOtpExisting && (await bcrypt.compare(req.body.otp, isOtpExisting.otp))) {
-            await Otp.findByIdAndDelete(isOtpExisting._id)
-            const verifiedUser = await User.findByIdAndUpdate(isValidUserId._id, { isVerified: true }, { new: true })
-            return res.status(200).json(sanitizeUser(verifiedUser))
-        }
-
-        // in default case if none of the conidtion matches, then return this response
-        return res.status(400).json({ message: 'Otp is invalid or expired' })
-
+        res.status(200).json({
+            success: true,
+            message: 'Code verified successfully'
+        });
 
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ message: "Some Error occured" })
+        console.error('Verify reset code error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
     }
 }
 
-exports.resendOtp = async (req, res) => {
+// Send reset code email
+exports.sendResetCode = async (req, res) => {
     try {
+        const { email } = req.body;
 
-        const existingUser = await User.findById(req.body.user)
-
-        if (!existingUser) {
-            return res.status(404).json({ "message": "User not found" })
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
         }
 
-        await Otp.deleteMany({ user: existingUser._id })
+        const user = await User.findOne({ email });
+        if (!user) {
+            // For security, don't reveal if email exists or not
+            return res.status(400).json({
+                success: true,
+                message: 'No account has been registered with this email yet.'
+            });
+        }
 
-        const otp = generateOTP()
-        const hashedOtp = await bcrypt.hash(otp, 10)
+        // Generate reset code
+        const resetCode = generateResetCode();
+        const resetCodeExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
 
-        const newOtp = new Otp({ user: req.body.user, otp: hashedOtp, expiresAt: Date.now() + parseInt(process.env.OTP_EXPIRATION_TIME) })
-        await newOtp.save()
+        // Save to user
+        user.resetPasswordCode = resetCode;
+        user.resetCodeExpires = resetCodeExpires;
+        await user.save();
 
-        await sendMail(existingUser.email, `OTP Verification for Your MERN-AUTH-REDUX-TOOLKIT Account`, `Your One-Time Password (OTP) for account verification is: <b>${otp}</b>.</br>Do not share this OTP with anyone for security reasons`)
+        try {
+            const emailHtml = await createResendOtpTemplate(resetCode);
+            await sendMail(
+                email,
+                'Password Reset Code',
+                emailHtml
+            );
+        } catch (emailError) {
+            console.error('Email sending failed:', emailError);
+        }
+        res.status(200).json({
+            success: true,
+            message: 'Reset code sent to email'
+        });
 
-        res.status(201).json({ 'message': "OTP sent" })
     } catch (error) {
-        res.status(500).json({ 'message': "Some error occured while resending otp, please try again later" })
-        console.log(error);
+        console.error('Send reset code error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
     }
-}
+};
+
+// Reset password with code
+exports.resetPasswordWithCode = async (req, res) => {
+    try {
+        const { email, code, newPassword } = req.body;
+
+        if (!email || !code || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email, code, and new password are required'
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password must be at least 6 characters'
+            });
+        }
+
+        const user = await User.findOne({
+            email,
+            resetPasswordCode: code,
+            resetCodeExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid or expired reset code'
+            });
+        }
+
+        // Update password
+        user.password = newPassword;
+        user.resetPasswordCode = undefined;
+        user.resetCodeExpires = undefined;
+        await user.save();
+
+        try {
+            const emailHtml = await resetPasswordSuccessfullyTemplate();
+            await sendMail(
+                email,
+                'Password Reset Successful',
+                emailHtml
+            );
+        } catch (emailError) {
+            console.error('Email sending failed:', emailError);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Password reset successfully'
+        });
+
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error'
+        });
+    }
+};
 
 exports.forgotPassword = async (req, res) => {
     let newToken;
@@ -493,7 +650,7 @@ exports.logout = async (req, res) => {
                 const existingDayIndex = user.sessionStats.history.findIndex(
                     entry => entry.date === today
                 );
-                
+
                 if (existingDayIndex >= 0) {
                     user.sessionStats.history[existingDayIndex].duration = addDurations(
                         user.sessionStats.history[existingDayIndex].duration,
