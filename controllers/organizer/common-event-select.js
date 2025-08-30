@@ -474,7 +474,7 @@ exports.fetchEventWithAllPlaceABidData = async (req, res, next) => {
         const bids = await Bid.find({
             projectId: projectId
         })
-            .populate('providerId', 'name email avatar experience rating reviewCount')
+            .populate('providerId', 'name username socialLinks address email avatar experience rating reviewCount averageRating serviceCategory')
             .sort({ bidAmount: 1, createdAt: 1 })
             .lean();
 

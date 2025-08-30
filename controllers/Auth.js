@@ -14,7 +14,7 @@ const Activity = require("../models/activity/activity.modal");
 const sharp = require('sharp');
 const getLocationFromIP = require('../utils/getLocationFromIP');
 const calculateDuration = require('../utils/helperFunction');
-const { createResendOtpTemplate } = require('../utils/Emails-template');
+const { createResendOtpTemplate,resetPasswordSuccessfullyTemplate } = require('../utils/Emails-template');
 
 // Generate random 6-digit code
 const generateResetCode = () => {
