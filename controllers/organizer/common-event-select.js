@@ -17,13 +17,18 @@ const { createBidStatusEmailTemplate } = require('../../utils/Emails-template');
 const { sendMail } = require('../../utils/Emails');
 
 exports.updateBidStatus = async (req, res, next) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { bidId } = req.params;
-        const { status, rejectionReason, acceptedAmount } = req.body.data;
-
+        const { status, rejectionReason, bidData, milestones } = req.body.data;
+        const acceptedAmount = Number(bidData.bidAmount);
 
         // Validate input
         if (!bidId) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(400).json({
                 success: false,
                 message: 'Bid ID is required',
@@ -31,6 +36,8 @@ exports.updateBidStatus = async (req, res, next) => {
         }
 
         if (!mongoose.Types.ObjectId.isValid(bidId)) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(400).json({
                 success: false,
                 message: 'Invalid Bid ID format',
@@ -39,6 +46,8 @@ exports.updateBidStatus = async (req, res, next) => {
 
         // Validate status
         if (!status || !['accepted', 'rejected'].includes(status)) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(400).json({
                 success: false,
                 message: 'Valid status (accepted or rejected) is required',
@@ -46,8 +55,10 @@ exports.updateBidStatus = async (req, res, next) => {
         }
 
         // Find the bid
-        const bid = await Bid.findById(bidId);
+        const bid = await Bid.findById(bidId).session(session);
         if (!bid) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(404).json({
                 success: false,
                 message: 'Bid not found',
@@ -56,6 +67,8 @@ exports.updateBidStatus = async (req, res, next) => {
 
         // Check if bid is already decided
         if (bid.status !== 'pending') {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(400).json({
                 success: false,
                 message: `Bid has already been ${bid.status}`,
@@ -70,6 +83,8 @@ exports.updateBidStatus = async (req, res, next) => {
         // Add validation based on status
         if (status === 'rejected') {
             if (!rejectionReason || rejectionReason.trim().length < 10) {
+                await session.abortTransaction();
+                session.endSession();
                 return res.status(400).json({
                     success: false,
                     message: 'Rejection reason is required and must be at least 10 characters long',
@@ -80,28 +95,82 @@ exports.updateBidStatus = async (req, res, next) => {
 
         if (status === 'accepted') {
             if (!acceptedAmount || isNaN(acceptedAmount) || acceptedAmount <= 0) {
+                await session.abortTransaction();
+                session.endSession();
                 return res.status(400).json({
                     success: false,
                     message: 'Valid accepted amount is required',
                 });
             }
 
-            if (acceptedAmount > bid.bidAmount) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Accepted amount cannot be higher than the original bid amount',
-                });
+            updateData.winningBid = acceptedAmount;
+
+            // Update bid data if provided
+            if (bidData) {
+                if (bidData.deliveryTime) updateData.deliveryTime = Number(bidData.deliveryTime);
+                if (bidData.deliveryUnit) updateData.deliveryUnit = bidData.deliveryUnit;
+                if (bidData.proposal) updateData.proposal = bidData.proposal;
             }
 
-            updateData.winningBid = acceptedAmount;
+            // Process milestones if provided
+            if (milestones && Array.isArray(milestones)) {
+                const updatedMilestones = [];
+
+                for (const milestoneData of milestones) {
+                    // Convert amount to number
+                    const amount = Number(milestoneData.amount);
+
+                    if (isNaN(amount) || amount <= 0) {
+                        await session.abortTransaction();
+                        session.endSession();
+                        return res.status(400).json({
+                            success: false,
+                            message: `Invalid amount for milestone: ${milestoneData.milestorneName}`
+                        });
+                    }
+
+                    // Check if milestone has _id (existing milestone)
+                    if (milestoneData._id && mongoose.Types.ObjectId.isValid(milestoneData._id)) {
+                        // Find and update existing milestone
+                        const existingMilestoneIndex = bid.milestones.findIndex(
+                            m => m._id.toString() === milestoneData._id
+                        );
+
+                        if (existingMilestoneIndex !== -1) {
+                            // Update existing milestone
+                            bid.milestones[existingMilestoneIndex].milestorneName = milestoneData.milestorneName;
+                            bid.milestones[existingMilestoneIndex].amount = amount;
+                            bid.milestones[existingMilestoneIndex].currency = milestoneData.currency || 'XAF';
+                            updatedMilestones.push(bid.milestones[existingMilestoneIndex]);
+                        } else {
+                            // Add as new milestone (shouldn't normally happen)
+                            updatedMilestones.push({
+                                milestorneName: milestoneData.milestorneName,
+                                amount: amount,
+                                currency: milestoneData.currency || 'XAF'
+                            });
+                        }
+                    } else {
+                        // Add new milestone
+                        updatedMilestones.push({
+                            milestorneName: milestoneData.milestorneName,
+                            amount: amount,
+                            currency: milestoneData.currency || 'XAF'
+                        });
+                    }
+                }
+
+                // Replace the milestones array
+                updateData.milestones = updatedMilestones;
+            }
         }
 
         // Update the bid
         const updatedBid = await Bid.findByIdAndUpdate(
             bidId,
             updateData,
-            { new: true, runValidators: true }
-        ).populate('providerId', 'name email')
+            { new: true, runValidators: true, session }
+        ).populate('providerId', 'name email');
 
         // If bid is accepted, update the project to mark it as closed
         if (status === 'accepted') {
@@ -111,14 +180,14 @@ exports.updateBidStatus = async (req, res, next) => {
                     bidStatus: 'closed',
                     isSigned: true
                 },
-                { new: true } // Return the updated document
+                { new: true, session }
             )
-                .populate('eventId') // Populate event details
-                .populate('categoryId') // Populate category details
-                .populate('createdBy'); // Populate user details
+                .populate('eventId')
+                .populate('categoryId')
+                .populate('createdBy');
 
             // Reject all other bids for this project
-            const placeBid = await Bid.updateMany(
+            await Bid.updateMany(
                 {
                     projectId: bid.projectId,
                     _id: { $ne: bidId },
@@ -127,13 +196,15 @@ exports.updateBidStatus = async (req, res, next) => {
                 {
                     status: 'rejected',
                     rejectionReason: 'Another bid was accepted for this project',
-                }
+                },
+                { session }
             );
+
             // Get the updated bids count and other statistics if needed
             const updatedBids = await Bid.findOne({
                 projectId: placeProject._id,
                 status: "accepted"
-            }).populate('providerId')
+            }).populate('providerId').session(session);
 
             const projectDetails = {
                 eventName: placeProject.eventId.eventName,
@@ -145,7 +216,8 @@ exports.updateBidStatus = async (req, res, next) => {
                 isSigned: placeProject.isSigned,
                 orgName: placeProject.createdBy.name,
                 orgEmail: placeProject.createdBy.email,
-            }
+            };
+
             const bidDetails = {
                 providerName: updatedBids.providerId.name,
                 providerEmail: updatedBids.providerId.email,
@@ -153,29 +225,32 @@ exports.updateBidStatus = async (req, res, next) => {
                 deliveryTime: updatedBids.deliveryTime,
                 proposal: updatedBids.proposal,
                 deliveryUnit: updatedBids.deliveryUnit,
-                milestones:updatedBids.milestones,
-                status:updatedBids.status,
-                winningBid:updatedBids.winningBid,
-            }
+                milestones: updatedBids.milestones,
+                status: updatedBids.status,
+                winningBid: updatedBids.winningBid,
+            };
+
             // Send confirmation email (don't fail if email fails)
             try {
                 const emailHtml = await createBidStatusEmailTemplate(
                     projectDetails,
                     bidDetails,
                     status,
-                );;
+                );
                 await sendMail(
-                    // 'polydabra12@gmail.com',
                     updatedBids.providerId.email,
-                    'Congratulation your bid is accepted...',
+                    'Congratulations! Your bid has been accepted',
                     emailHtml
                 );
             } catch (emailError) {
                 console.error('Email sending failed:', emailError);
+                // Don't fail the transaction if email fails
             }
         }
 
-
+        // Commit the transaction
+        await session.commitTransaction();
+        session.endSession();
 
         res.status(200).json({
             success: true,
@@ -184,6 +259,10 @@ exports.updateBidStatus = async (req, res, next) => {
         });
 
     } catch (error) {
+        // Abort transaction on error
+        await session.abortTransaction();
+        session.endSession();
+
         console.error('Error updating bid status:', error);
         res.status(500).json({
             success: false,
