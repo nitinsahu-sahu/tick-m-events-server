@@ -44,7 +44,7 @@ const bidSchema = new Schema({
   milestones: [milestoneSchema],
   status: {
     type: String,
-    enum: ['pending', 'accepted', 'rejected', 'withdrawn'],
+    enum: ['pending', 'accepted-by-provider', 'accepted-by-organizer', 'accepted', 'rejected', 'withdrawn'],
     default: 'pending'
   },
   createdAt: { type: Date, default: Date.now }
