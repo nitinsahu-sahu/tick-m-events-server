@@ -4,7 +4,8 @@ const { Schema } = mongoose;
 const milestoneSchema = new Schema({
   milestorneName: { type: String, required: true },
   amount: { type: Number, required: true },
-  currency: { type: String, required: true, default: 'XAF' }
+  currency: { type: String, required: true, default: 'XAF' },
+  isReleased: { type: Boolean, default: false }
 });
 
 const bidSchema = new Schema({
@@ -29,22 +30,33 @@ const bidSchema = new Schema({
     type: Number,
     default: 0
   },
+  organizrAmount: {
+    type: Number,
+    default: 0
+  },
   rejectionReason: {
     type: String,
     required: function () {
       return this.status === 'rejected';
     }
   },
-
+  isOrgnizerAccepted: {
+    type: Boolean,
+    default: false
+  },
+  isProviderAccepted: {
+    type: Boolean,
+    default: false
+  },
   proposal: {
     type: String,
     required: true,
-    minlength: 100
+    minlength: 50
   },
   milestones: [milestoneSchema],
   status: {
     type: String,
-    enum: ['pending', 'accepted-by-provider', 'accepted-by-organizer', 'accepted', 'rejected', 'withdrawn'],
+    enum: ['pending', 'accepted', 'rejected', 'withdrawn'],
     default: 'pending'
   },
   createdAt: { type: Date, default: Date.now }

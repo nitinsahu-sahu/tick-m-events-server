@@ -36,7 +36,7 @@ const placeABidSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending','process', 'ongoing', 'completed'],
+        enum: ['pending', 'process', 'ongoing', 'completed'],
         default: 'pending'
     },
     //Project is open for bidding

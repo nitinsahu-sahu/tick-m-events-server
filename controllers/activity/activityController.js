@@ -70,3 +70,39 @@ exports.getAllActivitiesForUser= async (req, res) => {
     });
   }
 };
+
+exports.getLatestEventCreatedActivity = async (req, res) => {
+  try {
+    const latestActivity = await Activity.findOne({ activityType: 'event_created' })
+      .sort({ timestamp: -1 })
+      .populate('userId', 'email name')
+      .lean();
+ 
+    if (!latestActivity) {
+      return res.status(404).json({
+        success: false,
+        message: 'No event_created activity found'
+      });
+    }
+    const eventId = latestActivity.metadata?.params?.eventId;
+ 
+    if (eventId) {
+      const event = await Event.findById(eventId).select('eventName').lean();
+      if (event) {
+        latestActivity.eventName = event.eventName; // ✅ Add eventName to response
+      }
+    }
+ 
+    res.status(200).json({
+      success: true,
+      message: 'Latest event_created activity fetched successfully',
+      data: latestActivity
+    });
+  } catch (err) {
+    console.error('Error fetching latest event_created activity:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch latest event_created activity'
+    });
+  }
+};
