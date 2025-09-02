@@ -115,18 +115,18 @@ exports.deleteEvent = async (req, res, next) => {
 exports.updateEvents = async (req, res, next) => {
   const userId = req.user._id;
   const { eventId } = req.params;
-
+ 
   try {
     // Verify the event exists and belongs to the user
     const existingEvent = await Event.findOne({ _id: eventId, createdBy: userId, isDelete: false });
-
+ 
     if (!existingEvent) {
       return res.status(404).json({
         success: false,
         message: 'Event not found or you do not have permission to update it'
       });
     }
-
+ 
     // Extract data from request body
     const {
       event,
@@ -135,22 +135,30 @@ exports.updateEvents = async (req, res, next) => {
       visibility,
       organizer
     } = req.body;
-
+ 
     // Start a transaction to ensure all updates succeed or fail together
     const session = await mongoose.startSession();
     session.startTransaction();
-
+ 
     try {
       // Update Event data
-      const updatedEvent = await Event.findByIdAndUpdate(
-        eventId,
-        {
-          ...event,
-          updatedAt: new Date()
-        },
-        { new: true, session }
-      );
-
+      const existingEventDoc = await Event.findById(eventId).session(session);
+ 
+      if (!existingEventDoc) {
+        throw new Error('Event not found');
+      }
+ 
+      // Apply updates manually
+      Object.assign(existingEventDoc, {
+        ...event,
+        updatedAt: new Date()
+      });
+ 
+      // This will now trigger the `pre('save')` hook
+      await existingEventDoc.save({ session });
+ 
+      const updatedEvent = existingEventDoc;
+ 
       // Update Customization data
       let updatedCustomization;
       if (customization) {
@@ -160,7 +168,7 @@ exports.updateEvents = async (req, res, next) => {
           { new: true, upsert: true, session }
         );
       }
-
+ 
       // // Update Ticket Configuration
       let updatedTicketConfiguration;
       if (tickets) {
@@ -170,7 +178,7 @@ exports.updateEvents = async (req, res, next) => {
           { new: true, upsert: true, session }
         );
       }
-
+ 
       // // Update Visibility
       let updatedVisibility;
       if (visibility) {
@@ -180,7 +188,7 @@ exports.updateEvents = async (req, res, next) => {
           { new: true, upsert: true, session }
         );
       }
-
+ 
       // // Update Organizer
       let updatedOrganizer;
       if (organizer) {
@@ -190,11 +198,11 @@ exports.updateEvents = async (req, res, next) => {
           { new: true, upsert: true, session }
         );
       }
-
+ 
       // Commit the transaction
       await session.commitTransaction();
       session.endSession();
-
+ 
       // // Prepare response
       const response = {
         success: true,
@@ -207,23 +215,23 @@ exports.updateEvents = async (req, res, next) => {
           organizer: updatedOrganizer
         }
       };
-
+ 
       // // Remove null values from response
       Object.keys(response.data).forEach(key => {
         if (response.data[key] === null || response.data[key] === undefined) {
           delete response.data[key];
         }
       });
-
+ 
       return res.status(200).json(response);
-
+ 
     } catch (error) {
       // If any error occurs, abort the transaction
       await session.abortTransaction();
       session.endSession();
       throw error;
     }
-
+ 
   } catch (error) {
     console.error('Error updating event:', error);
     return res.status(500).json({
