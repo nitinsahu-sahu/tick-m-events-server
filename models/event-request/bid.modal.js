@@ -30,6 +30,10 @@ const bidSchema = new Schema({
     type: Number,
     default: 0
   },
+  organizrAmount: {
+    type: Number,
+    default: 0
+  },
   rejectionReason: {
     type: String,
     required: function () {
