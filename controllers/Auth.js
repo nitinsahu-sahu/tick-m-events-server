@@ -294,6 +294,39 @@ exports.login = async (req, res) => {
     }
 };
 
+exports.markNotificationAsRead = async (req, res) => {
+  try {
+    const { userId, notifId } = req.params;
+ 
+    // Find user and the specific notification
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+ 
+    const notification = user.notifications.id(notifId);
+    if (!notification) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+ 
+    // Update "read" field
+    notification.read = true;
+    await user.save();
+ 
+    res.status(200).json({
+      success: true,
+      message: "Notification marked as read",
+      notification,
+    });
+  } catch (error) {
+    console.error("Error marking notification as read:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 // Get user details by ID (excluding password and createdAt)
 exports.getUserProfile = async (req, res) => {
     try {

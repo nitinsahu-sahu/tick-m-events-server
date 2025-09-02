@@ -179,6 +179,14 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
+    notifications: [
+        {
+            message: { type: String, required: true },
+            eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
+            createdAt: { type: Date, default: Date.now },
+            read: { type: Boolean, default: false }
+        }
+    ],
     resetPasswordToken: String,
     resetPasswordExpires: Date,
     resetPasswordCode: String,

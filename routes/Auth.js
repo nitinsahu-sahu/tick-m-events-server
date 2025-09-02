@@ -14,7 +14,7 @@ router
     .get("/profile/:id", authController.getUserProfile)
     .get("/users/:role", authController.getOrganizer)
     .post('/login', validate(loginValidation), authController.login)
-
+    .patch("/users/:userId/notifications/:notifId/read", authController.markNotificationAsRead)
     .post("/verify-reset-code", authController.verifyOtp)
     .post("/send-reset-code", authController.sendResetCode)
     .post('/reset-password', authController.resetPasswordWithCode)
@@ -29,6 +29,6 @@ router
     .put('/avatar', verifyToken, authController.updateAvatar)
     .post("/reviews", verifyToken, authController.createReview)
     .put("/reviews/:reviewId/reply", verifyToken, authController.addReply)
-    .get("/reviews",verifyToken, authController.getProviderReviews);
+    .get("/reviews", verifyToken, authController.getProviderReviews);
 
 module.exports = router

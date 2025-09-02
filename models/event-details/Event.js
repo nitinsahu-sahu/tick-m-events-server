@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
+const User = require("../User");
+const Order = require("../event-order/EventOrder");
+ 
 
 const eventSchema = new Schema({
   eventName: {
@@ -78,5 +81,69 @@ const eventSchema = new Schema({
   },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
+
+eventSchema.pre('save', async function (next) {
+  try {
+    if (this.isNew) return next();
+ 
+    const dateChanged = this.isModified('date');
+    const locationChanged = this.isModified('location');
+    const timeChanged = this.isModified('time'); // 👈 Added
+ 
+    let notificationMessage = null;
+ 
+    if (dateChanged && locationChanged && timeChanged) {
+      notificationMessage = `The date, time, and location for "${this.eventName}" have changed to ${this.date} at ${this.time}, ${this.location}`;
+    } else if (dateChanged && locationChanged) {
+      notificationMessage = `The date and location for "${this.eventName}" have changed to ${this.date} at ${this.location}`;
+    } else if (dateChanged && timeChanged) {
+      notificationMessage = `The date and time for "${this.eventName}" have changed to ${this.date} at ${this.time}`;
+    } else if (locationChanged && timeChanged) {
+      notificationMessage = `The location and time for "${this.eventName}" have changed to ${this.location} at ${this.time}`;
+    } else if (dateChanged) {
+      notificationMessage = `The date for "${this.eventName}" has changed to ${this.date}`;
+    } else if (locationChanged) {
+      notificationMessage = `The location of "${this.eventName}" has changed to ${this.location}`;
+    } else if (timeChanged) {
+      notificationMessage = `The time for "${this.eventName}" has changed to ${this.time}`;
+    }
+ 
+    if (notificationMessage) {
+      const orders = await Order.find({ eventId: this._id }).populate('userId');
+ 
+      for (const order of orders) {
+        if (!order.userId) continue;
+ 
+        // 🚨 Prevent duplicate notifications (same eventId + same message)
+        await User.updateOne(
+          {
+            _id: order.userId._id,
+            notifications: {
+              $not: {
+                $elemMatch: { eventId: this._id, message: notificationMessage }
+              }
+            }
+          },
+          {
+            $push: {
+              notifications: {
+                message: notificationMessage,
+                eventId: this._id,
+                createdAt: new Date(),
+                read: false
+              }
+            }
+          }
+        );
+      }
+ 
+      console.log(`🔔 Notification sent: ${notificationMessage}`);
+    }
+  } catch (err) {
+    console.error("Error in event pre-save hook:", err);
+  }
+ 
+  next();
+});
 
 module.exports = mongoose.model('Event', eventSchema);
