@@ -13,6 +13,7 @@ const client = twilio(accountSid, authToken);
 const moment = require('moment');
 const Activity = require('../models/activity/activity.modal');
 const UserFcmToken = require('../models/userReview/UserFcmToken');
+const SocialMediaPost = require('../models/marketing-engagement/social-media-post');
 
 // Constants
 const CRON_SCHEDULE = '* * * * *'; // Every minute
@@ -245,12 +246,30 @@ async function cleanupOldActivities() {
   }
 }
 
+async function cleanupOldSocialPosts() {
+  try {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+ 
+    const result = await SocialMediaPost.deleteMany({
+      createdAt: { $lt: oneMonthAgo },
+    });
+ 
+    if (result.deletedCount > 0) {
+      console.log(`[🧹 CRON] Deleted ${result.deletedCount} old social media posts`);
+    }
+  } catch (err) {
+    console.error("[❌ CRON] Error deleting old social media posts:", err.message);
+  }
+}
+
 function initReminderScheduler() {
   cron.schedule(CRON_SCHEDULE, async () => {
     await processReminders();
     await processInAppReminders();
     await processScheduledNotifications();
     await cleanupOldActivities();
+     await cleanupOldSocialPosts();
   });
  
   console.log('🟢 Reminder scheduler initialized');
