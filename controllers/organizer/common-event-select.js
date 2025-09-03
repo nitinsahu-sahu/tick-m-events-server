@@ -599,9 +599,8 @@ exports.updateProviderBidStatus = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const { bidId } = req.params;
-        const { status, bidData } = req.body.data;
-        const acceptedAmount = Number(bidData.bidAmount);
+        const { bidId, projectId } = req.params;
+        const { status } = req.body.data;
 
         // Validate input
         if (!bidId) {
@@ -631,9 +630,9 @@ exports.updateProviderBidStatus = async (req, res, next) => {
                 message: 'Valid status (accepted) is required',
             });
         }
-        // isOrgnizerAccepted
         // Find the bid
         const bid = await Bid.findById(bidId).session(session);
+       
         if (!bid) {
             await session.abortTransaction();
             session.endSession();
@@ -643,7 +642,7 @@ exports.updateProviderBidStatus = async (req, res, next) => {
             });
         }
 
-        // Check if bid is already decided
+        // // Check if bid is already decided
         if (bid.status !== 'pending') {
             await session.abortTransaction();
             session.endSession();
@@ -653,9 +652,11 @@ exports.updateProviderBidStatus = async (req, res, next) => {
             });
         }
 
-        const updateData = {};
+        const updateData = {
+            status: "accepted"
+        };
         if (status === 'isProviderAccepted') {
-            if (!acceptedAmount || isNaN(acceptedAmount) || acceptedAmount <= 0) {
+            if (!bid.organizrAmount || isNaN(bid.organizrAmount) || bid.organizrAmount <= 0) {
                 await session.abortTransaction();
                 session.endSession();
                 return res.status(400).json({
@@ -664,21 +665,21 @@ exports.updateProviderBidStatus = async (req, res, next) => {
                 });
             }
 
-            updateData.winningBid = acceptedAmount;
+            updateData.winningBid = bid.organizrAmount;
             updateData.isProviderAccepted = true;
         }
 
-        // Update the bid
+        // // Update the bid
         const updatedBid = await Bid.findByIdAndUpdate(
             bidId,
             updateData,
             { new: true, runValidators: true, session }
         ).populate('providerId', 'name email');
 
-        // If bid is accepted, update the project to mark it as closed
+        // // If bid is accepted, update the project to mark it as closed
         if (status === 'isProviderAccepted') {
             const placeProject = await PlaceABid.findByIdAndUpdate(
-                bid.projectId,
+                projectId,
                 {
                     bidStatus: 'closed',
                     isSigned: true
@@ -692,7 +693,7 @@ exports.updateProviderBidStatus = async (req, res, next) => {
             // Reject all other bids for this project
             await Bid.updateMany(
                 {
-                    projectId: bid.projectId,
+                    projectId: projectId,
                     _id: { $ne: bidId },
                     status: 'pending'
                 },
@@ -704,7 +705,7 @@ exports.updateProviderBidStatus = async (req, res, next) => {
             );
         }
 
-        // Commit the transaction
+        // // Commit the transaction
         await session.commitTransaction();
         session.endSession();
 

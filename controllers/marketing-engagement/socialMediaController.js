@@ -1,6 +1,6 @@
 const SocialMediaPost = require('../../models/marketing-engagement/social-media-post');
 const cloudinary = require('cloudinary').v2;
-const Event =require('../../models/event-details/Event');
+const Event = require('../../models/event-details/Event');
 
 exports.createSocialMediaPost = async (req, res) => {
   try {
@@ -30,6 +30,7 @@ exports.createSocialMediaPost = async (req, res) => {
       reservationLink,
       hashtag,
       imageUrl: cloudinaryResult.secure_url,
+      mediaType: cloudinaryResult.resource_type,
 
     });
 
@@ -45,36 +46,52 @@ exports.getSocialSharePage = async (req, res) => {
     const { postId } = req.params;
     const post = await SocialMediaPost.findById(postId);
     if (!post) return res.status(404).send("Post not found");
- 
+
     const event = await Event.findById(post.event);
     const eventName = event?.eventName || "Event";
- 
+
     const shareUrl = `https://tick-m-events.vercel.app/post/${postId}`;
     const imageUrl = post.imageUrl || "https://via.placeholder.com/1200x630.png?text=Default+Image";
     const hashtag = post.hashtag || "#TickMEvents";
     const descriptionText = post.description?.replace(/"/g, '&quot;') || "Join us for an unforgettable experience! Get your tickets now!";
     const reservationLink = post.reservationLink || shareUrl;
     const fullDescription = `${descriptionText}. ${reservationLink}. ${hashtag}`;
- 
+
     const userAgent = req.get("User-Agent") || "";
     const isBot = /facebookexternalhit|twitterbot|linkedinbot|WhatsApp|Slackbot|Discordbot|Googlebot/i.test(userAgent);
- 
+
     // Set correct content type
     res.set("Content-Type", "text/html; charset=utf-8");
- 
+
     const metaTags = `
-      <meta property="og:title" content="${eventName}" />
-      <meta property="og:description" content="${fullDescription}" />
-      <meta property="og:image" content="${imageUrl}" />
-      <meta property="og:url" content="${shareUrl}" />
-      <meta property="og:type" content="website" />
+  <meta property="og:title" content="${eventName}" />
+  <meta property="og:description" content="${fullDescription}" />
+  <meta property="og:url" content="${shareUrl}" />
+  <meta property="og:type" content="website" />
  
-      <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content="${eventName}" />
-      <meta name="twitter:description" content="${fullDescription}" />
-      <meta name="twitter:image" content="${imageUrl}" />
+  ${post.mediaType === "video"
+        ? `
+        <meta property="og:video" content="${post.mediaUrl}" />
+        <meta property="og:video:type" content="video/mp4" />
+        <meta property="og:video:width" content="1280" />
+        <meta property="og:video:height" content="720" />
+        <meta name="twitter:card" content="player" />
+        <meta name="twitter:player" content="${post.mediaUrl}" />
+        <meta name="twitter:player:width" content="1280" />
+        <meta name="twitter:player:height" content="720" />
+      `
+        : `
+        <meta property="og:image" content="${post.mediaUrl || "https://via.placeholder.com/1200x630.png?text=Default+Image"}" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="${post.mediaUrl || "https://via.placeholder.com/1200x630.png?text=Default+Image"}" />
+      `
+      }
+ 
+  <meta name="twitter:title" content="${eventName}" />
+  <meta name="twitter:description" content="${fullDescription}" />
     `;
- 
+
+
     res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
