@@ -4,7 +4,6 @@ const Event = require('../../models/event-details/Event');
 
 // Create a new ticket configuration
 exports.createTicketConfiguration = async (req, res) => {
-
   const {
     tickets,
     payStatus,
@@ -18,52 +17,67 @@ exports.createTicketConfiguration = async (req, res) => {
     fullRefundDaysBefore,
     partialRefundPercent,
     noRefundDate
-  } = req.body
-
+  } = req.body;
+ 
   try {
-    const { eventId } = req.params
-    const ticketList = JSON.parse(tickets)
+    const { eventId } = req.params;
+    const ticketList = JSON.parse(tickets);
+ 
+    // Map tickets properly for TicketTypeSchema
+    const formattedTickets = ticketList.map(ticket => ({
+      ticketType: ticket.ticketType,
+      id: ticket.id,
+      price: ticket.price,
+      totalTickets: ticket.totalTickets,
+      description: ticket.description,
+      isLimitedSeat: ticket.isLimitedSeat ?? true,
+      isLinkPramotion: ticket.isLinkPramotion ?? false,
+    }));
+ 
     const refundPolicy = {
       fullRefund: fullRefundCheck,
-      fullRefundDaysBefore: fullRefundDaysBefore,
+      fullRefundDaysBefore,
       partialRefund: partialRefundCheck,
-      partialRefundPercent: partialRefundPercent,
+      partialRefundPercent,
       noRefundAfterDate: noRefundAfterDateCheck,
-      noRefundDate: noRefundDate
-    }
-    const ticketQuantity = ticketList.reduce((sum, ticket) => {
-      // Remove commas and convert to number
+      noRefundDate,
+    };
+ 
+    const ticketQuantity = formattedTickets.reduce((sum, ticket) => {
       const ticketCount = parseInt(ticket.totalTickets.replace(/,/g, ''), 10);
       return sum + (isNaN(ticketCount) ? 0 : ticketCount);
     }, 0);
+ 
     await Event.findByIdAndUpdate(
       { _id: eventId },
       { ticketQuantity },
       { new: true }
     );
+ 
     const newConfig = new TicketConfiguration({
       eventId,
-      tickets: ticketList,
+      tickets: formattedTickets, // 👈 now valid for TicketTypeSchema
       purchaseDeadlineDate,
       isPurchaseDeadlineEnabled,
       paymentMethods,
       refundPolicy,
       isRefundPolicyEnabled,
-      payStatus
+      payStatus,
+      createdBy: req.user._id, // ensure auth middleware is used
     });
-
+ 
     await newConfig.save();
-
+ 
     res.status(201).json({
       success: true,
-      message: 'Ticket configuration created successfully',
+      message: "Ticket configuration created successfully",
       ticketConfigId: newConfig._id,
     });
   } catch (error) {
-    console.error('Error creating ticket configuration:', error);
+    console.error("Error creating ticket configuration:", error);
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: "Server error",
       error: error.message,
     });
   }

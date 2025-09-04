@@ -69,7 +69,7 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('sendMessage', async ({ senderId, receiverId, message, conversationId,updatedAt,type}) => {
+  socket.on('sendMessage', async ({ senderId, receiverId, message, conversationId,updatedAt,type,files }) => {
     const receiver = users.find(user => user.userId === receiverId);
     const sender = users.find(user => user.userId === senderId);
     const user = await User.findById(senderId);
@@ -83,6 +83,7 @@ io.on('connection', socket => {
       receiverId,
       updatedAt,
       type,
+      files,
       user: {
         _id: user._id,
         fullname: user.name,
@@ -90,6 +91,8 @@ io.on('connection', socket => {
         profile: user.avatar
       }
     };
+    console.log(messageData);
+    
     // Always emit to sender
     if (sender) {
       io.to(sender.socketId).emit('getMessage', messageData);

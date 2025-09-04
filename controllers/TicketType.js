@@ -5,23 +5,28 @@ exports.fetchTicketType = async (req, res) => {
   try {
     // Assuming user ID is available in req.user._id (common with JWT/auth middleware)
     const userId = req.user._id;
-
+    const { eventId } = req.query;
     if (!userId) {
       return res.status(400).json({
         success: false,
         message: "User ID is required"
       });
     }
-
-    const ticketTypes = await TicketType.find({ createdBy: userId })
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: "Event ID is required"
+      });
+    }
+    const ticketTypes = await TicketType.find({ createdBy: userId,eventId })
       .sort({ createdAt: -1 }); // Optional: sort by newest first
-
+ 
     res.status(200).json({
       success: true,
       count: ticketTypes.length,
       data: ticketTypes
     });
-
+ 
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -30,12 +35,17 @@ exports.fetchTicketType = async (req, res) => {
     });
   }
 };
-
+ 
 exports.createTicketType = async (req, res) => {
-  const { name, quantity, ticketDescription, price, validity, options } = req.body
-
+  const { name, quantity, ticketDescription, price, validity, options, eventId } = req.body
+ 
   try {
-    await TicketType.create({
+        if (!eventId) {
+      return res.status(400).json({ message: "Event ID is required" });
+    }
+ 
+      const newTicket = await TicketType.create({
+       eventId,
       name,
       quantity: quantity === "Unlimited" ? "10000" : quantity,
       ticketDescription,
@@ -44,9 +54,11 @@ exports.createTicketType = async (req, res) => {
       options,
       createdBy: req.user._id  // Attach the user ID of the creator
     });
-
+ 
     res.status(201).json({
       message: "Ticket Type created successfully",
+       ticketTypeId: newTicket._id,
+      ticket: newTicket,
     });
   } catch (err) {
     res.status(500).json({

@@ -39,7 +39,7 @@ router.route('/eventPageCustomization/:id')
 
 // Event ticket Configuration Routes
 router.route('/tickets/:eventId')
-  .post(createTicketConfiguration)
+  .post(verifyToken, createTicketConfiguration)
 
 // Event Customization Routes
 router.route('/tickets/ec/:eventId/:ticketCustomId')

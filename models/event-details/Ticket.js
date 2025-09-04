@@ -33,7 +33,11 @@ const RefundPolicySchema = new mongoose.Schema({
 
 const TicketTypeSchema = new mongoose.Schema({
   ticketType: { type: String, required: true },
-  id: { type: String },
+  id: {
+    type: mongoose.Schema.Types.ObjectId,  
+    ref: "TicketType",                      
+    required: true
+  },
   price: { type: String, default: "0 XAF" },
   totalTickets: { type: String },
   description: { type: String ,required: true},
