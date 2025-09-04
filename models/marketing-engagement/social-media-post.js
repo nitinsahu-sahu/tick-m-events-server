@@ -6,6 +6,10 @@ const socialMediaPostSchema = new mongoose.Schema({
     ref: 'Event',
     required: true,
   },
+   mediaType: {                
+    type: String,
+    enum: ['image', 'video'],
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
