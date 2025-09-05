@@ -31,7 +31,7 @@ const ticketTypeSchema = new Schema({
   },
   validity: {
     type: Date,
-    required: [true, "Validity date is required"],
+    // required: [true, "Validity date is required"],
   },
   options: {
     transferableTicket: {

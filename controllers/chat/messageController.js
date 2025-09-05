@@ -169,25 +169,51 @@ function determineFileType(resourceType) {
 }
 
 exports.uploadsFile = async (req, res) => {
-console.log(req.files);
+  console.log('Upload request files:', req.files);
 
-    try {
+  try {
+    const files = req.files?.file;
 
-        const files = req.files?.file;
-
-        if (!files) {
-            return res.status(400).json({
-                success: false,
-                message: "Please upload file..."
-            });
-        }
-        const result = await cloudinary.uploader.upload(files.tempFilePath, {
-            folder: 'msg_Files',
-            crop: "scale"
-        });
-
-        res.status(200).send(result);
-    } catch (error) {
-        res.status(400).send({ error: error.message });
+    if (!files) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload file..."
+      });
     }
+
+    // Determine file type
+    const fileType = files.mimetype.split('/')[0]; // 'image', 'video', 'application', etc.
+    console.log('Detected file type:', fileType);
+
+    let uploadOptions = {
+      folder: 'msg_Files',
+    };
+
+    // Set resource_type based on file type
+    if (fileType === 'image') {
+      uploadOptions.resource_type = 'image';
+      uploadOptions.crop = "scale"; // Only for images
+    } else if (fileType === 'video') {
+      uploadOptions.resource_type = 'video';
+      // Add video-specific options
+      uploadOptions.chunk_size = 6000000; // 6MB chunks for large videos
+    } else {
+      // For documents and other files
+      uploadOptions.resource_type = 'raw';
+    }
+
+    console.log('Upload options:', uploadOptions);
+
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(files.tempFilePath, uploadOptions);
+    console.log('Upload result:', result);
+
+    res.status(200).send(result);
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(400).send({ 
+      success: false,
+      error: error.message 
+    });
+  }
 }
