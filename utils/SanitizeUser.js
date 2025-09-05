@@ -15,6 +15,7 @@ exports.sanitizeUser = (user) => {
         number: user.number,
         avatar: user.avatar,
         role: user.role,
-        status: user.status
+        status: user.status,
+        __id: user.__id
     }
 }

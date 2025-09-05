@@ -32,6 +32,25 @@ exports.savePaymentSettings = async (req, res) => {
   }
 };
 
+exports.deletePaymentSetting = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const settingId = req.params.id;
+ 
+    // Ensure the user owns this payment setting
+    const deleted = await PaymentSettings.findOneAndDelete({ _id: settingId, userId });
+ 
+    if (!deleted) {
+      return res.status(404).json({ message: "Payment setting not found." });
+    }
+ 
+    return res.status(200).json({ message: "Payment setting removed successfully." });
+  } catch (error) {
+    console.error("Error deleting payment setting:", error);
+    return res.status(500).json({ message: "Server error. Please try again." });
+  }
+};
+
 exports.getPaymentSettings = async (req, res) => {
   try {
     const userId = req.user._id;
