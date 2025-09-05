@@ -26,6 +26,13 @@ const sessionDurationSchema = new Schema({
 });
 
 const userSchema = new Schema({
+      __id: {
+        type: String,
+        default: function() {
+            // This will be set in the pre-save middleware
+            return "";
+        }
+    },
     socialLinks: SocialLinksSchema,
     username: {
         type: String,
@@ -193,7 +200,37 @@ const userSchema = new Schema({
     resetCodeExpires: Date
 }, { timestamps: true })
 
+function generateUniqueId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let id = 'TM-';
+  
+  // Generate 6 random characters from the charset
+  for (let i = 0; i < 6; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  
+  return id;
+}
 
+// For MongoDB schema method (if you need to ensure uniqueness in database)
+userSchema.statics.getNextUserId = async function() {
+  let isUnique = false;
+  let newId;
+  
+  while (!isUnique) {
+    // Generate a new ID
+    newId = generateUniqueId();
+    
+    // Check if it already exists in the database
+    const existingUser = await this.findOne({ __id: newId });
+    
+    if (!existingUser) {
+      isUnique = true;
+    }
+  }
+  
+  return newId;
+};
 
 
 // Method to compare passwords
@@ -220,6 +257,11 @@ userSchema.methods.updateAverageRating = async function () {
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
+    // Generate custom ID if this is a new document
+    if (this.isNew) {
+        this.__id = await this.constructor.getNextUserId();
+    }
+    
     if (!this.isModified("password")) {
         return next();
     }
