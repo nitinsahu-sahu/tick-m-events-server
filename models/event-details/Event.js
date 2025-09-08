@@ -79,6 +79,10 @@ const eventSchema = new Schema({
     type: Boolean,
     default: false
   },
+  payStatus: {
+    type: String,
+    enum: ['free', 'paid'],
+  },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

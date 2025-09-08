@@ -6,6 +6,7 @@ const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
 const Visibility = require('../../models/event-details/Visibility');
 const eventReview = require('../../models/event-details/eventReview');
+const Promotion = require('../../models/marketing-engagement/promotion-&-offer.schema');
 
 exports.getHomeRecommendationsEvents = async (req, res, next) => {
     try {
@@ -37,8 +38,6 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
             .sort({ date: 1 }) // Sort by date ascending (earliest first)
             .limit(10) // Limit to 10 upcoming events
             .lean();
-
-
 
         // 2. Get popular trending events
         const popularEvents = await Event.aggregate([
@@ -144,12 +143,14 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         // Helper function to get full event details
         const getEventDetails = async (events) => {
             return Promise.all(events.map(async (event) => {
-                const [organizer, customization, tickets, visibility, category] = await Promise.all([
+                const [organizer, customization, tickets, visibility, category,promotion] = await Promise.all([
                     Organizer.findOne({ eventId: event._id }).select('-socialMedia -website -createdAt -updatedAt -isDelete -__v').lean(),
                     Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                     Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                     Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-                    Category.findById(event.categoryId).select('name').lean()
+                    Category.findById(event.categoryId).select('name').lean(),
+                    Promotion.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+
                 ]);
 
                 return {
@@ -158,7 +159,8 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
                     customization,
                     tickets,
                     visibility,
-                    category: category?.name || 'General'
+                    category: category?.name || 'General',
+                    promotion
                 };
             }));
         };
