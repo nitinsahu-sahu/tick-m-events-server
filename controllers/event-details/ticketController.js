@@ -18,11 +18,11 @@ exports.createTicketConfiguration = async (req, res) => {
     partialRefundPercent,
     noRefundDate
   } = req.body;
- 
+
   try {
     const { eventId } = req.params;
     const ticketList = JSON.parse(tickets);
- 
+
     // Map tickets properly for TicketTypeSchema
     const formattedTickets = ticketList.map(ticket => ({
       ticketType: ticket.ticketType,
@@ -33,7 +33,7 @@ exports.createTicketConfiguration = async (req, res) => {
       isLimitedSeat: ticket.isLimitedSeat ?? true,
       isLinkPramotion: ticket.isLinkPramotion ?? false,
     }));
- 
+
     const refundPolicy = {
       fullRefund: fullRefundCheck,
       fullRefundDaysBefore,
@@ -42,18 +42,18 @@ exports.createTicketConfiguration = async (req, res) => {
       noRefundAfterDate: noRefundAfterDateCheck,
       noRefundDate,
     };
- 
+
     const ticketQuantity = formattedTickets.reduce((sum, ticket) => {
       const ticketCount = parseInt(ticket.totalTickets.replace(/,/g, ''), 10);
       return sum + (isNaN(ticketCount) ? 0 : ticketCount);
     }, 0);
- 
+
     await Event.findByIdAndUpdate(
       { _id: eventId },
-      { ticketQuantity },
+      { ticketQuantity, payStatus },
       { new: true }
     );
- 
+
     const newConfig = new TicketConfiguration({
       eventId,
       tickets: formattedTickets, // 👈 now valid for TicketTypeSchema
@@ -65,9 +65,9 @@ exports.createTicketConfiguration = async (req, res) => {
       payStatus,
       createdBy: req.user._id, // ensure auth middleware is used
     });
- 
+
     await newConfig.save();
- 
+
     res.status(201).json({
       success: true,
       message: "Ticket configuration created successfully",

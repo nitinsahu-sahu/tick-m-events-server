@@ -32,7 +32,7 @@ const eventSchema = new Schema({
   validationOptions: {
     selectedView: {
       type: String,
-      enum: ['scan', 'list'],
+      enum: ['scan', 'list','both'],
       default: 'scan'
     },
     listViewMethods: {
@@ -78,6 +78,10 @@ const eventSchema = new Schema({
   isDelete: {
     type: Boolean,
     default: false
+  },
+  payStatus: {
+    type: String,
+    enum: ['free', 'paid'],
   },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
