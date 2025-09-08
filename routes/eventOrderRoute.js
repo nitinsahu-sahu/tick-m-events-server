@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { createOrder, getOrdersByUser, downloadTicket, verifyTicket, getAllOrders, updateOrderVerifyEntryStatus,
-    fetchUserValidatedTickets, getPurchseTicketUserList } = require('../controllers/event-order/event-order-controller');
+    fetchUserValidatedTickets, getPurchseTicketUserList, 
+    downloadInvoice} = require('../controllers/event-order/event-order-controller');
 const { verifyToken } = require('../middleware/VerifyToken');
 
 
@@ -9,7 +10,7 @@ const { verifyToken } = require('../middleware/VerifyToken');
 // Create a new order
 router.post("/order", verifyToken, createOrder);
 router.get("/validated", verifyToken, fetchUserValidatedTickets);
-
+router.get('/invoice/:transactionId', downloadInvoice);
 // Get order by ID
 // router.get('/:id', getOrderById);
 

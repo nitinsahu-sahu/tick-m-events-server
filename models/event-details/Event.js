@@ -32,7 +32,7 @@ const eventSchema = new Schema({
   validationOptions: {
     selectedView: {
       type: String,
-      enum: ['scan', 'list'],
+      enum: ['scan', 'list','both'],
       default: 'scan'
     },
     listViewMethods: {
