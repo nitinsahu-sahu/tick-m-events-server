@@ -1023,3 +1023,131 @@ exports.getPurchseTicketUserList = async (req, res) => {
     });
   }
 };
+
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    if (!transactionId) {
+      return res.status(400).json({ message: 'Transaction ID is required' });
+    }
+ 
+    const order = await EventOrder.findOne({ transactionId }).populate('eventId');
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+ 
+    const event = order.eventId;
+ 
+    // Create PDF
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(require('@pdf-lib/fontkit'));
+    const page = pdfDoc.addPage([595, 842]); // A4 size
+    const { width, height } = page.getSize();
+ 
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontSize = 12;
+ 
+    let yPosition = height - 50;
+ 
+    // Header
+    page.drawText('Invoice', { x: 50, y: yPosition, size: 20, font, color: rgb(0, 0, 0) });
+    yPosition -= 40;
+ 
+    // Order info
+    page.drawText(`Invoice ID: ${order.transactionId}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 20;
+    page.drawText(`Date: ${order.createdAt.toLocaleDateString()}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 20;
+    page.drawText(`Customer Email: ${order.orderAddress.email}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 20;
+    page.drawText(`Payment Method: ${order.paymentMethod}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 20;
+    page.drawText(`Payment Status: ${order.paymentStatus || 'Pending'}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 30;
+ 
+    // Event info
+    page.drawText(`Event: ${event.eventName}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 20;
+    page.drawText(`Date: ${event.date}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 20;
+    page.drawText(`Location: ${event.location}`, { x: 50, y: yPosition, size: fontSize, font });
+    yPosition -= 40;
+ 
+    // Draw table headers
+    const tableX = 50;
+    let tableY = yPosition;
+    const colWidths = [250, 70, 100]; // Ticket Type, Qty, Price
+    const rowHeight = 20;
+ 
+    // Draw header background rectangle
+    page.drawRectangle({
+      x: tableX,
+      y: tableY - rowHeight,
+      width: colWidths.reduce((a, b) => a + b, 0),
+      height: rowHeight,
+      color: rgb(0.9, 0.9, 0.9),
+    });
+ 
+    // Header titles
+    page.drawText('Ticket Type', { x: tableX + 5, y: tableY - 15, size: fontSize, font, color: rgb(0, 0, 0) });
+    page.drawText('Quantity', { x: tableX + colWidths[0] + 5, y: tableY - 15, size: fontSize, font, color: rgb(0, 0, 0) });
+    page.drawText('Price (XAF)', { x: tableX + colWidths[0] + colWidths[1] + 5, y: tableY - 15, size: fontSize, font, color: rgb(0, 0, 0) });
+ 
+    tableY -= rowHeight;
+ 
+    // Draw table rows for tickets
+    order.tickets.forEach(ticket => {
+      // Draw ticket type
+      page.drawText(ticket.ticketType || 'N/A', { x: tableX + 5, y: tableY - 15, size: fontSize, font });
+      // Draw quantity
+      page.drawText(ticket.quantity.toString(), { x: tableX + colWidths[0] + 5, y: tableY - 15, size: fontSize, font });
+      // Draw price (unitPrice * quantity)
+      const totalPrice = (ticket.unitPrice || 0) * (ticket.quantity || 1);
+      page.drawText(totalPrice.toLocaleString(), { x: tableX + colWidths[0] + colWidths[1] + 5, y: tableY - 15, size: fontSize, font });
+ 
+      // Draw horizontal line after row
+      page.drawLine({
+        start: { x: tableX, y: tableY - rowHeight },
+        end: { x: tableX + colWidths.reduce((a, b) => a + b, 0), y: tableY - rowHeight },
+        thickness: 0.5,
+        color: rgb(0.7, 0.7, 0.7),
+      });
+ 
+      tableY -= rowHeight;
+    });
+ 
+    // Draw vertical lines (columns)
+    let xPos = tableX;
+    colWidths.forEach(width => {
+      page.drawLine({
+        start: { x: xPos, y: yPosition },
+        end: { x: xPos, y: tableY },
+        thickness: 0.5,
+        color: rgb(0.7, 0.7, 0.7),
+      });
+      xPos += width;
+    });
+    // Last vertical line at the end of the table
+    page.drawLine({
+      start: { x: xPos, y: yPosition },
+      end: { x: xPos, y: tableY },
+      thickness: 0.5,
+      color: rgb(0.7, 0.7, 0.7),
+    });
+ 
+    yPosition = tableY - 30;
+ 
+    // Total
+    page.drawText(`Total Amount: ${order.totalAmount?.toLocaleString()} XAF`, { x: 50, y: yPosition, size: 14, font });
+ 
+    // Save PDF
+    const pdfBytes = await pdfDoc.save();
+ 
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Invoice-${order.transactionId}.pdf`);
+    res.send(Buffer.from(pdfBytes));
+  } catch (error) {
+    console.error('Error generating invoice PDF:', error);
+    res.status(500).json({ message: 'Error generating invoice PDF', error: error.message });
+  }
+};
