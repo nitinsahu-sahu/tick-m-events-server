@@ -53,7 +53,7 @@ const eventOrderSchema = new Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['credit_card', 'paypal', 'upi', 'cod'],
+        enum: ['credit_card', 'paypal', 'upi', 'cod','cash'],
         required: true
     },
     refundStatus: {
