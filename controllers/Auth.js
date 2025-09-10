@@ -232,8 +232,9 @@ exports.login = async (req, res) => {
             };
         }
         await existingUser.save();
-
         const secureInfo = sanitizeUser(existingUser);
+console.log('secureInfo',secureInfo)
+
         const token = generateToken(secureInfo);
         const cookieExpiry = 2 * 60 * 60 * 1000;
 

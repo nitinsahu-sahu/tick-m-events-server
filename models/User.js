@@ -3,7 +3,6 @@ const { Schema } = mongoose
 const bcrypt = require("bcryptjs");
 const RewardTransaction = require("./RewardTrans");
 
-
 const SocialLinksSchema = new mongoose.Schema({
     instagram: {
         type: String,

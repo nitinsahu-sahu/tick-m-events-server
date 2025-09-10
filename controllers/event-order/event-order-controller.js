@@ -10,6 +10,9 @@ const { createOrderEmailTemplate } = require('../../utils/Emails-template');
 const QRCode = require('qrcode');
 const TicketType = require("../../models/TicketType");
 const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
+const RefundRequest = require("../../models/refund-managment/RefundRequest");
+const User = require("../../models/User");
+
 // Get Validated tickets
 exports.fetchUserValidatedTickets = async (req, res) => {
   try {
@@ -72,111 +75,117 @@ exports.createOrder = async (req, res) => {
   const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
   const transactionId = uuidToNumeric(uuidv4());
   const ticketCode = uuidToSixNumeric(uuidv4());
- 
+
   const session = await mongoose.startSession();
- 
+
   try {
-    const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails,deviceUsed } = req.body;
- 
+    const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
+
     // Input validation
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
- 
+
     const ticketList = JSON.parse(tickets);
     // const parsedOrderAddress = JSON.parse(orderAddress);
     const parsedOrderAddress = typeof orderAddress === 'string' ? JSON.parse(orderAddress) : orderAddress;
     const parsedParticipants = typeof participantDetails === 'string' ? JSON.parse(participantDetails) : participantDetails;
- 
+
     if (!parsedOrderAddress?.email || !parsedOrderAddress?.number || !parsedOrderAddress?.city) {
       return res.status(400).json({ message: 'Missing required address fields' });
     }
- 
+
     if (!Array.isArray(parsedParticipants) || parsedParticipants.length === 0) {
       return res.status(400).json({ message: 'At least one participant is required' });
     }
- 
+
     const userEmail = parsedOrderAddress.email;
     if (!Array.isArray(ticketList?.tickets) || ticketList.tickets.length === 0) {
       return res.status(400).json({ message: 'At least one ticket is required' });
     }
- 
+
     // Start transaction
     session.startTransaction();
- 
+
     // 1. First update the event's sold tickets count
     const totalSoldTickets = ticketList.tickets.reduce((sum, ticket) => {
       return sum + (Number(ticket.quantity) || 0);
     }, 0);
- 
+
     const updatedEvent = await Event.findByIdAndUpdate(
       eventId,
       { $inc: { soldTicket: totalSoldTickets } },
       { new: true, session }
     );
- 
+
     if (!updatedEvent) {
       throw new Error('Event not found');
     }
- 
+
     // 2. Update ticket configuration
     const ticketConfig = await TicketConfiguration.findOne({
       eventId: eventId
     }).session(session);
- 
+
     if (!ticketConfig) {
       throw new Error(`No ticket configuration found for event ID: ${eventId}`);
     }
- 
+    console.log('ticketConfig', ticketConfig);
+
     // Process each ticket
     for (const orderedTicket of ticketList.tickets) {
-      const ticketType = ticketConfig.tickets.find(
-        t => t.id === orderedTicket.ticketId || t._id?.toString() === orderedTicket.ticketId
-      );
- 
+      console.log('orderedTicket', orderedTicket);
+
+      const ticketType = ticketConfig.tickets.find(t => {
+        const idString = t.id?.toString();
+        const _idString = t._id?.toString();
+        console.log(`Comparing: ${idString} or ${_idString} with ${orderedTicket.ticketId}`);
+        return idString === orderedTicket.ticketId || _idString === orderedTicket.ticketId;
+      });
+
       if (!ticketType) {
+        console.log('Available ticket IDs:', ticketConfig.tickets.map(t => ({
+          id: t.id?.toString(),
+          _id: t._id?.toString()
+        })));
         throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
       }
- 
+
       const availableTickets = Number(ticketType.totalTickets) || 0;
       const orderedQuantity = Number(orderedTicket.quantity) || 0;
- 
-      // if (availableTickets < orderedQuantity) {
-      //   throw new Error(`Not enough tickets available for ${ticketType.ticketType}`);
-      // }
- 
+
       ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
     }
- 
-    // Process each ticket
+
     // Process each ticket
     for (const orderedTicket of ticketList.tickets) {
       const orderedQuantity = Number(orderedTicket.quantity) || 0;
- 
+
       try {
         const updatedTicket = await TicketType.findByIdAndUpdate(
           orderedTicket.ticketId,
           { $inc: { sold: orderedQuantity } },
           { new: true, session }
         );
- 
+        console.log('updatedTicket', updatedTicket);
+
         if (!updatedTicket) {
           console.error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
           throw new Error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
         }
- 
+
         console.log('Updated ticket sold count:', updatedTicket.sold);
       } catch (updateError) {
         console.error('Error updating ticket sold count:', updateError);
         throw updateError; // This will trigger transaction rollback
       }
     }
- 
+
     await ticketConfig.save({ session });
- 
+
     // Generate QR code
     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
- 
+
     // Create order
     const newOrder = new EventOrder({
       eventId,
@@ -191,9 +200,9 @@ exports.createOrder = async (req, res) => {
       qrCode: qrImage,
       deviceUsed
     });
- 
+
     const savedOrder = await newOrder.save({ session });
- 
+
     // Commit transaction if everything succeeded
     await session.commitTransaction();
     const event = await Event.findById(eventId).select('eventName date time location');
@@ -208,18 +217,18 @@ exports.createOrder = async (req, res) => {
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
     }
- 
+
     res.status(201).json({
       success: true,
       savedOrder,
       message: "Tickets booked successfully"
     });
- 
+
   } catch (error) {
     // Abort transaction on error
     await session.abortTransaction();
     console.error('Order processing error:', error);
- 
+
     res.status(500).json({
       success: false,
       message: 'Error processing order',
@@ -315,34 +324,34 @@ exports.getOrderById = async (req, res) => {
 exports.getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
- 
+
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ message: "Invalid user ID" });
     }
- 
+
     // 1. Get all orders for the user
     const orders = await EventOrder.find({ userId, verifyEntry: false }).sort({ createdAt: -1 });
- 
+
     // 2. Extract all unique eventIds
     const eventIds = [...new Set(orders.map(order => order.eventId))];
- 
+
     // 4.5 Fetch CustomPhotoFrames for the events
     const photoFrames = await CustomPhotoFrame.find({ eventId: { $in: eventIds } });
     const photoFrameMap = {};
     photoFrames.forEach(frame => {
       photoFrameMap[frame.eventId.toString()] = frame;
     });
- 
+
     // 3. Fetch corresponding events
     const events = await Event.find({ _id: { $in: eventIds } });
     const eventMap = {};
     events.forEach(event => {
       eventMap[event._id.toString()] = event;
     });
- 
+
     // 4. Fetch TicketConfiguration for those events
     const ticketConfigs = await TicketConfiguration.find({ eventId: { $in: eventIds.map(id => id.toString()) } });
- 
+
     const configMap = {};
     ticketConfigs.forEach(config => {
       configMap[config.eventId] = {
@@ -350,7 +359,7 @@ exports.getOrdersByUser = async (req, res) => {
         isRefundPolicyEnabled: config.isRefundPolicyEnabled || false
       };
     });
- 
+
     // 5. Enrich each order
     const enrichedOrders = orders.map(order => {
       const event = eventMap[order.eventId] || null;
@@ -883,33 +892,33 @@ exports.updateOrderVerifyEntryStatus = async (req, res) => {
   try {
     const { entryTime, verifyEntry } = req.body;
     const { ticketCode, participantId, name } = req.body.verifyData;
- 
+
     // Check if at least one identifier is provided
     if (!ticketCode && !participantId && !name) {
       return res.status(400).json({
         message: "Please provide at least one identifier (ticketCode, participantId, or name)"
       });
     }
- 
+
     // Check if verifyEntry is provided
     if (typeof verifyEntry !== 'boolean') {
       return res.status(400).json({
         message: "Please provide a valid verifyEntry status (true/false)"
       });
     }
- 
+
     let updatedOrder;
- 
+
     if (participantId || name) {
-     
+
       // const filter = { ticketCode };
       const filter = {};
       // if (participantId) filter["participantDetails._id"] = participantId;
       // if (name) filter["participantDetails.name"] = name;
-      if (ticketCode) filter.ticketCode = ticketCode; 
+      if (ticketCode) filter.ticketCode = ticketCode;
       if (participantId) filter["participantDetails._id"] = participantId;
       if (name) filter["participantDetails.name"] = name;
- 
+
       updatedOrder = await EventOrder.findOneAndUpdate(
         filter,
         {
@@ -929,13 +938,13 @@ exports.updateOrderVerifyEntryStatus = async (req, res) => {
         { new: true }
       );
     }
- 
+
     if (!updatedOrder) {
       return res.status(404).json({
         message: "No matching order/participant found with the provided identifiers"
       });
     }
- 
+
     res.status(200).json({
       message: "Entry status updated successfully",
       data: {
@@ -1030,29 +1039,29 @@ exports.downloadInvoice = async (req, res) => {
     if (!transactionId) {
       return res.status(400).json({ message: 'Transaction ID is required' });
     }
- 
+
     const order = await EventOrder.findOne({ transactionId }).populate('eventId');
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
- 
+
     const event = order.eventId;
- 
+
     // Create PDF
     const pdfDoc = await PDFDocument.create();
     pdfDoc.registerFontkit(require('@pdf-lib/fontkit'));
     const page = pdfDoc.addPage([595, 842]); // A4 size
     const { width, height } = page.getSize();
- 
+
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontSize = 12;
- 
+
     let yPosition = height - 50;
- 
+
     // Header
     page.drawText('Invoice', { x: 50, y: yPosition, size: 20, font, color: rgb(0, 0, 0) });
     yPosition -= 40;
- 
+
     // Order info
     page.drawText(`Invoice ID: ${order.transactionId}`, { x: 50, y: yPosition, size: fontSize, font });
     yPosition -= 20;
@@ -1064,7 +1073,7 @@ exports.downloadInvoice = async (req, res) => {
     yPosition -= 20;
     page.drawText(`Payment Status: ${order.paymentStatus || 'Pending'}`, { x: 50, y: yPosition, size: fontSize, font });
     yPosition -= 30;
- 
+
     // Event info
     page.drawText(`Event: ${event.eventName}`, { x: 50, y: yPosition, size: fontSize, font });
     yPosition -= 20;
@@ -1072,13 +1081,13 @@ exports.downloadInvoice = async (req, res) => {
     yPosition -= 20;
     page.drawText(`Location: ${event.location}`, { x: 50, y: yPosition, size: fontSize, font });
     yPosition -= 40;
- 
+
     // Draw table headers
     const tableX = 50;
     let tableY = yPosition;
     const colWidths = [250, 70, 100]; // Ticket Type, Qty, Price
     const rowHeight = 20;
- 
+
     // Draw header background rectangle
     page.drawRectangle({
       x: tableX,
@@ -1087,14 +1096,14 @@ exports.downloadInvoice = async (req, res) => {
       height: rowHeight,
       color: rgb(0.9, 0.9, 0.9),
     });
- 
+
     // Header titles
     page.drawText('Ticket Type', { x: tableX + 5, y: tableY - 15, size: fontSize, font, color: rgb(0, 0, 0) });
     page.drawText('Quantity', { x: tableX + colWidths[0] + 5, y: tableY - 15, size: fontSize, font, color: rgb(0, 0, 0) });
     page.drawText('Price (XAF)', { x: tableX + colWidths[0] + colWidths[1] + 5, y: tableY - 15, size: fontSize, font, color: rgb(0, 0, 0) });
- 
+
     tableY -= rowHeight;
- 
+
     // Draw table rows for tickets
     order.tickets.forEach(ticket => {
       // Draw ticket type
@@ -1104,7 +1113,7 @@ exports.downloadInvoice = async (req, res) => {
       // Draw price (unitPrice * quantity)
       const totalPrice = (ticket.unitPrice || 0) * (ticket.quantity || 1);
       page.drawText(totalPrice.toLocaleString(), { x: tableX + colWidths[0] + colWidths[1] + 5, y: tableY - 15, size: fontSize, font });
- 
+
       // Draw horizontal line after row
       page.drawLine({
         start: { x: tableX, y: tableY - rowHeight },
@@ -1112,10 +1121,10 @@ exports.downloadInvoice = async (req, res) => {
         thickness: 0.5,
         color: rgb(0.7, 0.7, 0.7),
       });
- 
+
       tableY -= rowHeight;
     });
- 
+
     // Draw vertical lines (columns)
     let xPos = tableX;
     colWidths.forEach(width => {
@@ -1134,20 +1143,89 @@ exports.downloadInvoice = async (req, res) => {
       thickness: 0.5,
       color: rgb(0.7, 0.7, 0.7),
     });
- 
+
     yPosition = tableY - 30;
- 
+
     // Total
     page.drawText(`Total Amount: ${order.totalAmount?.toLocaleString()} XAF`, { x: 50, y: yPosition, size: 14, font });
- 
+
     // Save PDF
     const pdfBytes = await pdfDoc.save();
- 
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Invoice-${order.transactionId}.pdf`);
     res.send(Buffer.from(pdfBytes));
   } catch (error) {
     console.error('Error generating invoice PDF:', error);
     res.status(500).json({ message: 'Error generating invoice PDF', error: error.message });
+  }
+};
+
+exports.transferTicket = async (req, res) => {
+  try {
+    const { orderId, beneficiaryId } = req.body;
+    const loggedInUserId = req.user._id;
+ 
+    if (!orderId || !beneficiaryId) {
+      return res.status(400).json({
+        success: false,
+        message: "Order ID and Beneficiary ID are required",
+      });
+    }
+ 
+    // 0️⃣ Check if a refund already exists for this order
+    const existingRefund = await RefundRequest.findOne({
+      orderId,
+      userId: loggedInUserId,
+      refundStatus: { $in: ["pending", "approved"] }, // pending or approved
+    });
+ 
+    if (existingRefund) {
+      return res.status(400).json({
+        success: false,
+        message: "⚠️ You have already requested a refund for this ticket. Please cancel the refund before sharing the ticket.",
+      });
+    }
+ 
+    // 1️⃣ Check beneficiary exists
+    const beneficiary = await User.findOne({ __id: beneficiaryId, role: "participant" });
+    if (!beneficiary) {
+      return res.status(404).json({
+        success: false,
+        message: "Beneficiary not found or not a participant",
+      });
+    }
+ 
+    // 2️⃣ Find sender order
+    const senderOrder = await EventOrder.findOne({
+      _id: orderId,
+      userId: loggedInUserId,
+    });
+ 
+    if (!senderOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found for this user",
+      });
+    }
+ 
+    // 3️⃣ Transfer entire order to beneficiary
+    senderOrder.userId = beneficiary._id;
+    senderOrder.updatedAt = new Date();
+    await senderOrder.save();
+ 
+    return res.status(200).json({
+      success: true,
+      message: "Tickets transferred successfully",
+      updatedOrder: senderOrder,
+    });
+ 
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
