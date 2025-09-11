@@ -171,7 +171,7 @@ const userSchema = new Schema({
     referralCode: {
         type: String,
         unique: true,
-        sparse: true
+        // sparse: true
     },
     referredBy: {
         type: Schema.Types.ObjectId,

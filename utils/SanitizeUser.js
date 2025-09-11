@@ -1,6 +1,4 @@
 exports.sanitizeUser = (user) => {
-    console.log('user',user);
-    
     return {
         _id: user._id,
         socialLinks: user.socialLinks,
@@ -19,6 +17,8 @@ exports.sanitizeUser = (user) => {
         role: user.role,
         status: user.status,
         __id: user.__id,
-        referCode: user.referrelCode
+        referralCode: user.referralCode,
+        rewardPoints: user.rewardPoints,
+        referralCount: user.referralCount
     }
 }
