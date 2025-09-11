@@ -233,8 +233,6 @@ exports.login = async (req, res) => {
         }
         await existingUser.save();
         const secureInfo = sanitizeUser(existingUser);
-console.log('secureInfo',secureInfo)
-
         const token = generateToken(secureInfo);
         const cookieExpiry = 2 * 60 * 60 * 1000;
 
@@ -333,16 +331,28 @@ exports.getUserProfile = async (req, res) => {
     try {
         const userId = req.params.id;
 
-        const user = await User.findById(userId).select('-password -createdAt');
+        const user = await User.findById(userId).select('-password -createdAt -__v');
 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
+
+        // Check if the user is a provider - if not, return a message
+        if (user.role !== 'provider') {
+            return res.status(200).json({
+                success: true,
+                message: "This user is not a service provider.",
+                user: null, // Don't return user data
+                services: null // Don't return services
+            });
+        }
+
+        // Only fetch services if the user is a provider
         const services = await UserServiceRequest.find({ createdBy: user._id }).select('-createdAt -updatedAt');
 
         res.status(200).json({
             success: true,
-            message: "Profile fetch successfully.",
+            message: "Provider profile fetched successfully.",
             user,
             services
         });
@@ -605,7 +615,6 @@ exports.forgotPassword = async (req, res) => {
         res.status(200).json({ message: `Password Reset link sent to ${isExistingUser.email}` })
 
     } catch (error) {
-        console.log(error);
         res.status(500).json({ message: 'Error occured while sending password reset mail' })
     }
 }
@@ -649,7 +658,6 @@ exports.resetPassword = async (req, res) => {
         return res.status(404).json({ message: "Reset Link has been expired" })
 
     } catch (error) {
-        console.log(error);
         res.status(500).json({ message: "Error occured while resetting the password, please try again later" })
     }
 }
@@ -724,7 +732,6 @@ exports.checkAuth = async (req, res) => {
         }
         res.sendStatus(401)
     } catch (error) {
-        console.log(error);
         res.sendStatus(500)
     }
 }
