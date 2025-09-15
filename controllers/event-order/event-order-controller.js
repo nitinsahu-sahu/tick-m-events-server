@@ -12,7 +12,7 @@ const TicketType = require("../../models/TicketType");
 const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const RefundRequest = require("../../models/refund-managment/RefundRequest");
 const User = require("../../models/User");
-
+const axios = require("axios");
 // Get Validated tickets
 exports.fetchUserValidatedTickets = async (req, res) => {
   try {
