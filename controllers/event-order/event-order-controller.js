@@ -70,123 +70,199 @@ exports.fetchUserValidatedTickets = async (req, res) => {
   }
 };
 
+// exports.createOrder = async (req, res) => {
+//   const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
+//   const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
+//   const transactionId = uuidToNumeric(uuidv4());
+//   const ticketCode = uuidToSixNumeric(uuidv4());
+
+//   const session = await mongoose.startSession();
+
+//   try {
+//     const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
+
+//     // Input validation
+//     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
+//       return res.status(400).json({ message: 'Missing required fields' });
+//     }
+
+//     const ticketList = JSON.parse(tickets);
+//     // const parsedOrderAddress = JSON.parse(orderAddress);
+//     const parsedOrderAddress = typeof orderAddress === 'string' ? JSON.parse(orderAddress) : orderAddress;
+//     const parsedParticipants = typeof participantDetails === 'string' ? JSON.parse(participantDetails) : participantDetails;
+
+//     if (!parsedOrderAddress?.email || !parsedOrderAddress?.number || !parsedOrderAddress?.city) {
+//       return res.status(400).json({ message: 'Missing required address fields' });
+//     }
+
+//     if (!Array.isArray(parsedParticipants) || parsedParticipants.length === 0) {
+//       return res.status(400).json({ message: 'At least one participant is required' });
+//     }
+
+//     const userEmail = parsedOrderAddress.email;
+//     if (!Array.isArray(ticketList?.tickets) || ticketList.tickets.length === 0) {
+//       return res.status(400).json({ message: 'At least one ticket is required' });
+//     }
+
+//     // Start transaction
+//     session.startTransaction();
+
+//     // 1. First update the event's sold tickets count
+//     const totalSoldTickets = ticketList.tickets.reduce((sum, ticket) => {
+//       return sum + (Number(ticket.quantity) || 0);
+//     }, 0);
+
+//     const updatedEvent = await Event.findByIdAndUpdate(
+//       eventId,
+//       { $inc: { soldTicket: totalSoldTickets } },
+//       { new: true, session }
+//     );
+
+//     if (!updatedEvent) {
+//       throw new Error('Event not found');
+//     }
+
+//     // 2. Update ticket configuration
+//     const ticketConfig = await TicketConfiguration.findOne({
+//       eventId: eventId
+//     }).session(session);
+
+//     if (!ticketConfig) {
+//       throw new Error(`No ticket configuration found for event ID: ${eventId}`);
+//     }
+//     console.log('ticketConfig', ticketConfig);
+
+//     // Process each ticket
+//     for (const orderedTicket of ticketList.tickets) {
+//       console.log('orderedTicket', orderedTicket);
+
+//       const ticketType = ticketConfig.tickets.find(t => {
+//         const idString = t.id?.toString();
+//         const _idString = t._id?.toString();
+//         console.log(`Comparing: ${idString} or ${_idString} with ${orderedTicket.ticketId}`);
+//         return idString === orderedTicket.ticketId || _idString === orderedTicket.ticketId;
+//       });
+
+//       if (!ticketType) {
+//         console.log('Available ticket IDs:', ticketConfig.tickets.map(t => ({
+//           id: t.id?.toString(),
+//           _id: t._id?.toString()
+//         })));
+//         throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
+//       }
+
+//       const availableTickets = Number(ticketType.totalTickets) || 0;
+//       const orderedQuantity = Number(orderedTicket.quantity) || 0;
+
+//       ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
+//     }
+
+//     // Process each ticket
+//     for (const orderedTicket of ticketList.tickets) {
+//       const orderedQuantity = Number(orderedTicket.quantity) || 0;
+
+//       try {
+//         const updatedTicket = await TicketType.findByIdAndUpdate(
+//           orderedTicket.ticketId,
+//           { $inc: { sold: orderedQuantity } },
+//           { new: true, session }
+//         );
+//         console.log('updatedTicket', updatedTicket);
+
+//         if (!updatedTicket) {
+//           console.error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
+//           throw new Error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
+//         }
+
+//         console.log('Updated ticket sold count:', updatedTicket.sold);
+//       } catch (updateError) {
+//         console.error('Error updating ticket sold count:', updateError);
+//         throw updateError; // This will trigger transaction rollback
+//       }
+//     }
+
+//     await ticketConfig.save({ session });
+
+//     // Generate QR code
+//     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
+
+//     // Create order
+//     const newOrder = new EventOrder({
+//       eventId,
+//       userId: req.user._id,
+//       orderAddress: parsedOrderAddress,
+//       participantDetails: parsedParticipants,
+//       tickets: ticketList.tickets,
+//       totalAmount,
+//       paymentMethod,
+//       transactionId,
+//       ticketCode,
+//       qrCode: qrImage,
+//       deviceUsed
+//     });
+
+//     const savedOrder = await newOrder.save({ session });
+
+//     // Commit transaction if everything succeeded
+//     await session.commitTransaction();
+//     const event = await Event.findById(eventId).select('eventName date time location');
+//     // Send confirmation email (don't fail if email fails)
+//     try {
+//       const emailHtml = await createOrderEmailTemplate(savedOrder, userEmail, event);
+//       await sendMail(
+//         userEmail,
+//         'Your Ticket Purchase Confirmation',
+//         emailHtml
+//       );
+//     } catch (emailError) {
+//       console.error('Email sending failed:', emailError);
+//     }
+
+//     res.status(201).json({
+//       success: true,
+//       savedOrder,
+//       message: "Tickets booked successfully"
+//     });
+
+//   } catch (error) {
+//     // Abort transaction on error
+//     await session.abortTransaction();
+//     console.error('Order processing error:', error);
+
+//     res.status(500).json({
+//       success: false,
+//       message: 'Error processing order',
+//       error: error.message
+//     });
+//   } finally {
+//     // End session in all cases
+//     session.endSession();
+//   }
+// };
 exports.createOrder = async (req, res) => {
-  const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
-  const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
-  const transactionId = uuidToNumeric(uuidv4());
-  const ticketCode = uuidToSixNumeric(uuidv4());
-
   const session = await mongoose.startSession();
-
+  session.startTransaction();  // ensure transaction started
+ 
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
-
-    // Input validation
+    console.log("createOrder called with:", { eventId, totalAmount, paymentMethod, orderAddress, tickets, participantDetails, deviceUsed });
+ 
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
-      return res.status(400).json({ message: 'Missing required fields' });
+      console.log("createOrder: missing fields");
+      return res.status(400).json({ message: "Missing required fields" });
     }
-
+ 
     const ticketList = JSON.parse(tickets);
-    // const parsedOrderAddress = JSON.parse(orderAddress);
-    const parsedOrderAddress = typeof orderAddress === 'string' ? JSON.parse(orderAddress) : orderAddress;
-    const parsedParticipants = typeof participantDetails === 'string' ? JSON.parse(participantDetails) : participantDetails;
-
-    if (!parsedOrderAddress?.email || !parsedOrderAddress?.number || !parsedOrderAddress?.city) {
-      return res.status(400).json({ message: 'Missing required address fields' });
-    }
-
-    if (!Array.isArray(parsedParticipants) || parsedParticipants.length === 0) {
-      return res.status(400).json({ message: 'At least one participant is required' });
-    }
-
-    const userEmail = parsedOrderAddress.email;
-    if (!Array.isArray(ticketList?.tickets) || ticketList.tickets.length === 0) {
-      return res.status(400).json({ message: 'At least one ticket is required' });
-    }
-
-    // Start transaction
-    session.startTransaction();
-
-    // 1. First update the event's sold tickets count
-    const totalSoldTickets = ticketList.tickets.reduce((sum, ticket) => {
-      return sum + (Number(ticket.quantity) || 0);
-    }, 0);
-
-    const updatedEvent = await Event.findByIdAndUpdate(
-      eventId,
-      { $inc: { soldTicket: totalSoldTickets } },
-      { new: true, session }
-    );
-
-    if (!updatedEvent) {
-      throw new Error('Event not found');
-    }
-
-    // 2. Update ticket configuration
-    const ticketConfig = await TicketConfiguration.findOne({
-      eventId: eventId
-    }).session(session);
-
-    if (!ticketConfig) {
-      throw new Error(`No ticket configuration found for event ID: ${eventId}`);
-    }
-    console.log('ticketConfig', ticketConfig);
-
-    // Process each ticket
-    for (const orderedTicket of ticketList.tickets) {
-      console.log('orderedTicket', orderedTicket);
-
-      const ticketType = ticketConfig.tickets.find(t => {
-        const idString = t.id?.toString();
-        const _idString = t._id?.toString();
-        console.log(`Comparing: ${idString} or ${_idString} with ${orderedTicket.ticketId}`);
-        return idString === orderedTicket.ticketId || _idString === orderedTicket.ticketId;
-      });
-
-      if (!ticketType) {
-        console.log('Available ticket IDs:', ticketConfig.tickets.map(t => ({
-          id: t.id?.toString(),
-          _id: t._id?.toString()
-        })));
-        throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
-      }
-
-      const availableTickets = Number(ticketType.totalTickets) || 0;
-      const orderedQuantity = Number(orderedTicket.quantity) || 0;
-
-      ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
-    }
-
-    // Process each ticket
-    for (const orderedTicket of ticketList.tickets) {
-      const orderedQuantity = Number(orderedTicket.quantity) || 0;
-
-      try {
-        const updatedTicket = await TicketType.findByIdAndUpdate(
-          orderedTicket.ticketId,
-          { $inc: { sold: orderedQuantity } },
-          { new: true, session }
-        );
-        console.log('updatedTicket', updatedTicket);
-
-        if (!updatedTicket) {
-          console.error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
-          throw new Error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
-        }
-
-        console.log('Updated ticket sold count:', updatedTicket.sold);
-      } catch (updateError) {
-        console.error('Error updating ticket sold count:', updateError);
-        throw updateError; // This will trigger transaction rollback
-      }
-    }
-
-    await ticketConfig.save({ session });
-
-    // Generate QR code
+    const parsedOrderAddress = typeof orderAddress === "string" ? JSON.parse(orderAddress) : orderAddress;
+    const parsedParticipants = typeof participantDetails === "string" ? JSON.parse(participantDetails) : participantDetails;
+ 
+    console.log("Parsed ticketList, participants:", ticketList, parsedParticipants);
+ 
+    const transactionId = uuidv4();
+    const ticketCode = Math.floor(100000 + Math.random() * 900000);
+ 
     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
-
-    // Create order
+ 
     const newOrder = new EventOrder({
       eventId,
       userId: req.user._id,
@@ -198,45 +274,99 @@ exports.createOrder = async (req, res) => {
       transactionId,
       ticketCode,
       qrCode: qrImage,
-      deviceUsed
+      deviceUsed,
+      paymentStatus: "pending",
     });
-
+ 
     const savedOrder = await newOrder.save({ session });
-
-    // Commit transaction if everything succeeded
+    console.log("Order saved:", savedOrder._id);
+ 
+    // Now call Fapshi
+    const fapshiPayload = {
+      amount: Number(totalAmount),  // ensure it's a number
+      email: parsedOrderAddress.email,
+      redirectUrl: `${process.env.FRONTEND_URL}/payment-result/${savedOrder._id}`,
+      userId: req.user._id.toString(),
+      externalId: transactionId,
+      message: `Ticket purchase for event ${eventId}`,
+    };
+    console.log("FRONTEND_URL from env:", process.env.FRONTEND_URL);
+console.log("Redirect URL being sent:", fapshiPayload.redirectUrl);
+    console.log("Calling Fapshi with:", fapshiPayload);
+   
+    const fapshiResponse = await axios.post(
+      "https://sandbox.fapshi.com/initiate-pay",
+      fapshiPayload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          apikey: process.env.FAPSHI_API_KEY,
+          apiuser: process.env.FAPSHI_API_USER,
+        },
+      }
+    );
+    console.log("Fapshi response data:", fapshiResponse.data);
+ 
     await session.commitTransaction();
-    const event = await Event.findById(eventId).select('eventName date time location');
-    // Send confirmation email (don't fail if email fails)
-    try {
-      const emailHtml = await createOrderEmailTemplate(savedOrder, userEmail, event);
-      await sendMail(
-        userEmail,
-        'Your Ticket Purchase Confirmation',
-        emailHtml
-      );
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-    }
-
+ 
     res.status(201).json({
       success: true,
-      savedOrder,
-      message: "Tickets booked successfully"
+      order: savedOrder,
+      paymentUrl: fapshiResponse.data?.link,
+      message: "Redirect user to payment link",
     });
-
+ 
   } catch (error) {
-    // Abort transaction on error
     await session.abortTransaction();
-    console.error('Order processing error:', error);
-
+    console.error("Error in createOrder:", error.response?.data || error.message || error);
+ 
     res.status(500).json({
       success: false,
-      message: 'Error processing order',
-      error: error.message
+      message: "Error creating order",
+      error: error.response?.data || error.message
     });
   } finally {
-    // End session in all cases
     session.endSession();
+  }
+};
+ 
+exports.fapshiWebhook = async (req, res) => {
+  try {
+    console.log("Fapshi webhook received:", req.body);
+ 
+    const { externalId, status, transId } = req.body;
+ 
+    // externalId = transactionId you sent when creating order
+    if (!externalId) {
+      return res.status(400).json({ message: "Missing externalId" });
+    }
+ 
+    // Find order by transactionId
+    const order = await EventOrder.findOne({ transactionId: externalId });
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+ 
+    // Update payment status
+    if (status === "SUCCESSFUL") {
+      order.paymentStatus = "confirmed";
+    } else if (status === "FAILED") {
+      order.paymentStatus = "failed";
+    } else {
+      order.paymentStatus = "pending";
+    }
+ 
+    order.transactionId = transId || order.transactionId;
+    await order.save();
+ 
+    console.log(`Order ${order._id} updated to ${order.paymentStatus}`);
+ 
+    // Respond so Fapshi knows we received the webhook
+    res.status(200).json({ message: "Webhook processed" });
+ 
+  } catch (err) {
+    console.error("Error in fapshiWebhook:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
