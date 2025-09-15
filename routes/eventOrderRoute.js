@@ -3,7 +3,8 @@ const router = express.Router();
 const { createOrder, getOrdersByUser, downloadTicket, verifyTicket, getAllOrders, updateOrderVerifyEntryStatus,
     fetchUserValidatedTickets, getPurchseTicketUserList, 
     downloadInvoice,
-    transferTicket} = require('../controllers/event-order/event-order-controller');
+    transferTicket,
+    fapshiWebhook} = require('../controllers/event-order/event-order-controller');
 const { verifyToken } = require('../middleware/VerifyToken');
 
 
@@ -13,6 +14,7 @@ router.post('/transfer-ticket', verifyToken, transferTicket);
 router.post("/order", verifyToken, createOrder);
 router.get("/validated", verifyToken, fetchUserValidatedTickets);
 router.get('/invoice/:transactionId', downloadInvoice);
+router.post("/fapshi-webhook", fapshiWebhook);
 // Get order by ID
 // router.get('/:id', getOrderById);
 
