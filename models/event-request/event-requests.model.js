@@ -8,14 +8,23 @@ const eventRequestSchema = new mongoose.Schema({
   serviceCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category' },
   providerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   eventLocation: { type: String, required: true },
-  status: {
+  providerStatus: {
     type: String,
-    enum: ['accepted', 'requested-by-organizer', 'accepted-by-provider', 'rejected-by-provider', 'rejected-by-organizer', 'accepted-by-organizer'],
-    default: 'requested-by-organizer'
+    enum: ['accepted', 'pending', 'rejected'],
+    default: 'pending'
   },
-  contractStatus: {
+  orgStatus: {
     type: String,
-    enum: ['pending', 'signed', 'ongoing', 'completed', 'cancelled'],
+    enum: ['accepted', 'request', 'rejected'],
+    default: 'request'
+  },
+  isSigned: {
+    type: Boolean,
+    default: false
+  },
+  projectStatus: {
+    type: String,
+    enum: ['pending', 'ongoing', 'completed', 'cancelled'],
     default: 'pending'
   },
   orgBudget: {
@@ -26,7 +35,7 @@ const eventRequestSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  
+
   orgAdditionalRequirement: {
     type: String,
   },
