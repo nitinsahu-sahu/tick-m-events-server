@@ -3,9 +3,9 @@ const { v4: uuidv4 } = require('uuid');
 const { createWithdrawalOTPTemplate } = require('../../utils/Emails-template');
 const { sendMail } = require('../../utils/Emails');
 const { generateOTP } = require('../../utils/GenerateOtp');
-const  User=require('../../models/User');
+const User = require('../../models/User');
 const otpStore = new Map();
-const verifiedUsers = new Map(); 
+const verifiedUsers = new Map();
 
 // Create Withdrawal Request
 exports.createWithdrawal = async (req, res) => {
@@ -148,7 +148,7 @@ exports.verifyWithdrawalOTP = async (req, res) => {
 // get all withdrawal requests
 exports.getAllWithdrawals = async (req, res) => {
   try {
-    const withdrawals = await Withdrawal.find().sort({ createdAt: -1 });
+    const withdrawals = await Withdrawal.find().sort({ createdAt: -1 }).populate('userId', 'name');
 
     const formattedWithdrawals = withdrawals.map((w) => {
       const obj = w.toObject();
@@ -162,7 +162,8 @@ exports.getAllWithdrawals = async (req, res) => {
       return {
         _id: obj._id,
         withdrawalId: obj.withdrawalId,
-        userId: obj.userId,
+        userId: obj.userId?._id,
+        user: obj.userId?.name || 'Unknown User',
         amount: obj.amount,
         payment: obj.payment,
         withdrawalCode: obj.withdrawalCode,
@@ -187,5 +188,102 @@ exports.getAllWithdrawals = async (req, res) => {
   }
 };
 
+exports.processPayout = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[DEBUG] processPayout called with id: ${id}`);
+ 
+    // 1. Fetch withdrawal from DB
+    const withdrawal = await Withdrawal.findById(id);
+    console.log('[DEBUG] Withdrawal fetched from DB:', withdrawal);
+ 
+    if (!withdrawal) {
+      console.warn('[DEBUG] Withdrawal not found for id:', id);
+      return res.status(404).json({ success: false, message: 'Withdrawal not found' });
+    }
+ 
+    if (withdrawal.status !== 'pending') {
+      console.warn('[DEBUG] Withdrawal is not pending. Current status:', withdrawal.status);
+      return res.status(400).json({ success: false, message: 'Withdrawal is not pending' });
+    }
+ 
+    const mobileNumber = withdrawal.payment?.details?.mobileNumber;
+    const userName = withdrawal.user || 'Unknown User';
+    const method = withdrawal.payment?.method;
+ 
+    console.log('[DEBUG] Payment details:', { mobileNumber, method, userName });
+ 
+    if (!mobileNumber || !method) {
+      console.error('[DEBUG] Invalid payment details:', withdrawal.payment);
+      return res.status(400).json({ success: false, message: 'Invalid payment details' });
+    }
+ 
+    // 2. Send payout request to Fapshi
+    console.log('[DEBUG] Sending payout request to Fapshi with data:', {
+      amount: withdrawal.amount,
+      phone: mobileNumber,
+      medium: 'mobile money',
+      name: userName,
+      email: 'noreply@example.com',
+      userId: withdrawal.userId,
+      externalId: withdrawal.withdrawalId.replace(/[^a-zA-Z0-9]/g, ''), // removes #
+      message: 'User Withdrawal Payout'
+    });
+ 
+    const response = await axios.post('https://sandbox.fapshi.com/payout', {
+      amount: withdrawal.amount,
+      phone: mobileNumber,
+      medium: 'mobile money',
+      name: userName,
+      email: 'noreply@example.com', // replace with actual email if available
+      userId: withdrawal.userId,
+      externalId: withdrawal.withdrawalId.replace(/[^a-zA-Z0-9]/g, ''), // removes #
+      message: 'User Withdrawal Payout'
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': process.env.FAPSHI_API_KEY,
+        'apiuser': process.env.FAPSHI_API_USER
+      }
+    });
+ 
+    console.log('[DEBUG] Fapshi API Response:', response.data);
+ 
+    // 3. If successful, update withdrawal status
+    withdrawal.status = 'approved';
+    await withdrawal.save();
+    console.log('[DEBUG] Withdrawal updated to approved in DB.');
+ 
+    res.status(200).json({
+      success: true,
+      message: 'Payout successful and withdrawal updated.',
+      fapshiResponse: response.data
+    });
+ 
+  } catch (error) {
+    console.error('Fapshi Payout Error:', error.message);
+ 
+    // Capture full error details if from Axios
+    if (error.response) {
+      console.error('[DEBUG] Fapshi Error Response:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    } else if (error.request) {
+      console.error('[DEBUG] No response received from Fapshi:', error.request);
+    } else {
+      console.error('[DEBUG] Error setting up Fapshi request:', error.message);
+    }
+ 
+ 
+ 
+    res.status(500).json({
+      success: false,
+      message: 'Payout failed',
+      error: error.message
+    });
+  }
+}
 
 
