@@ -1,10 +1,10 @@
 const express = require("express")
 const {
     getRequestsByProvider, createRequest, providerRespondOnReq, updateRequestById, sendProposal,
-    getPraposal, updatePraposal, getRequestsByOrganizer,
+    getPraposal, updatePraposal, getRequestsByOrganizer,serviceAwarded,
     updateRequestStatusByOrganizer,
     markRequestAsCompleted,
-    cancelEventReq,
+    cancelEventReq,updateProviderStatus,
     getProviderAcceptedReq,
     getActiveContractsByProvider
 } = require("../controllers/event-request/event-requst-controller")
@@ -22,6 +22,8 @@ router
     .get("/organizer-requests", verifyToken, getRequestsByOrganizer)
     .get("/acceptedByProvider", verifyToken, getProviderAcceptedReq)
     .put("/:id/status", verifyToken, updateRequestStatusByOrganizer)
+    .put("/:id/awarded", verifyToken, serviceAwarded)
+    .put("/p/:id/status", verifyToken, updateProviderStatus)
     .patch('/mark-completed/:id', markRequestAsCompleted)
     .delete('/:id', verifyToken, cancelEventReq)
     .get("/active-contracts", verifyToken, getActiveContractsByProvider)

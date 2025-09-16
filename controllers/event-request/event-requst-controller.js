@@ -15,7 +15,7 @@ exports.getRequestsByProvider = async (req, res) => {
             ]
         };
         if (status) {
-            query.status = status;
+            query.orgStatus = status;
         }
 
         // Parse sorting
@@ -90,28 +90,27 @@ exports.updateRequestById = async (req, res) => {
 // Organizer sends request to provider
 exports.createRequest = async (req, res) => {
     try {
-        const { serviceTime, status, eventId, serviceRequestId, orgRequirement, 
-                orgBudget, eventLocation, orgAdditionalRequirement } = req.body;
+        const { serviceTime, eventId, serviceRequestId, orgRequirement,
+            orgBudget, eventLocation, orgAdditionalRequirement } = req.body;
         const organizerId = req.user._id;
 
-        // Check for existing request
-//         const existingRequest = await EventRequest.findOne({
-//             serviceRequestId
-//         });
-// console.log(existingRequest);
-// console.log('body',req.body);
+        // Check for existing request for the same service and event by the same organizer
+        const existingRequest = await EventRequest.findOne({
+            eventId,
+            organizerId,
+            serviceRequestId
+        });
 
-//         if (existingRequest) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "You have already requested this service for this event"
-//             });
-//         }
+        if (existingRequest) {
+            return res.status(400).json({
+                success: false,
+                message: "You have already requested this service for this event"
+            });
+        }
 
-        // Try to find the service request but don't fail if not found
         let providerId = null;
         try {
-            const existingServiceRequest = await ProviderService.findOne({
+            const existingServiceRequest = await EventRequest.findOne({
                 _id: serviceRequestId
             });
             providerId = existingServiceRequest?.createdBy || null;
@@ -124,7 +123,6 @@ exports.createRequest = async (req, res) => {
             eventId,
             organizerId,
             serviceRequestId,
-            status,
             orgRequirement,
             orgBudget,
             eventLocation,
@@ -242,7 +240,7 @@ exports.getRequestsByOrganizer = async (req, res) => {
     try {
         const { page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
 
-        const query = { organizerId: req.user._id };
+        const query = { organizerId: req.user._id, providerStatus: "accepted" };
 
         // Sorting
         const [sortField, sortOrder] = sortBy.split(':');
@@ -347,6 +345,109 @@ exports.updateRequestStatusByOrganizer = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Server error while updating request status',
+        });
+    }
+};
+
+exports.serviceAwarded = async (req, res) => {
+    try {
+        const { id } = req.params; // EventRequest ID
+        const { status } = req.body; // 'accepted' or 'rejected'
+
+        // Validate the status value
+        const validStatuses = ['accepted', 'rejected'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid status value. Must be either "accepted" or "rejected"'
+            });
+        }
+
+        // Prepare update object based on status
+        const updateData = {};
+        
+        if (status === 'accepted') {
+            updateData.isSigned = true;
+            updateData.orgStatus = 'accepted';
+        } else if (status === 'rejected') {
+            updateData.orgStatus = 'rejected';
+            updateData.projectStatus = 'cancelled'; // Project cancelled when rejected
+        }
+
+        // Find and update the event request
+        const updatedRequest = await EventRequest.findByIdAndUpdate(
+            id,
+            updateData,
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Request not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Service request ${status} successfully`,
+            request: updatedRequest
+        });
+
+    } catch (error) {
+        console.error('Error updating service award status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while updating service award status',
+        });
+    }
+};
+
+exports.updateProviderStatus = async (req, res) => {
+    try {
+        const { id } = req.params; // EventRequest ID
+        const providerId = req.user._id; // Assuming the provider is the authenticated user
+
+
+        // Validate the status value
+        const validStatuses = ['accepted', 'pending', 'rejected'];
+        if (!validStatuses.includes(req.body.proStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid status value. Must be one of: accepted, pending, rejected'
+            });
+        }
+
+        // Find the event request and update the provider status
+        const updatedRequest = await EventRequest.findOneAndUpdate(
+            {
+                _id: id,
+            },
+            {
+                providerStatus: req.body.proStatus,
+                providerId
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Request not found or you are not authorized to update this request'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Provider status updated to ${req.body.proStatus} successfully`,
+            request: updatedRequest
+        });
+
+    } catch (error) {
+        console.error('Error updating provider status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while updating provider status',
         });
     }
 };
@@ -493,29 +594,29 @@ exports.getProviderAcceptedReq = async (req, res) => {
 exports.getActiveContractsByProvider = async (req, res) => {
     try {
         const providerId = new mongoose.Types.ObjectId(req.user._id); // force ObjectId
- 
+
         const query = {
             providerId,
             contractStatus: { $in: ['signed', 'ongoing', 'completed'] }
         };
- 
+
         console.log("Query being used:", query);
- 
+
         const requests = await EventRequest.find(query)
             .populate('eventId', 'eventName date location time description experience averageRating website certified')
             .populate('organizerId', 'name email avatar')
             .populate('serviceRequestId', 'serviceType budget description additionalOptions')
             .sort({ createdAt: -1 })
             .lean();
- 
+
         console.log("Found requests:", requests.length);
- 
+
         res.status(200).json({
             success: true,
             count: requests.length,
             requests
         });
- 
+
     } catch (error) {
         console.error('Error fetching active provider contracts:', error);
         res.status(500).json({
