@@ -1,12 +1,123 @@
 const EventRequest = require("../../models/event-request/event-requests.model");
+const User = require("../../models/User");
 const ProviderService = require("../../models/service-reequest/service-request");
 const mongoose = require('mongoose');
 
+exports.serviceUpdateStatus = async (req, res) => {
+    try {
+        const { id } = req.params; // EventRequest ID
+        const { newStatus } = req.body; // Status to update
+
+        // Validate the status value
+        const validStatuses = ['pending', 'ongoing', 'completed', 'cancelled'];
+        if (!validStatuses.includes(newStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid status value. Must be one of: "pending", "ongoing", "completed", or "cancelled"'
+            });
+        }
+
+        // Find the EventRequest by ID
+        const eventRequest = await EventRequest.findById(id);
+        if (!eventRequest) {
+            return res.status(404).json({
+                success: false,
+                message: 'Event request not found'
+            });
+        }
+
+        // Store the old status for comparison
+        const oldStatus = eventRequest.projectStatus;
+
+        // Update the projectStatus in EventRequest
+        eventRequest.projectStatus = newStatus;
+        await eventRequest.save();
+
+        // Only update contractsCount if status is being changed to 'completed'
+        if (newStatus === 'completed') {
+            // Find the user who owns this event request (organizer)
+            const organizer = await User.findById(eventRequest.providerId);
+            if (organizer) {
+                // Initialize contractsCount if it doesn't exist
+                if (!organizer.contractsCount) {
+                    // Use $set to add the contractsCount field if it doesn't exist
+                    await User.findByIdAndUpdate(
+                        organizer._id,
+                        {
+                            $set: {
+                                contractsCount: {
+                                    completed: 0,
+                                    cancelled: 0,
+                                    ongoing: 0,
+                                    total: 0
+                                }
+                            }
+                        }
+                    );
+                    
+                    // Reload the user to get the updated document
+                    const updatedOrganizer = await User.findById(organizer._id);
+                    
+                    // Update the completed count
+                    updatedOrganizer.contractsCount.completed += 1;
+                    
+                    // If it was previously another status, adjust counts
+                    if (oldStatus === 'cancelled' && updatedOrganizer.contractsCount.cancelled > 0) {
+                        updatedOrganizer.contractsCount.cancelled -= 1;
+                    } else if (oldStatus === 'ongoing' && updatedOrganizer.contractsCount.ongoing > 0) {
+                        updatedOrganizer.contractsCount.ongoing -= 1;
+                    }
+                    
+                    // Update total count
+                    updatedOrganizer.contractsCount.total = updatedOrganizer.contractsCount.completed + 
+                                                          updatedOrganizer.contractsCount.ongoing + 
+                                                          updatedOrganizer.contractsCount.cancelled;
+                    
+                    await updatedOrganizer.save();
+                } else {
+                    // contractsCount already exists, just update it
+                    organizer.contractsCount.completed = (organizer.contractsCount.completed || 0) + 1;
+                    
+                    // If it was previously another status, adjust counts
+                    if (oldStatus === 'cancelled' && organizer.contractsCount.cancelled > 0) {
+                        organizer.contractsCount.cancelled -= 1;
+                    } else if (oldStatus === 'ongoing' && organizer.contractsCount.ongoing > 0) {
+                        organizer.contractsCount.ongoing -= 1;
+                    }
+                    
+                    // Update total count
+                    organizer.contractsCount.total = (organizer.contractsCount.completed || 0) + 
+                                                   (organizer.contractsCount.ongoing || 0) + 
+                                                   (organizer.contractsCount.cancelled || 0);
+                    
+                    await organizer.save();
+                }
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Project status updated to ${newStatus} successfully`,
+            data: {
+                eventRequest: {
+                    id: eventRequest._id,
+                    projectStatus: eventRequest.projectStatus
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error updating service project status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while updating service project status',
+        });
+    }
+};
 
 exports.getRequestsByProvider = async (req, res) => {
     try {
-        const { status, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
-
+        const { projectStatus, orgStatus, isSigned, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
         // Build query
         const query = {
             $or: [
@@ -14,8 +125,10 @@ exports.getRequestsByProvider = async (req, res) => {
                 { providerId: null }
             ]
         };
-        if (status) {
-            query.orgStatus = status;
+        if (orgStatus) {
+            query.orgStatus = orgStatus;
+            query.isSigned = isSigned;
+            query.projectStatus = projectStatus;
         }
 
         // Parse sorting
@@ -365,10 +478,11 @@ exports.serviceAwarded = async (req, res) => {
 
         // Prepare update object based on status
         const updateData = {};
-        
+
         if (status === 'accepted') {
             updateData.isSigned = true;
             updateData.orgStatus = 'accepted';
+            updateData.projectStatus = 'ongoing';
         } else if (status === 'rejected') {
             updateData.orgStatus = 'rejected';
             updateData.projectStatus = 'cancelled'; // Project cancelled when rejected
@@ -402,6 +516,8 @@ exports.serviceAwarded = async (req, res) => {
         });
     }
 };
+
+
 
 exports.updateProviderStatus = async (req, res) => {
     try {
