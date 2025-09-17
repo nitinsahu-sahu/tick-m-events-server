@@ -107,10 +107,7 @@ const userSchema = new Schema({
         type: Boolean,
         default: false
     },
-    contractsCount: {
-        type: Number,
-        default: 0
-    },
+    
     role: {
         type: String,
         enum: ['organizer', 'admin', 'participant', 'provider'],

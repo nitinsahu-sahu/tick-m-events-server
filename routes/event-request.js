@@ -3,7 +3,7 @@ const {
     getRequestsByProvider, createRequest, providerRespondOnReq, updateRequestById, sendProposal,
     getPraposal, updatePraposal, getRequestsByOrganizer,serviceAwarded,
     updateRequestStatusByOrganizer,
-    markRequestAsCompleted,
+    markRequestAsCompleted,serviceUpdateStatus,
     cancelEventReq,updateProviderStatus,
     getProviderAcceptedReq,
     getActiveContractsByProvider
@@ -23,6 +23,8 @@ router
     .get("/acceptedByProvider", verifyToken, getProviderAcceptedReq)
     .put("/:id/status", verifyToken, updateRequestStatusByOrganizer)
     .put("/:id/awarded", verifyToken, serviceAwarded)
+    .put("/:id/projectUpdate", verifyToken, serviceUpdateStatus)
+    
     .put("/p/:id/status", verifyToken, updateProviderStatus)
     .patch('/mark-completed/:id', markRequestAsCompleted)
     .delete('/:id', verifyToken, cancelEventReq)
