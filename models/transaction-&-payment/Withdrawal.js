@@ -18,6 +18,13 @@ const withdrawalSchema = new Schema({
   withdrawalId: { type: String, required: true, unique: true },
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   amount: { type: Number, required: true },
+   eventId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event', // or the correct model name
+  },
+  balance: {
+    type: Number,
+  },
   payment: {
     paymentMethod: {
       type: String,

@@ -316,7 +316,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                     .lean(),
                 EventsRequest.find({
                     eventId: event._id,
-                    status: { $ne: 'requested-by-organizer' }
+                    providerStatus: "accepted"
                 })
                     .populate({
                         path: 'providerId',

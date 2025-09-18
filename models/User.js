@@ -25,9 +25,9 @@ const sessionDurationSchema = new Schema({
 });
 
 const userSchema = new Schema({
-      __id: {
+    __id: {
         type: String,
-        default: function() {
+        default: function () {
             // This will be set in the pre-save middleware
             return "";
         }
@@ -95,6 +95,7 @@ const userSchema = new Schema({
             default: "https://res.cloudinary.com/dm624gcgg/image/upload/v1745399695/a33ffade6c44792172af87c950e914099ba87c45_dg1rab.png",  // Default avatar URL
         }
     },
+    
     isVerified: {
         type: Boolean,
         default: false
@@ -107,7 +108,7 @@ const userSchema = new Schema({
         type: Boolean,
         default: false
     },
-    
+
     role: {
         type: String,
         enum: ['organizer', 'admin', 'participant', 'provider'],
@@ -182,6 +183,7 @@ const userSchema = new Schema({
         type: Number,
         default: 0
     },
+
     notifications: [
         {
             message: { type: String, required: true },
@@ -197,35 +199,35 @@ const userSchema = new Schema({
 }, { timestamps: true })
 
 function generateUniqueId() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let id = 'TM-';
-  
-  // Generate 6 random characters from the charset
-  for (let i = 0; i < 6; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  
-  return id;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let id = 'TM-';
+
+    // Generate 6 random characters from the charset
+    for (let i = 0; i < 6; i++) {
+        id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    return id;
 }
 
 // For MongoDB schema method (if you need to ensure uniqueness in database)
-userSchema.statics.getNextUserId = async function() {
-  let isUnique = false;
-  let newId;
-  
-  while (!isUnique) {
-    // Generate a new ID
-    newId = generateUniqueId();
-    
-    // Check if it already exists in the database
-    const existingUser = await this.findOne({ __id: newId });
-    
-    if (!existingUser) {
-      isUnique = true;
+userSchema.statics.getNextUserId = async function () {
+    let isUnique = false;
+    let newId;
+
+    while (!isUnique) {
+        // Generate a new ID
+        newId = generateUniqueId();
+
+        // Check if it already exists in the database
+        const existingUser = await this.findOne({ __id: newId });
+
+        if (!existingUser) {
+            isUnique = true;
+        }
     }
-  }
-  
-  return newId;
+
+    return newId;
 };
 
 
@@ -257,7 +259,7 @@ userSchema.pre("save", async function (next) {
     if (this.isNew) {
         this.__id = await this.constructor.getNextUserId();
     }
-    
+
     if (!this.isModified("password")) {
         return next();
     }

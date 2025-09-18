@@ -49,47 +49,46 @@ exports.serviceUpdateStatus = async (req, res) => {
                                     completed: 0,
                                     cancelled: 0,
                                     ongoing: 0,
-                                    total: 0
                                 }
                             }
                         }
                     );
-                    
+
                     // Reload the user to get the updated document
                     const updatedOrganizer = await User.findById(organizer._id);
-                    
+
                     // Update the completed count
                     updatedOrganizer.contractsCount.completed += 1;
-                    
+
                     // If it was previously another status, adjust counts
                     if (oldStatus === 'cancelled' && updatedOrganizer.contractsCount.cancelled > 0) {
                         updatedOrganizer.contractsCount.cancelled -= 1;
                     } else if (oldStatus === 'ongoing' && updatedOrganizer.contractsCount.ongoing > 0) {
                         updatedOrganizer.contractsCount.ongoing -= 1;
                     }
-                    
+
                     // Update total count
-                    updatedOrganizer.contractsCount.total = updatedOrganizer.contractsCount.completed + 
-                                                          updatedOrganizer.contractsCount.ongoing + 
-                                                          updatedOrganizer.contractsCount.cancelled;
-                    
+                    updatedOrganizer.contractsCount.total = updatedOrganizer.contractsCount.completed +
+                        updatedOrganizer.contractsCount.ongoing +
+                        updatedOrganizer.contractsCount.cancelled;
+
                     await updatedOrganizer.save();
                 } else {
                     // contractsCount already exists, just update it
                     organizer.contractsCount.completed = (organizer.contractsCount.completed || 0) + 1;
-                    
+
                     // If it was previously another status, adjust counts
                     if (oldStatus === 'cancelled' && organizer.contractsCount.cancelled > 0) {
                         organizer.contractsCount.cancelled -= 1;
                     } else if (oldStatus === 'ongoing' && organizer.contractsCount.ongoing > 0) {
                         organizer.contractsCount.ongoing -= 1;
                     }
-                    
+
                     // Update total count
-                    organizer.contractsCount.total = (organizer.contractsCount.completed || 0) + 
-                                                   (organizer.contractsCount.ongoing || 0) + 
-                                                   (organizer.contractsCount.cancelled || 0);
-                    
+                    organizer.contractsCount.total = (organizer.contractsCount.completed || 0) +
+                        (organizer.contractsCount.ongoing || 0) +
+                        (organizer.contractsCount.cancelled || 0);
+
                     await organizer.save();
                 }
             }
@@ -465,46 +464,57 @@ exports.updateRequestStatusByOrganizer = async (req, res) => {
 exports.serviceAwarded = async (req, res) => {
     try {
         const { id } = req.params; // EventRequest ID
-        const { status } = req.body; // 'accepted' or 'rejected'
 
-        // Validate the status value
-        const validStatuses = ['accepted', 'rejected'];
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid status value. Must be either "accepted" or "rejected"'
-            });
-        }
-
-        // Prepare update object based on status
-        const updateData = {};
-
-        if (status === 'accepted') {
-            updateData.isSigned = true;
-            updateData.orgStatus = 'accepted';
-            updateData.projectStatus = 'ongoing';
-        } else if (status === 'rejected') {
-            updateData.orgStatus = 'rejected';
-            updateData.projectStatus = 'cancelled'; // Project cancelled when rejected
-        }
-
-        // Find and update the event request
-        const updatedRequest = await EventRequest.findByIdAndUpdate(
-            id,
-            updateData,
-            { new: true, runValidators: true }
-        );
-
-        if (!updatedRequest) {
+        // Find the event request first to get providerId
+        const eventRequest = await EventRequest.findById(id);
+        if (!eventRequest) {
             return res.status(404).json({
                 success: false,
                 message: 'Request not found'
             });
         }
 
+        // Prepare update object for pending status only
+        const updateData = {
+            isSigned: true,
+            orgStatus: 'accepted',
+            projectStatus: 'pending'
+        };
+        
+        // Update provider's contractsCount if provider exists
+        if (eventRequest.providerId) {
+            await User.findByIdAndUpdate(
+                eventRequest.providerId,
+                { 
+                    $inc: { 
+                        'contractsCount.total': 1,
+                        'contractsCount.pending': 1
+                    },
+                    // Set default values if the field doesn't exist
+                    $setOnInsert: {
+                        'contractsCount.completed': 0,
+                        'contractsCount.cancelled': 0,
+                        'contractsCount.ongoing': 0
+                    }
+                },
+                { 
+                    upsert: true, // Create the field if it doesn't exist
+                    setDefaultsOnInsert: true, // Set default values if creating
+                    new: true 
+                }
+            );
+        }
+
+        // Update the event request
+        const updatedRequest = await EventRequest.findByIdAndUpdate(
+            id,
+            updateData,
+            { new: true, runValidators: true }
+        );
+
         res.status(200).json({
             success: true,
-            message: `Service request ${status} successfully`,
+            message: 'Service request marked as pending successfully',
             request: updatedRequest
         });
 
@@ -512,7 +522,7 @@ exports.serviceAwarded = async (req, res) => {
         console.error('Error updating service award status:', error);
         res.status(500).json({
             success: false,
-            message: 'Server error while updating service award status',
+            message: 'Server error while updating service status',
         });
     }
 };
