@@ -15,6 +15,9 @@ Forgine Credential
 "email": "organizer.jos1@gmail.com",
 "password": "John@123",
 
+"email": "provider.rabada12@gmail.com",
+"password": "Rabada@123",
+
 "email": "participant.sam2@gmail.com",
 "password": "SamCurran@123",
 

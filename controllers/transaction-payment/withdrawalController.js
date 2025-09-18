@@ -10,7 +10,7 @@ const axios=require('axios');
 // Create Withdrawal Request
 exports.createWithdrawal = async (req, res) => {
   try {
-    const { userId, amount, payment } = req.body;
+    const { userId, amount, payment, eventId, balance } = req.body;
 
     if (!userId || !amount || !payment || !payment.paymentMethod || !payment.method || !payment.details) {
       return res.status(400).json({
@@ -43,6 +43,7 @@ exports.createWithdrawal = async (req, res) => {
 
     const newWithdrawal = new Withdrawal({
       withdrawalId,
+       eventId, balance,
       userId,
       amount,
       payment,
