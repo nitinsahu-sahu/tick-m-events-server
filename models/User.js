@@ -24,6 +24,7 @@ const sessionDurationSchema = new Schema({
     seconds: { type: Number, default: 0 }
 });
 
+
 const userSchema = new Schema({
     __id: {
         type: String,
@@ -33,6 +34,24 @@ const userSchema = new Schema({
         }
     },
     socialLinks: SocialLinksSchema,
+    gigsCounts: {
+        pending: {
+            type: Number,
+            default:0
+        },
+        ongoing: {
+            type: Number,
+            default:0
+        },
+        completed: {
+            type: Number,
+            default:0
+        },
+        cancelled: {
+            type: Number,
+            default:0
+        },
+    },
     username: {
         type: String,
         unique: true,
@@ -95,7 +114,7 @@ const userSchema = new Schema({
             default: "https://res.cloudinary.com/dm624gcgg/image/upload/v1745399695/a33ffade6c44792172af87c950e914099ba87c45_dg1rab.png",  // Default avatar URL
         }
     },
-    
+
     isVerified: {
         type: Boolean,
         default: false
@@ -169,7 +188,8 @@ const userSchema = new Schema({
     referralCode: {
         type: String,
         unique: true,
-        // sparse: true
+        sparse: true,
+        default: undefined
     },
     referredBy: {
         type: Schema.Types.ObjectId,
@@ -265,7 +285,7 @@ userSchema.pre("save", async function (next) {
     }
     this.password = await bcrypt.hash(this.password, 10);
 
-    // Generate referral code for participants
+    // Generate referral code ONLY for participants
     if (this.role === 'participant' && !this.referralCode) {
         this.referralCode = await this.generateReferralCode();
     }

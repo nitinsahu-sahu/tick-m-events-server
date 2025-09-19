@@ -116,46 +116,58 @@ exports.serviceUpdateStatus = async (req, res) => {
 
 exports.getRequestsByProvider = async (req, res) => {
     try {
-        const { projectStatus, orgStatus, isSigned, page = 1, limit = 10, sortBy = 'createdAt:desc' } = req.query;
-        // Build query
-        const query = {
-            $or: [
-                { providerId: req.user._id },
-                { providerId: null }
-            ]
-        };
-        if (orgStatus) {
-            query.orgStatus = orgStatus;
-            query.isSigned = isSigned;
-            query.projectStatus = projectStatus;
+        const userId = req.user._id; // Assuming providerId comes from route params
+console.log();
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Provider ID is required'
+            });
         }
 
-        // Parse sorting
-        const [sortField, sortOrder] = sortBy.split(':');
-        const sort = { [sortField]: sortOrder === 'desc' ? -1 : 1 };
+        // Fetch all requests for this provider
+        const requests = await EventRequest.find({ 
+            $or:[
+                 { providerId: userId },
+                { organizerId: userId }
+            ]
+         })
+            .populate('eventId', 'eventName date location time description experience averageRating website certified')
+            .populate('organizerId', 'name email avatar')
+            .populate('providerId', 'name email avatar')
+            .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+            .lean()
 
-        // Pagination
-        const skip = (page - 1) * limit;
+        // Filter requests based on conditions
+        const pendingRequests = requests.filter(request =>
+            !request.isSigned
+        );
 
-        const [requests, total] = await Promise.all([
-            EventRequest.find(query)
-                .populate('eventId', 'eventName date location time description experience averageRating website certified')
-                .populate('organizerId', 'name email avatar')
-                .populate('serviceRequestId', 'serviceType budget description additionalOptions')
-                .sort(sort)
-                .skip(skip)
-                .limit(parseInt(limit))
-                .lean(),
-            EventRequest.countDocuments(query)
-        ]);
+        const signedReqests = requests.filter(request =>
+            request.isSigned &&
+            (request.projectStatus === 'pending' || request.projectStatus === 'ongoing')
+        );
+
+        const completedRequests = requests.filter(request =>
+            request.isSigned &&
+            request.projectStatus === 'completed'
+        );
+
+
 
         res.status(200).json({
             success: true,
-            count: requests.length,
-            total,
-            totalPages: Math.ceil(total / limit),
-            currentPage: parseInt(page),
-            requests
+            pendingRequests,
+            signedReqests,
+            completedRequests,
+            totalRequests: requests,
+            counts: {
+                pending: pendingRequests.length,
+                confirmed: signedReqests.length,
+                completed: completedRequests.length,
+                total: requests.length
+            }
         });
 
     } catch (error) {
@@ -201,9 +213,10 @@ exports.updateRequestById = async (req, res) => {
 
 // Organizer sends request to provider
 exports.createRequest = async (req, res) => {
+
     try {
         const { serviceTime, eventId, serviceRequestId, orgRequirement,
-            orgBudget, eventLocation, orgAdditionalRequirement } = req.body;
+            orgBudget, eventLocation, orgAdditionalRequirement, providerId } = req.body;
         const organizerId = req.user._id;
 
         // Check for existing request for the same service and event by the same organizer
@@ -220,16 +233,6 @@ exports.createRequest = async (req, res) => {
             });
         }
 
-        let providerId = null;
-        try {
-            const existingServiceRequest = await EventRequest.findOne({
-                _id: serviceRequestId
-            });
-            providerId = existingServiceRequest?.createdBy || null;
-        } catch (err) {
-            console.log('Error finding service request, proceeding without providerId:', err.message);
-        }
-
         // Create new request (providerId will be null if not found)
         const request = await EventRequest.create({
             eventId,
@@ -239,6 +242,7 @@ exports.createRequest = async (req, res) => {
             orgBudget,
             eventLocation,
             orgAdditionalRequirement,
+            providerId,
             serviceTime,
             providerId // This will be null if service request not found
         });
@@ -480,13 +484,13 @@ exports.serviceAwarded = async (req, res) => {
             orgStatus: 'accepted',
             projectStatus: 'pending'
         };
-        
+
         // Update provider's contractsCount if provider exists
         if (eventRequest.providerId) {
             await User.findByIdAndUpdate(
                 eventRequest.providerId,
-                { 
-                    $inc: { 
+                {
+                    $inc: {
                         'contractsCount.total': 1,
                         'contractsCount.pending': 1
                     },
@@ -497,10 +501,10 @@ exports.serviceAwarded = async (req, res) => {
                         'contractsCount.ongoing': 0
                     }
                 },
-                { 
+                {
                     upsert: true, // Create the field if it doesn't exist
                     setDefaultsOnInsert: true, // Set default values if creating
-                    new: true 
+                    new: true
                 }
             );
         }
