@@ -106,12 +106,12 @@ exports.signup = async (req, res) => {
 
         // Create and save user
         const newUser = await User.create(userData);
-            console.log('espn',newUser);
+        console.log('espn', newUser);
 
         // Process referral reward if applicable
         if (referrer) {
             const refer = await User.processReferral(referralCode, newUser.name);
-            
+
         }
 
         // Omit sensitive data in response
@@ -788,12 +788,14 @@ exports.updateAvatar = async (req, res) => {
 
         // Check image dimensions before uploading
         const imageInfo = await sharp(avatar.tempFilePath).metadata();
-        if (imageInfo.width !== 192 || imageInfo.height !== 192) {
-            return res.status(400).json({
-                success: false,
-                message: 'Avatar dimensions must be exactly 192x192 pixels'
-            });
-        }
+        console.log(imageInfo);
+        
+        // if (imageInfo.width !== 192 || imageInfo.height !== 192) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: 'Avatar dimensions must be exactly 192x192 pixels'
+        //     });
+        // }
 
         // Check if user has existing avatar
         if (user.avatar.public_id && user.avatar.public_id !== 'avatars/pmqlhyz1ehcipviw3ren') {
