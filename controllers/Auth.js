@@ -14,11 +14,11 @@ const Activity = require("../models/activity/activity.modal");
 const sharp = require('sharp');
 const getLocationFromIP = require('../utils/getLocationFromIP');
 const calculateDuration = require('../utils/helperFunction');
-const { createResendOtpTemplate,resetPasswordSuccessfullyTemplate } = require('../utils/Emails-template');
+const { createResendOtpTemplate, resetPasswordSuccessfullyTemplate } = require('../utils/Emails-template');
 
 // Generate random 6-digit code
 const generateResetCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+    return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 //register controller
@@ -106,10 +106,12 @@ exports.signup = async (req, res) => {
 
         // Create and save user
         const newUser = await User.create(userData);
+            console.log('espn',newUser);
 
         // Process referral reward if applicable
         if (referrer) {
-            await User.processReferral(referralCode, newUser.name);
+            const refer = await User.processReferral(referralCode, newUser.name);
+            
         }
 
         // Omit sensitive data in response
@@ -128,7 +130,7 @@ exports.signup = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Signup error:', error);
+        console.error('Signup error:', error.message);
 
         if (error.name === 'ValidationError') {
             const messages = Object.values(error.errors).map(err => err.message);
@@ -294,36 +296,36 @@ exports.login = async (req, res) => {
 };
 
 exports.markNotificationAsRead = async (req, res) => {
-  try {
-    const { userId, notifId } = req.params;
- 
-    // Find user and the specific notification
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+    try {
+        const { userId, notifId } = req.params;
+
+        // Find user and the specific notification
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const notification = user.notifications.id(notifId);
+        if (!notification) {
+            return res.status(404).json({ success: false, message: "Notification not found" });
+        }
+
+        // Update "read" field
+        notification.read = true;
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: "Notification marked as read",
+            notification,
+        });
+    } catch (error) {
+        console.error("Error marking notification as read:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
     }
- 
-    const notification = user.notifications.id(notifId);
-    if (!notification) {
-      return res.status(404).json({ success: false, message: "Notification not found" });
-    }
- 
-    // Update "read" field
-    notification.read = true;
-    await user.save();
- 
-    res.status(200).json({
-      success: true,
-      message: "Notification marked as read",
-      notification,
-    });
-  } catch (error) {
-    console.error("Error marking notification as read:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
 };
 
 // Get user details by ID (excluding password and createdAt)

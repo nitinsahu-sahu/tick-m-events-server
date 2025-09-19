@@ -41,3 +41,19 @@ Forgine Credential
 
 "email": "rachin2@gmail.com",
 "password": "Aiden@123",
+
+----------------New Db Users-------------------
+"email": "rachin2@gmail.com",
+"password": "Rachin@123",
+
+"email": "provider.watson13@gmail.com",
+"password": "Watson@123",
+
+"email": "admin.jofra1@gmail.com",
+"password": "Jofra@123",
+
+"email": "Polydabra12@gmail.com",
+"password": "Nitin@123",
+
+"email": "organizer.rabada12@gmail.com",
+"password": "Rabada@123",
