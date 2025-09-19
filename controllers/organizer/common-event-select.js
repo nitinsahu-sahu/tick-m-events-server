@@ -15,7 +15,7 @@ const PlaceABid = require('../../models/event-request/placeBid.modal');
 const Bid = require('../../models/event-request/bid.modal');
 const { createBidStatusEmailTemplate } = require('../../utils/Emails-template');
 const { sendMail } = require('../../utils/Emails');
-
+const Withdrawal = require('../../models/transaction-&-payment/Withdrawal');
 exports.updateBidStatus = async (req, res, next) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -294,7 +294,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
         // Helper function to get full event details
         const eventsWithDetails = await Promise.all(upcomingEvents.map(async (event) => {
-            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests, placeABid] = await Promise.all([
+            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests, placeABid, withdrawals] = await Promise.all([
                 Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -331,7 +331,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                     .lean(),
                 PlaceABid.find({ eventId: event._id })
                     .populate('categoryId', 'name')
-                    .lean()
+                    .lean(),
+                Withdrawal.find({ eventId: event._id }).lean(),
             ]);
 
             const enrichedOrders = eventOrder.map(orderItem => {
@@ -388,7 +389,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 purchaseDeadlineDate: ticketConfig?.purchaseDeadlineDate || null,
                 photoFrame,
                 eventRequests,
-                placeABid: enrichedPlaceABid || []
+                placeABid: enrichedPlaceABid || [],
+                withdrawals
             };
         }));
 
@@ -632,7 +634,7 @@ exports.updateProviderBidStatus = async (req, res, next) => {
         }
         // Find the bid
         const bid = await Bid.findById(bidId).session(session);
-       
+
         if (!bid) {
             await session.abortTransaction();
             session.endSession();

@@ -116,9 +116,10 @@ exports.serviceUpdateStatus = async (req, res) => {
 
 exports.getRequestsByProvider = async (req, res) => {
     try {
-        const providerId = req.user._id; // Assuming providerId comes from route params
+        const userId = req.user._id; // Assuming providerId comes from route params
+console.log();
 
-        if (!providerId) {
+        if (!userId) {
             return res.status(400).json({
                 success: false,
                 message: 'Provider ID is required'
@@ -126,9 +127,15 @@ exports.getRequestsByProvider = async (req, res) => {
         }
 
         // Fetch all requests for this provider
-        const requests = await EventRequest.find({ providerId })
+        const requests = await EventRequest.find({ 
+            $or:[
+                 { providerId: userId },
+                { organizerId: userId }
+            ]
+         })
             .populate('eventId', 'eventName date location time description experience averageRating website certified')
             .populate('organizerId', 'name email avatar')
+            .populate('providerId', 'name email avatar')
             .populate('serviceRequestId', 'serviceType budget description additionalOptions')
             .lean()
 
@@ -147,11 +154,14 @@ exports.getRequestsByProvider = async (req, res) => {
             request.projectStatus === 'completed'
         );
 
+
+
         res.status(200).json({
             success: true,
             pendingRequests,
             signedReqests,
             completedRequests,
+            totalRequests: requests,
             counts: {
                 pending: pendingRequests.length,
                 confirmed: signedReqests.length,
