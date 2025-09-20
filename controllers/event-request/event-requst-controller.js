@@ -17,8 +17,10 @@ exports.serviceUpdateStatus = async (req, res) => {
             });
         }
 
-        // Find the EventRequest by ID
-        const eventRequest = await EventRequest.findById(id);
+        // Find the event request
+        const eventRequest = await EventRequest.findById(id)
+            .populate('providerId', 'gigsCounts')
+        
         if (!eventRequest) {
             return res.status(404).json({
                 success: false,
@@ -26,83 +28,22 @@ exports.serviceUpdateStatus = async (req, res) => {
             });
         }
 
-        // Store the old status for comparison
-        const oldStatus = eventRequest.projectStatus;
+        const previousStatus = eventRequest.projectStatus;
+        const providerId = eventRequest.providerId;
 
-        // Update the projectStatus in EventRequest
+        // Update the event request status
         eventRequest.projectStatus = newStatus;
         await eventRequest.save();
 
-        // Only update contractsCount if status is being changed to 'completed'
-        if (newStatus === 'completed') {
-            // Find the user who owns this event request (organizer)
-            const organizer = await User.findById(eventRequest.providerId);
-            if (organizer) {
-                // Initialize contractsCount if it doesn't exist
-                if (!organizer.contractsCount) {
-                    // Use $set to add the contractsCount field if it doesn't exist
-                    await User.findByIdAndUpdate(
-                        organizer._id,
-                        {
-                            $set: {
-                                contractsCount: {
-                                    completed: 0,
-                                    cancelled: 0,
-                                    ongoing: 0,
-                                }
-                            }
-                        }
-                    );
-
-                    // Reload the user to get the updated document
-                    const updatedOrganizer = await User.findById(organizer._id);
-
-                    // Update the completed count
-                    updatedOrganizer.contractsCount.completed += 1;
-
-                    // If it was previously another status, adjust counts
-                    if (oldStatus === 'cancelled' && updatedOrganizer.contractsCount.cancelled > 0) {
-                        updatedOrganizer.contractsCount.cancelled -= 1;
-                    } else if (oldStatus === 'ongoing' && updatedOrganizer.contractsCount.ongoing > 0) {
-                        updatedOrganizer.contractsCount.ongoing -= 1;
-                    }
-
-                    // Update total count
-                    updatedOrganizer.contractsCount.total = updatedOrganizer.contractsCount.completed +
-                        updatedOrganizer.contractsCount.ongoing +
-                        updatedOrganizer.contractsCount.cancelled;
-
-                    await updatedOrganizer.save();
-                } else {
-                    // contractsCount already exists, just update it
-                    organizer.contractsCount.completed = (organizer.contractsCount.completed || 0) + 1;
-
-                    // If it was previously another status, adjust counts
-                    if (oldStatus === 'cancelled' && organizer.contractsCount.cancelled > 0) {
-                        organizer.contractsCount.cancelled -= 1;
-                    } else if (oldStatus === 'ongoing' && organizer.contractsCount.ongoing > 0) {
-                        organizer.contractsCount.ongoing -= 1;
-                    }
-
-                    // Update total count
-                    organizer.contractsCount.total = (organizer.contractsCount.completed || 0) +
-                        (organizer.contractsCount.ongoing || 0) +
-                        (organizer.contractsCount.cancelled || 0);
-
-                    await organizer.save();
-                }
-            }
+        // Update user gig counts based on status transition
+        if (providerId) {
+            await updateUserGigCounts(providerId, previousStatus, newStatus);
         }
 
         res.status(200).json({
             success: true,
-            message: `Project status updated to ${newStatus} successfully`,
-            data: {
-                eventRequest: {
-                    id: eventRequest._id,
-                    projectStatus: eventRequest.projectStatus
-                }
-            }
+            message: `Service project status updated successfully from ${previousStatus} to ${newStatus}`,
+            data: eventRequest
         });
 
     } catch (error) {
@@ -114,10 +55,37 @@ exports.serviceUpdateStatus = async (req, res) => {
     }
 };
 
+// Helper function to update user gig counts
+async function updateUserGigCounts(userId, previousStatus, newStatus) {
+    const user = await User.findById(userId);
+    
+    if (!user) return;
+    
+    // Initialize gigsCounts if not present
+    if (!user.gigsCounts) {
+        user.gigsCounts = {
+            pending: 0,
+            ongoing: 0,
+            completed: 0,
+            cancelled: 0
+        };
+    }
+    
+    // Decrement previous status count if it's a valid status
+    if (previousStatus && user.gigsCounts[previousStatus] > 0) {
+        user.gigsCounts[previousStatus] -= 1;
+    }
+    
+    // Increment new status count
+    user.gigsCounts[newStatus] = (user.gigsCounts[newStatus] || 0) + 1;
+    
+    await user.save();
+}
+
 exports.getRequestsByProvider = async (req, res) => {
     try {
         const userId = req.user._id; // Assuming providerId comes from route params
-console.log();
+        console.log();
 
         if (!userId) {
             return res.status(400).json({
@@ -127,12 +95,12 @@ console.log();
         }
 
         // Fetch all requests for this provider
-        const requests = await EventRequest.find({ 
-            $or:[
-                 { providerId: userId },
+        const requests = await EventRequest.find({
+            $or: [
+                { providerId: userId },
                 { organizerId: userId }
             ]
-         })
+        })
             .populate('eventId', 'eventName date location time description experience averageRating website certified')
             .populate('organizerId', 'name email avatar')
             .populate('providerId', 'name email avatar')
@@ -491,14 +459,13 @@ exports.serviceAwarded = async (req, res) => {
                 eventRequest.providerId,
                 {
                     $inc: {
-                        'contractsCount.total': 1,
-                        'contractsCount.pending': 1
+                        'gigsCounts.pending': 1
                     },
                     // Set default values if the field doesn't exist
                     $setOnInsert: {
-                        'contractsCount.completed': 0,
-                        'contractsCount.cancelled': 0,
-                        'contractsCount.ongoing': 0
+                        'gigsCounts.completed': 0,
+                        'gigsCounts.cancelled': 0,
+                        'gigsCounts.ongoing': 0
                     }
                 },
                 {

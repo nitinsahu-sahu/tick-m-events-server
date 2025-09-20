@@ -20,6 +20,7 @@ exports.sanitizeUser = (user) => {
         referralCode: user.referralCode,
         rewardPoints: user.rewardPoints,
         referralCount: user.referralCount,
+        gigsCounts: user.gigsCounts,
         averageRating:user.averageRating
     }
 }
