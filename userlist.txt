@@ -56,4 +56,4 @@ Forgine Credential
 "password": "Nitin@123",
 
 "email": "organizer.rabada12@gmail.com",
-"password": "Rabada@123",
+"password": "Nitin@123",
