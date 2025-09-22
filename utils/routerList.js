@@ -18,21 +18,22 @@ const availabilityRoutes = require("../routes/AvailabilityRoutes");
 const verificationRoutes = require("../routes/verificationRoutes");
 const eventReminderRoutes = require("../routes/eventReminderRoutes");
 const saveSettings = require("../routes/settings");
-const adminRoutes =require("../routes/admin/admin.routes");
-const editEventRoutes =require("../routes/organizer/eventRoutes");
-const customFrameRoutes=require("../routes/customFrame");
-const contactRoutes =require("../routes/contact.routes");
-const contractRoutes =require("../routes/contract");
-const providerRoutes =require("../routes/provider/providerRoutes");
-  
+const adminRoutes = require("../routes/admin/admin.routes");
+const editEventRoutes = require("../routes/organizer/eventRoutes");
+const customFrameRoutes = require("../routes/customFrame");
+const contactRoutes = require("../routes/contact.routes");
+const contractRoutes = require("../routes/contract");
+const providerRoutes = require("../routes/provider/providerRoutes");
+const rewardRoutes = require('../routes/rewards.router');
+
 // Define route configuration
 exports.routesLists = {
-  '/api/v1/p':providerRoutes,
-  '/api/v1/contact':contactRoutes,
-  '/api/v1/contract':contractRoutes,
-  '/api/v1/custom-frame':customFrameRoutes,
-  '/api/v1/admin':adminRoutes,
-  '/api/v1/o':editEventRoutes,
+  '/api/v1/p': providerRoutes,
+  '/api/v1/contact': contactRoutes,
+  '/api/v1/contract': contractRoutes,
+  '/api/v1/custom-frame': customFrameRoutes,
+  '/api/v1/admin': adminRoutes,
+  '/api/v1/o': editEventRoutes,
   '/api/v1/settings': saveSettings,
   '/api/v1/event-reminder': eventReminderRoutes,
   '/api/v1/verification': verificationRoutes,
@@ -53,4 +54,5 @@ exports.routesLists = {
   '/api/v1/home-recommendations': homeRecommendationsRoutes,
   '/api/v1/transaction-payment': transactionPaymentRoutes,
   '/api/v1/event-requests': eventRequestRoutes,
+  '/api/v1/loyalty': rewardRoutes,
 };

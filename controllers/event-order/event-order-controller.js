@@ -13,6 +13,8 @@ const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const RefundRequest = require("../../models/refund-managment/RefundRequest");
 const User = require("../../models/User");
 const axios = require("axios");
+const RewardTransaction = require("../../models/RewardTrans");
+
 // Get Validated tickets
 exports.fetchUserValidatedTickets = async (req, res) => {
   try {
@@ -73,23 +75,23 @@ exports.fetchUserValidatedTickets = async (req, res) => {
 exports.createOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
- 
+
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
     console.log("createOrder called with:", { eventId, totalAmount, paymentMethod });
- 
+
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
       return res.status(400).json({ message: "Missing required fields" });
     }
- 
+
     const ticketList = JSON.parse(tickets);
     const parsedOrderAddress = typeof orderAddress === "string" ? JSON.parse(orderAddress) : orderAddress;
     const parsedParticipants = typeof participantDetails === "string" ? JSON.parse(participantDetails) : participantDetails;
- 
+
     const transactionId = uuidv4();
     const ticketCode = Math.floor(100000 + Math.random() * 900000);
     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
- 
+
     const newOrder = new EventOrder({
       eventId,
       userId: req.user._id,
@@ -104,10 +106,29 @@ exports.createOrder = async (req, res) => {
       deviceUsed,
       paymentStatus: "pending"
     });
- 
+
     const savedOrder = await newOrder.save({ session });
-    console.log("Order saved:", savedOrder._id);
- 
+
+    // ✅ LOYALTY POINTS
+    const points = Math.floor(totalAmount / 100);
+    if (points > 0) {
+      await RewardTransaction.create(
+        [
+          {
+            userId: req.user._id,
+            points,
+            type: "credit",
+            reason: "Ticket Purchase",
+            reference: eventId,
+            referenceModel: "Order",
+
+          },
+        ],
+        { session }
+      );
+      console.log(`Loyalty Points added: ${points} for user ${req.user._id}`);
+    }
+
     // ✅ CASH CASE
     if (paymentMethod === "cash") {
       await session.commitTransaction();
@@ -117,8 +138,8 @@ exports.createOrder = async (req, res) => {
         message: "Cash order created successfully",
       });
     }
- 
- 
+
+
     // ✅ ONLINE PAYMENT CASE (Fapshi)
     const fapshiPayload = {
       amount: Number(totalAmount),
@@ -128,7 +149,7 @@ exports.createOrder = async (req, res) => {
       externalId: transactionId,
       message: `Ticket purchase for event ${eventId}`,
     };
- 
+
     const fapshiResponse = await axios.post(
       "https://sandbox.fapshi.com/initiate-pay",
       fapshiPayload,
@@ -140,20 +161,20 @@ exports.createOrder = async (req, res) => {
         },
       }
     );
- 
+
     await session.commitTransaction();
- 
+
     res.status(201).json({
       success: true,
       savedOrder,
       paymentUrl: fapshiResponse.data?.link,
       message: "Redirect user to payment link",
     });
- 
+
   } catch (error) {
     await session.abortTransaction();
     console.error("Error in createOrder:", error.response?.data || error.message || error);
- 
+
     res.status(500).json({
       success: false,
       message: "Error creating order",
@@ -163,24 +184,24 @@ exports.createOrder = async (req, res) => {
     session.endSession();
   }
 };
- 
+
 exports.fapshiWebhook = async (req, res) => {
   try {
     console.log("Fapshi webhook received:", req.body);
- 
+
     const { externalId, status, transId } = req.body;
- 
+
     // externalId = transactionId you sent when creating order
     if (!externalId) {
       return res.status(400).json({ message: "Missing externalId" });
     }
- 
+
     // Find order by transactionId
     const order = await EventOrder.findOne({ transactionId: externalId });
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
- 
+
     // Update payment status
     if (status === "SUCCESSFUL") {
       order.paymentStatus = "confirmed";
@@ -189,15 +210,15 @@ exports.fapshiWebhook = async (req, res) => {
     } else {
       order.paymentStatus = "pending";
     }
- 
+
     order.transactionId = transId || order.transactionId;
     await order.save();
- 
+
     console.log(`Order ${order._id} updated to ${order.paymentStatus}`);
- 
+
     // Respond so Fapshi knows we received the webhook
     res.status(200).json({ message: "Webhook processed" });
- 
+
   } catch (err) {
     console.error("Error in fapshiWebhook:", err);
     res.status(500).json({ message: "Server error" });
@@ -1129,28 +1150,28 @@ exports.transferTicket = async (req, res) => {
   try {
     const { orderId, beneficiaryId } = req.body;
     const loggedInUserId = req.user._id;
- 
+
     if (!orderId || !beneficiaryId) {
       return res.status(400).json({
         success: false,
         message: "Order ID and Beneficiary ID are required",
       });
     }
- 
+
     // 0️⃣ Check if a refund already exists for this order
     const existingRefund = await RefundRequest.findOne({
       orderId,
       userId: loggedInUserId,
       refundStatus: { $in: ["pending", "approved"] }, // pending or approved
     });
- 
+
     if (existingRefund) {
       return res.status(400).json({
         success: false,
         message: "⚠️ You have already requested a refund for this ticket. Please cancel the refund before sharing the ticket.",
       });
     }
- 
+
     // 1️⃣ Check beneficiary exists
     const beneficiary = await User.findOne({ __id: beneficiaryId, role: "participant" });
     if (!beneficiary) {
@@ -1159,31 +1180,31 @@ exports.transferTicket = async (req, res) => {
         message: "Beneficiary not found or not a participant",
       });
     }
- 
+
     // 2️⃣ Find sender order
     const senderOrder = await EventOrder.findOne({
       _id: orderId,
       userId: loggedInUserId,
     });
- 
+
     if (!senderOrder) {
       return res.status(404).json({
         success: false,
         message: "Order not found for this user",
       });
     }
- 
+
     // 3️⃣ Transfer entire order to beneficiary
     senderOrder.userId = beneficiary._id;
     senderOrder.updatedAt = new Date();
     await senderOrder.save();
- 
+
     return res.status(200).json({
       success: true,
       message: "Tickets transferred successfully",
       updatedOrder: senderOrder,
     });
- 
+
   } catch (error) {
     console.error(error);
     res.status(500).json({
