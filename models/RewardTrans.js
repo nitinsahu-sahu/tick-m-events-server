@@ -26,7 +26,20 @@ const rewardTransactionSchema = new Schema({
   },
   referenceModel: {
     type: String,
-    enum: ['User', 'Order', 'Other']
+    enum: ['User', 'Order','Other']
+  },
+   usedAt: {
+    type: Date,
+    default: null 
+  },
+  status: {
+    type: String,
+    enum: ['available', 'used'],
+    default: 'available'
+  },
+   debitUsedFor: {
+    type: String,
+    default: null
   }
 }, { timestamps: true });
 

@@ -1,4 +1,5 @@
 const Event = require('../../models/event-details/Event');
+const User = require('../../models/User');
 const Organizer = require('../../models/event-details/Organizer');
 const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
@@ -16,6 +17,7 @@ const Bid = require('../../models/event-request/bid.modal');
 const { createBidStatusEmailTemplate } = require('../../utils/Emails-template');
 const { sendMail } = require('../../utils/Emails');
 const Withdrawal = require('../../models/transaction-&-payment/Withdrawal');
+
 exports.updateBidStatus = async (req, res, next) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -76,11 +78,9 @@ exports.updateBidStatus = async (req, res, next) => {
         }
 
         // Prepare update object
-        // const updateData = {
-        //     status,
-        // };
         const updateData = {};
         // Add validation based on status
+
         if (status === 'rejected') {
             if (!rejectionReason || rejectionReason.trim().length < 10) {
                 await session.abortTransaction();
@@ -335,6 +335,43 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 Withdrawal.find({ eventId: event._id }).lean(),
             ]);
 
+            // NEW: Get signed projects with provider details
+            const signedProjects = await Promise.all(
+                placeABid
+                    .filter(project => project.isSigned) // Only signed projects
+                    .map(async (project) => {
+                        // Find the winning bid for this project
+                        const winningBid = await Bid.findOne({
+                            projectId: project._id,
+                            status: 'accepted'
+                        })
+                        .populate('providerId', 'name email avatar experience rating reviewCount isVerified')
+                        .lean();
+
+                        // Get all bids for this project for statistics
+                        const allBids = await Bid.find({ projectId: project._id })
+                            .populate('providerId', 'name email')
+                            .select('bidAmount status createdAt')
+                            .lean();
+
+                        return {
+                            projectDetails: project,
+                            winningBid: winningBid || null,
+                            totalBids: allBids.length,
+                            bidsStatistics: {
+                                totalBids: allBids.length,
+                                averageBid: allBids.length > 0 ? 
+                                    allBids.reduce((sum, bid) => sum + bid.bidAmount, 0) / allBids.length : 0,
+                                pendingBids: allBids.filter(bid => bid.status === 'pending').length,
+                                acceptedBids: allBids.filter(bid => bid.status === 'accepted').length,
+                                rejectedBids: allBids.filter(bid => bid.status === 'rejected').length
+                            },
+                            projectStatus: project.status,
+                            bidStatus: project.bidStatus
+                        };
+                    })
+            );
+
             const enrichedOrders = eventOrder.map(orderItem => {
                 const matchingRefund = refundRequests.find(refund => {
                     const refundOrderId = refund.orderId?._id || refund.orderId;
@@ -374,6 +411,15 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 return bid;
             }));
 
+            // Get project statistics for the event
+            const projectStatistics = {
+                totalProjects: placeABid.length,
+                signedProjects: placeABid.filter(project => project.isSigned).length,
+                openForBidding: placeABid.filter(project => project.bidStatus === 'open').length,
+                closedProjects: placeABid.filter(project => project.bidStatus === 'closed').length,
+                cancelledProjects: placeABid.filter(project => project.bidStatus === 'cancelled').length
+            };
+            
             return {
                 ...event,
                 order: enrichedOrders,
@@ -390,9 +436,13 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 photoFrame,
                 eventRequests,
                 placeABid: enrichedPlaceABid || [],
-                withdrawals
+                withdrawals,
+                signedProjects,
+                projectStatistics
             };
         }));
+
+         
 
         res.status(200).json({
             success: true,
@@ -680,7 +730,7 @@ exports.updateProviderBidStatus = async (req, res, next) => {
 
         // // If bid is accepted, update the project to mark it as closed
         if (status === 'isProviderAccepted') {
-            const placeProject = await PlaceABid.findByIdAndUpdate(
+            await PlaceABid.findByIdAndUpdate(
                 projectId,
                 {
                     bidStatus: 'closed',
@@ -707,6 +757,15 @@ exports.updateProviderBidStatus = async (req, res, next) => {
             );
         }
 
+        //Update Provider gigs
+        const eventRequest = await PlaceABid.findById(projectId)
+
+        const previousStatus = eventRequest.status;
+        const providerId = req.user._id;
+        if (providerId) {
+            await updateUserGigCounts(providerId, previousStatus, "pending");
+        }
+
         // // Commit the transaction
         await session.commitTransaction();
         session.endSession();
@@ -730,3 +789,30 @@ exports.updateProviderBidStatus = async (req, res, next) => {
         });
     }
 };
+
+// Helper function to update user gig counts
+async function updateUserGigCounts(userId, previousStatus, newStatus) {
+    const user = await User.findById(userId);
+    
+    if (!user) return;
+    
+    // Initialize gigsCounts if not present
+    if (!user.gigsCounts) {
+        user.gigsCounts = {
+            pending: 0,
+            ongoing: 0,
+            completed: 0,
+            cancelled: 0
+        };
+    }
+    
+    // Decrement previous status count if it's a valid status
+    if (previousStatus && user.gigsCounts[previousStatus] > 0) {
+        user.gigsCounts[previousStatus] -= 1;
+    }
+    
+    // Increment new status count
+    user.gigsCounts[newStatus] = (user.gigsCounts[newStatus] || 0) + 1;
+    
+    await user.save();
+}
