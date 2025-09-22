@@ -40,6 +40,7 @@ const bidSchema = new Schema({
       return this.status === 'rejected';
     }
   },
+ 
   isOrgnizerAccepted: {
     type: Boolean,
     default: false
