@@ -3,7 +3,7 @@ const router = express.Router();
 const { getUserEventsWithDetails, deleteEvent, updateEvents, updateEventVisibility } = require('../../controllers/organizer/editEvent.Controller');
 const { verifyToken, verifyOrganizer } = require('../../middleware/VerifyToken');
 const { fetchEventOrganizerSelect, fetchEventWithPlaceABidData, fetchEventWithAllPlaceABidData, updateBidStatus, updateProviderBidStatus } = require('../../controllers/organizer/common-event-select');
-const { postPlaceABid,getBids,getBidById } = require('../../controllers/event-request/place-a-bid-controller');
+const { postPlaceABid,getBids,getBidById,updatePlaceABidStatus } = require('../../controllers/event-request/place-a-bid-controller');
 
 router.route('/edit-events')
     .get(verifyToken, getUserEventsWithDetails)
@@ -21,6 +21,7 @@ router.put('/place-a-bid/:projectId/:bidId/providerAcceptance', verifyToken, upd
 router.post('/place-a-bid', verifyToken, verifyOrganizer, postPlaceABid)
 router.get('/place-a-bid', verifyToken, getBids)
 router.get('/place-a-bid/:projectId', verifyToken, getBidById)
+router.put('/place-a-bid/:id/:providerId/projectUpdate', verifyToken, updatePlaceABidStatus)
 
 
 module.exports = router;
