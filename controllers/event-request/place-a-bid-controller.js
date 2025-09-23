@@ -1,8 +1,85 @@
 const PlaceABidModal = require("../../models/event-request/placeBid.modal");
 const Bid = require("../../models/event-request/bid.modal");
 const Category = require("../../models/event-details/Category");
+const User = require("../../models/User");
 const Verification = require("../../models/profile-service-maagement/Verification");
 const mongoose = require("mongoose")
+
+exports.updatePlaceABidStatus = async (req, res) => {
+  try {
+    const { id, providerId } = req.params; // EventRequest ID
+    const { newStatus } = req.body; // Status to update
+
+    // Validate the status value
+    const validStatuses = ['pending', 'ongoing', 'completed', 'cancelled'];
+    if (!validStatuses.includes(newStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value. Must be one of: "pending", "ongoing", "completed", or "cancelled"'
+      });
+    }
+
+    // Find the event request
+    const placeABid = await PlaceABidModal.findById(id)
+
+    if (!placeABid) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event request not found'
+      });
+    }
+
+    const previousStatus = placeABid.status;
+
+    // Update the event request status
+    placeABid.status = newStatus;
+    await placeABid.save();
+
+    // Update user gig counts based on status transition
+    if (providerId) {
+      await updateUserGigCounts(providerId, previousStatus, newStatus);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Service project status updated successfully from ${previousStatus} to ${newStatus}`,
+      data: placeABid
+    });
+
+  } catch (error) {
+    console.error('Error updating service project status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating service project status',
+    });
+  }
+};
+
+async function updateUserGigCounts(userId, previousStatus, newStatus) {
+  const user = await User.findById(userId);
+
+  if (!user) return;
+
+  // Initialize gigsCounts if not present
+  if (!user.gigsCounts) {
+    user.gigsCounts = {
+      pending: 0,
+      ongoing: 0,
+      completed: 0,
+      cancelled: 0
+    };
+  }
+
+  // Decrement previous status count if it's a valid status
+  if (previousStatus && user.gigsCounts[previousStatus] > 0) {
+    user.gigsCounts[previousStatus] -= 1;
+  }
+
+  // Increment new status count
+  user.gigsCounts[newStatus] = (user.gigsCounts[newStatus] || 0) + 1;
+
+  await user.save();
+}
 
 // Organizer Place a Custome Service For Event
 exports.postPlaceABid = async (req, res) => {
@@ -472,15 +549,15 @@ exports.getMyBids = async (req, res, next) => {
     const enhancedBids = await Promise.all(
       mybids.map(async (bid) => {
         // Get all bids for this project, sorted by bid amount (lowest first)
-        const allBidsForProject = await Bid.find({ 
-          projectId: bid.projectId._id 
+        const allBidsForProject = await Bid.find({
+          projectId: bid.projectId._id
         }).sort({ bidAmount: 1, createdAt: 1 }); // Sort by amount then by date
 
         // Find the position/rank of the current bid
         const bidIndex = allBidsForProject.findIndex(
           b => b._id.toString() === bid._id.toString()
         );
-        
+
         const bidRank = bidIndex !== -1 ? bidIndex + 1 : null;
         const totalBids = allBidsForProject.length;
 
@@ -580,7 +657,7 @@ exports.updateBid = async (req, res, next) => {
     const { bidId } = req.params;
     const userId = req.user._id;
     const updateData = req.body;
- 
+
     // Find the bid
     const bid = await Bid.findById(bidId);
     if (!bid) {
@@ -589,7 +666,7 @@ exports.updateBid = async (req, res, next) => {
         message: 'Bid not found'
       });
     }
- 
+
     // Check if user owns the bid
     if (bid.providerId.toString() !== userId.toString()) {
       return res.status(403).json({
@@ -597,7 +674,7 @@ exports.updateBid = async (req, res, next) => {
         message: 'Not authorized to update this bid'
       });
     }
- 
+
     // Check if bid can still be updated
     const project = await PlaceABidModal.findById(bid.projectId);
     if (project.bidStatus !== 'open') {
@@ -606,7 +683,7 @@ exports.updateBid = async (req, res, next) => {
         message: 'Cannot update bid as project is no longer active'
       });
     }
- 
+
     // Validate proposal length if being updated
     if (updateData.proposal && updateData.proposal.length < 100) {
       return res.status(400).json({
@@ -614,22 +691,22 @@ exports.updateBid = async (req, res, next) => {
         message: 'Proposal must be at least 100 characters long'
       });
     }
- 
+
     const updatedBid = await Bid.findByIdAndUpdate(
       bidId,
       updateData,
       { new: true, runValidators: true }
     );
- 
+
     res.status(200).json({
       success: true,
       message: 'Bid updated successfully',
       data: updatedBid
     });
- 
+
   } catch (error) {
     console.error('Error updating bid:', error);
- 
+
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
       return res.status(400).json({
@@ -638,7 +715,7 @@ exports.updateBid = async (req, res, next) => {
         errors: messages
       });
     }
- 
+
     res.status(500).json({
       success: false,
       message: 'Server error',
