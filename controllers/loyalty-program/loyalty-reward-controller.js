@@ -38,6 +38,56 @@ const rewardCatalog = [
   },
 ];
 
+exports.getAvailableRewards = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const transactions = await RewardTransaction.find({
+      userId,
+      type: "credit",
+      status: "available",
+    });
+
+    if (!transactions.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No available rewards",
+        rewards: [],
+      });
+    }
+
+    const totalPoints = transactions.reduce((sum, t) => sum + t.points, 0);
+
+    // Merge reward info + transaction info
+    const availableRewards = rewardCatalog
+      .filter(r => totalPoints >= r.pointsRequired)
+      .map(r => {
+        const txn = transactions.find(t => t.points >= r.pointsRequired);
+        return {
+          _id: txn?._id || null,     // transaction id
+          name: r.name,
+          description: r.description,
+          points: txn?.points || r.pointsRequired, // show actual points instead of required
+          reason: txn?.reason || null,
+          redeemCode: txn?.redeemCode || null,
+        };
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Available rewards fetched successfully",
+      totalPoints,
+      rewards: availableRewards, // already merged
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch available rewards",
+      error: err.message,
+    });
+  }
+};
+
 exports.getUserPoints = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -54,46 +104,6 @@ exports.getUserPoints = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-exports.getAvailableRewards = async (req, res) => {
-  try {
-    const userId = req.user._id;
-
-    // Fetch only credits that are still available
-    const transactions = await RewardTransaction.find({
-      userId,
-      type: "credit",
-      status:"available",
-    });
-
-    if (!transactions.length) {
-      return res.status(200).json({
-        success: true,
-        message: "No available rewards",
-        rewards: [],
-      });
-    }
-
-    // Sum total available points
-    const totalPoints = transactions.reduce((sum, t) => sum + t.points, 0);
-
-    // Filter rewards user can actually redeem
-    const availableRewards = rewardCatalog.filter(r => totalPoints >= r.pointsRequired);
-
-    return res.status(200).json({
-      success: true,
-      message: "Available rewards fetched successfully",
-      totalPoints,
-      rewards: availableRewards,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch available rewards",
-      error: err.message,
-    });
   }
 };
 
@@ -134,3 +144,60 @@ exports.getRewardHistory = async (req, res) => {
     });
   }
 };
+
+exports.redeemReward = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { rewardId, code } = req.body; // get code from frontend
+
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: "Redeem code is required",
+      });
+    }
+
+    // Find existing transaction for this reward and user
+    let transaction = await RewardTransaction.findOne({
+      userId,
+       _id: rewardId,
+      // optionally filter by type: 'credit' or whatever fits your logic
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "No transaction found for this reward",
+      });
+    }
+
+    // If code already exists, return it (or update it if you want)
+    if (transaction.redeemCode) {
+      return res.status(200).json({
+        success: true,
+        code: transaction.redeemCode,
+        message: "Reward code already generated",
+      });
+    }
+
+    // Save the provided code to the existing transaction
+    transaction.redeemCode = code;
+    transaction.codeGeneratedAt = new Date();
+
+    await transaction.save();
+
+    return res.status(200).json({
+      success: true,
+      code,
+      message: "Reward code saved successfully",
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to save reward code",
+      error: err.message,
+    });
+  }
+};
+

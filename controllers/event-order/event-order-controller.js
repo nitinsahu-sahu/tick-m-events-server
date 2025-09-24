@@ -74,24 +74,85 @@ exports.fetchUserValidatedTickets = async (req, res) => {
 
 exports.createOrder = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
-    console.log("createOrder called with:", { eventId, totalAmount, paymentMethod });
 
+    // Validation
     if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
+    // Parse inputs
     const ticketList = JSON.parse(tickets);
     const parsedOrderAddress = typeof orderAddress === "string" ? JSON.parse(orderAddress) : orderAddress;
     const parsedParticipants = typeof participantDetails === "string" ? JSON.parse(participantDetails) : participantDetails;
+    const userEmail = parsedOrderAddress.email;
 
-    const transactionId = uuidv4();
-    const ticketCode = Math.floor(100000 + Math.random() * 900000);
+    if (!Array.isArray(ticketList?.tickets) || ticketList.tickets.length === 0) {
+      return res.status(400).json({ message: 'At least one ticket is required' });
+    }
+
+    // Generate unique IDs
+    const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
+    const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
+    const transactionId = uuidToNumeric(uuidv4());
+    const ticketCode = uuidToSixNumeric(uuidv4());
     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
 
+    session.startTransaction();
+
+    // 1. Update event's sold tickets count
+    const totalSoldTickets = ticketList.tickets.reduce((sum, ticket) => {
+      return sum + (Number(ticket.quantity) || 0);
+    }, 0);
+
+    await Event.findByIdAndUpdate(
+      eventId,
+      { $inc: { soldTicket: totalSoldTickets } },
+      { new: true, session }
+    );
+
+    // 2. Update ticket configuration
+    const ticketConfig = await TicketConfiguration.findOne({ eventId: eventId }).session(session);
+    if (!ticketConfig) {
+      throw new Error(`No ticket configuration found for event ID: ${eventId}`);
+    }
+
+    // Process each ticket in ticket configuration
+    for (const orderedTicket of ticketList.tickets) {
+      const ticketType = ticketConfig.tickets.find(
+        t => t.id.toString() === orderedTicket.ticketId.toString()
+      );
+
+      if (!ticketType) {
+        throw new Error(`Ticket type not found for ID: ${orderedTicket.ticketId}`);
+      }
+
+      const availableTickets = Number(ticketType.totalTickets) || 0;
+      const orderedQuantity = Number(orderedTicket.quantity) || 0;
+
+      ticketType.totalTickets = (availableTickets - orderedQuantity).toString();
+    }
+
+    // 3. Update individual ticket types
+    for (const orderedTicket of ticketList.tickets) {
+      const orderedQuantity = Number(orderedTicket.quantity) || 0;
+
+      const updatedTicket = await TicketType.findByIdAndUpdate(
+        orderedTicket.ticketId,
+        { $inc: { sold: orderedQuantity } },
+        { new: true, session }
+      );
+
+      if (!updatedTicket) {
+        throw new Error(`TicketType not found with ID: ${orderedTicket.ticketId}`);
+      }
+    }
+
+    await ticketConfig.save({ session });
+
+    // 4. Create the order
     const newOrder = new EventOrder({
       eventId,
       userId: req.user._id,
@@ -109,76 +170,137 @@ exports.createOrder = async (req, res) => {
 
     const savedOrder = await newOrder.save({ session });
 
-    // ✅ LOYALTY POINTS
+    // 5. Send confirmation email (non-critical, don't fail transaction)
+    const sendEmailAsync = async () => {
+      try {
+        const event = await Event.findById(eventId).select('eventName date time location');
+        const emailHtml = await createOrderEmailTemplate(savedOrder, userEmail, event);
+        await sendMail(userEmail, 'Your Ticket Purchase Confirmation', emailHtml);
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+      }
+    };
+
+    // 6. Add loyalty points (within transaction)
     const points = Math.floor(totalAmount / 100);
     if (points > 0) {
       await RewardTransaction.create(
-        [
-          {
-            userId: req.user._id,
-            points,
-            type: "credit",
-            reason: "Ticket Purchase",
-            reference: eventId,
-            referenceModel: "Order",
-
-          },
-        ],
+        [{
+          userId: req.user._id,
+          points,
+          type: "credit",
+          reason: "Ticket Purchase",
+          reference: eventId,
+          referenceModel: "Order",
+        }],
         { session }
       );
-      console.log(`Loyalty Points added: ${points} for user ${req.user._id}`);
     }
 
-    // ✅ CASH CASE
+    // 7. Handle payment methods
+    let paymentUrl = null;
+
     if (paymentMethod === "cash") {
+      // Cash payment - commit transaction immediately
       await session.commitTransaction();
+
+      // Send email after transaction commit for cash payments
+      sendEmailAsync();
+
       return res.status(201).json({
         success: true,
         savedOrder,
         message: "Cash order created successfully",
       });
+    } else {
+      // Online payment - prepare Fapshi payload but don't call API within transaction
+      const fapshiPayload = {
+        amount: Number(totalAmount),
+        email: userEmail,
+        redirectUrl: `${process.env.FRONTEND_URL}/ticket-purchase-process?orderId=${savedOrder._id}&status=success`,
+        userId: req.user._id.toString(),
+        externalId: transactionId,
+        message: `Ticket purchase for event ${eventId}`,
+      };
+
+      // Commit transaction first before external API call
+      await session.commitTransaction();
+
+      // Then call Fapshi API
+      try {
+        const fapshiResponse = await axios.post(
+          "https://sandbox.fapshi.com/initiate-pay",
+          fapshiPayload,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              apikey: process.env.FAPSHI_API_KEY,
+              apiuser: process.env.FAPSHI_API_USER,
+            },
+            timeout: 10000, // 10 second timeout
+          }
+        );
+
+        paymentUrl = fapshiResponse.data?.link;
+        console.log(fapshiResponse);
+        console.log(paymentUrl);
+
+      } catch (fapshiError) {
+        console.error("Fapshi API error:", fapshiError.message);
+
+        // Update order status to failed for online payment
+        await EventOrder.findByIdAndUpdate(savedOrder._id, {
+          paymentStatus: "failed",
+          errorMessage: fapshiError.response?.data?.message || "Payment gateway error"
+        });
+
+        return res.status(500).json({
+          success: false,
+          message: "Payment gateway error",
+          error: fapshiError.response?.data || fapshiError.message,
+        });
+      }
+
+      // Send email for online payment after successful API call
+      sendEmailAsync();
+
+      return res.status(201).json({
+        success: true,
+        savedOrder,
+        paymentUrl,
+        message: "Order created successfully. Redirect to payment.",
+      });
     }
 
-
-    // ✅ ONLINE PAYMENT CASE (Fapshi)
-    const fapshiPayload = {
-      amount: Number(totalAmount),
-      email: parsedOrderAddress.email,
-      redirectUrl: `${process.env.FRONTEND_URL}/ticket-purchase-process?orderId=${savedOrder._id}&status=success`,
-      userId: req.user._id.toString(),
-      externalId: transactionId,
-      message: `Ticket purchase for event ${eventId}`,
-    };
-
-    const fapshiResponse = await axios.post(
-      "https://sandbox.fapshi.com/initiate-pay",
-      fapshiPayload,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          apikey: process.env.FAPSHI_API_KEY,
-          apiuser: process.env.FAPSHI_API_USER,
-        },
-      }
-    );
-
-    await session.commitTransaction();
-
-    res.status(201).json({
-      success: true,
-      savedOrder,
-      paymentUrl: fapshiResponse.data?.link,
-      message: "Redirect user to payment link",
-    });
-
   } catch (error) {
-    await session.abortTransaction();
-    console.error("Error in createOrder:", error.response?.data || error.message || error);
+    // Transaction error handling
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    console.error("Error in createOrder:", error);
+
+    // Specific error handling
+    if (error.message.includes('Ticket type not found')) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ticket selection",
+        error: error.message,
+      });
+    }
+
+    if (error.message.includes('not enough tickets')) {
+      return res.status(400).json({
+        success: false,
+        message: "Insufficient tickets available",
+        error: error.message,
+      });
+    }
 
     res.status(500).json({
       success: false,
       message: "Error creating order",
-      error: error.response?.data || error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : "Internal server error",
     });
   } finally {
     session.endSession();
@@ -187,7 +309,6 @@ exports.createOrder = async (req, res) => {
 
 exports.fapshiWebhook = async (req, res) => {
   try {
-    console.log("Fapshi webhook received:", req.body);
 
     const { externalId, status, transId } = req.body;
 
@@ -208,8 +329,9 @@ exports.fapshiWebhook = async (req, res) => {
     } else if (status === "FAILED") {
       order.paymentStatus = "failed";
     } else {
-      order.paymentStatus = "pending";
+      order.paymentStatus = "confirmed";
     }
+    
 
     order.transactionId = transId || order.transactionId;
     await order.save();
@@ -220,7 +342,6 @@ exports.fapshiWebhook = async (req, res) => {
     res.status(200).json({ message: "Webhook processed" });
 
   } catch (err) {
-    console.error("Error in fapshiWebhook:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -3,6 +3,7 @@ const User = require('../../models/User');
 const Organizer = require('../../models/event-details/Organizer');
 const Customization = require('../../models/event-details/Customization');
 const Ticket = require('../../models/event-details/Ticket');
+const TicketType = require('../../models/TicketType');
 const Visibility = require('../../models/event-details/Visibility');
 const eventReview = require('../../models/event-details/eventReview');
 const Category = require('../../models/event-details/Category');
@@ -294,7 +295,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
         // Helper function to get full event details
         const eventsWithDetails = await Promise.all(upcomingEvents.map(async (event) => {
-            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests, placeABid, withdrawals] = await Promise.all([
+            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests, placeABid, withdrawals, ticketType] = await Promise.all([
                 Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -333,6 +334,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                     .populate('categoryId', 'name')
                     .lean(),
                 Withdrawal.find({ eventId: event._id }).lean(),
+                TicketType.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+
             ]);
 
             // NEW: Get signed projects with provider details
@@ -345,8 +348,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                             projectId: project._id,
                             status: 'accepted'
                         })
-                        .populate('providerId', 'name email avatar experience rating reviewCount isVerified')
-                        .lean();
+                            .populate('providerId', 'name email avatar experience rating reviewCount isVerified')
+                            .lean();
 
                         // Get all bids for this project for statistics
                         const allBids = await Bid.find({ projectId: project._id })
@@ -360,7 +363,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                             totalBids: allBids.length,
                             bidsStatistics: {
                                 totalBids: allBids.length,
-                                averageBid: allBids.length > 0 ? 
+                                averageBid: allBids.length > 0 ?
                                     allBids.reduce((sum, bid) => sum + bid.bidAmount, 0) / allBids.length : 0,
                                 pendingBids: allBids.filter(bid => bid.status === 'pending').length,
                                 acceptedBids: allBids.filter(bid => bid.status === 'accepted').length,
@@ -419,7 +422,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 closedProjects: placeABid.filter(project => project.bidStatus === 'closed').length,
                 cancelledProjects: placeABid.filter(project => project.bidStatus === 'cancelled').length
             };
-            
+
             return {
                 ...event,
                 order: enrichedOrders,
@@ -438,11 +441,12 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 placeABid: enrichedPlaceABid || [],
                 withdrawals,
                 signedProjects,
-                projectStatistics
+                projectStatistics,
+                ticketType: ticketType || []
             };
         }));
 
-         
+
 
         res.status(200).json({
             success: true,
@@ -793,9 +797,9 @@ exports.updateProviderBidStatus = async (req, res, next) => {
 // Helper function to update user gig counts
 async function updateUserGigCounts(userId, previousStatus, newStatus) {
     const user = await User.findById(userId);
-    
+
     if (!user) return;
-    
+
     // Initialize gigsCounts if not present
     if (!user.gigsCounts) {
         user.gigsCounts = {
@@ -805,14 +809,14 @@ async function updateUserGigCounts(userId, previousStatus, newStatus) {
             cancelled: 0
         };
     }
-    
+
     // Decrement previous status count if it's a valid status
     if (previousStatus && user.gigsCounts[previousStatus] > 0) {
         user.gigsCounts[previousStatus] -= 1;
     }
-    
+
     // Increment new status count
     user.gigsCounts[newStatus] = (user.gigsCounts[newStatus] || 0) + 1;
-    
+
     await user.save();
 }
