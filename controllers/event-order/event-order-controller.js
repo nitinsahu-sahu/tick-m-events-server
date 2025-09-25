@@ -79,8 +79,12 @@ exports.createOrder = async (req, res) => {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
 
     // Validation
-    if (!eventId || !orderAddress || !totalAmount || !paymentMethod) {
+     if (!eventId || !orderAddress || totalAmount === undefined || totalAmount === null) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
+ 
+    if (Number(totalAmount) > 0 && !paymentMethod) {
+      return res.status(400).json({ message: "Payment method is required for paid events" });
     }
 
     // Parse inputs
@@ -200,7 +204,8 @@ exports.createOrder = async (req, res) => {
     // 7. Handle payment methods
     let paymentUrl = null;
 
-    if (paymentMethod === "cash") {
+      if (paymentMethod === "cash" || Number(totalAmount) === 0) {
+ 
       // Cash payment - commit transaction immediately
       await session.commitTransaction();
 
