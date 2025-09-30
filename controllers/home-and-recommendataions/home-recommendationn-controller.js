@@ -260,3 +260,139 @@ async function getEventPreferences(userId) {
         return [];
     }
 }
+
+exports.getHomeEvents = async (req, res, next) => {
+  try {
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentDateTime = new Date();
+ 
+    // 1. Get upcoming events (future dates or today but time in future)
+    const upcomingEvents = await Event.find({
+      isDelete: { $ne: true },
+      status: "approved",
+      $or: [
+        { date: { $gt: currentDateTime.toISOString().split("T")[0] } },
+        {
+          date: currentDateTime.toISOString().split("T")[0],
+          time: {
+            $gt: currentDateTime.toLocaleTimeString("en-US", { hour12: false }),
+          },
+        },
+      ],
+    })
+      .sort({ date: 1 })
+      .limit(10)
+      .lean();
+ 
+    // 2. Get popular events
+    const popularEvents = await Event.aggregate([
+      {
+        $match: {
+          isDelete: { $ne: true },
+          status: "approved",
+        },
+      },
+      {
+        $lookup: {
+          from: "tickets",
+          localField: "_id",
+          foreignField: "eventId",
+          as: "ticketData",
+        },
+      },
+      {
+        $lookup: {
+          from: "eventreviews",
+          localField: "_id",
+          foreignField: "eventId",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          popularityScore: {
+            $add: [
+              { $sum: "$ticketData.tickets.totalTickets" },
+              { $multiply: [{ $size: "$reviews" }, 5] },
+              { $ifNull: [{ $avg: "$reviews.rating" }, 0] },
+            ],
+          },
+        },
+      },
+      { $sort: { popularityScore: -1 } },
+      { $limit: 10 },
+      {
+        $project: {
+          ticketData: 0,
+          reviews: 0,
+        },
+      },
+    ]);
+ 
+    // 3. Latest events (recently added & still upcoming)
+    const latestEvents = await Event.find({
+      isDelete: { $ne: true },
+      status: "approved",
+      date: { $gte: currentDate.toISOString().split("T")[0] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+ 
+    // Helper to fetch related details
+    const getEventDetails = async (events) => {
+      return Promise.all(
+        events.map(async (event) => {
+          const [organizer, customization, tickets, visibility, category, promotion] =
+            await Promise.all([
+              Organizer.findOne({ eventId: event._id })
+                .select(
+                  "-socialMedia -website -createdAt -updatedAt -isDelete -__v"
+                )
+                .lean(),
+              Customization.findOne({ eventId: event._id })
+                .select("-createdAt -updatedAt -isDelete -__v")
+                .lean(),
+              Ticket.find({ eventId: event._id })
+                .select("-createdAt -updatedAt -isDelete -__v")
+                .lean(),
+              Visibility.findOne({ eventId: event._id })
+                .select("-createdAt -updatedAt -isDelete -__v")
+                .lean(),
+              Category.findById(event.categoryId).select("name").lean(),
+              Promotion.find({ eventId: event._id })
+                .select("-createdAt -updatedAt -isDelete -__v")
+                .lean(),
+            ]);
+ 
+          return {
+            ...event,
+            organizer,
+            customization,
+            tickets,
+            visibility,
+            category: category?.name || "General",
+            promotion,
+          };
+        })
+      );
+    };
+ 
+    const upcomingWithDetails = await getEventDetails(upcomingEvents);
+    const popularWithDetails = await getEventDetails(popularEvents);
+    const latestWithDetails = await getEventDetails(latestEvents);
+ 
+    res.status(200).json({
+      success: true,
+      message: "Public home events fetched successfully",
+      upcomingEvents: upcomingWithDetails,
+      popularEvents: popularWithDetails,
+      latestEvents: latestWithDetails,
+    });
+  } catch (error) {
+    console.error("Error fetching public home events:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
