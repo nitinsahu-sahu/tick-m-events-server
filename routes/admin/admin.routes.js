@@ -3,11 +3,13 @@ const { getAllUsers, validateUser, blockUser, providerList, getEventSummary } = 
 const router = express.Router()
 const { verifyToken, verifyAdmin } = require('../../middleware/VerifyToken');
 const { getDashbordData } = require('../../controllers/admin/dashboard.controller');
+const { paymentHistoryController } = require('../../controllers/admin/payment-history.controller');
 
 router.get('/', verifyToken, getAllUsers);
 router.put('/validate/:userId', verifyToken, validateUser);
 router.put('/block/:userId', verifyToken, blockUser);
 router.get('/gogs/pro-list', verifyToken, verifyAdmin, providerList);
+router.post('/verify-admin-fee-payment', verifyToken, paymentHistoryController);
 router.get('/dashboard', verifyToken, verifyAdmin, getDashbordData);
 router.get('/ticketingActivity', verifyToken, verifyAdmin, getEventSummary);//add routes
 
