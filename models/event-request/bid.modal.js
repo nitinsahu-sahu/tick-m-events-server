@@ -40,7 +40,7 @@ const bidSchema = new Schema({
       return this.status === 'rejected';
     }
   },
- 
+
   isOrgnizerAccepted: {
     type: Boolean,
     default: false
@@ -59,6 +59,10 @@ const bidSchema = new Schema({
     type: String,
     enum: ['pending', 'accepted', 'rejected', 'withdrawn'],
     default: 'pending'
+  },
+  adminFeePaid: {
+    type: Boolean,
+    default: false
   },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
