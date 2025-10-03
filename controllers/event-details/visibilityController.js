@@ -23,7 +23,11 @@ exports.createPublicationVisibility = async (req, res, next) => {
       visibilityType
     });
     const event = await Event.findById(eventId).select('eventName');
-
+    await Event.findByIdAndUpdate(
+      { _id: eventId },
+      { step: 4 },
+      { new: true }
+    );
     if (event) {
       await Activity.create({
         userId: req.user._id,

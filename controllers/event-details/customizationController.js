@@ -1,3 +1,4 @@
+const Event = require('../../models/event-details/Event');
 const Customization = require('../../models/event-details/Customization');
 const cloudinary = require('cloudinary').v2;
 const ErrorResponse = require('../../utils/errorHandler');
@@ -7,12 +8,18 @@ exports.createEventCustomization = async (req, res, next) => {
   try {
     const { frame, themeColor, customColor } = req.body
     const { eventLogo } = req.files
-    const { eventId,ticketCustomId } = req.params
+    const { eventId, ticketCustomId } = req.params
     const result = await cloudinary.uploader.upload(eventLogo.tempFilePath, {
       folder: 'event_logos',
       width: 500,
       crop: "scale"
     });
+
+    await Event.findByIdAndUpdate(
+      { _id: eventId },
+      { step: 3 },
+      { new: true }
+    );
 
     // Create the event first
     const eventCustomization = await Customization.create({

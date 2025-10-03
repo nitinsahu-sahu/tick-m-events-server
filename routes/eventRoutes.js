@@ -11,6 +11,7 @@ const { createEventCustomization } = require('../controllers/event-details/custo
 const { createPublicationVisibility } = require('../controllers/event-details/visibilityController');
 const { submitRating } = require('../controllers/event-details/eventReviewController');
 const { validateEventCreation } = require('../validators/event-validator');
+const { createCompleteEvent } = require('../controllers/event-details/complete-event');
 
 router.route('/')
   .get(getEvents)
@@ -54,5 +55,9 @@ router.route('/:id/validation-view').patch(validateViewUpdate);
 router.get('/eventPageCustomization/:id', getEventPageCustomization);
 
 router.put('/status/:eventId/:status', verifyToken, verifyAdmin, updateEventStatus);
+
+//new
+router.post('/create-complete', verifyToken, createCompleteEvent);
+
 
 module.exports = router;

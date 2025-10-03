@@ -50,7 +50,7 @@ exports.createTicketConfiguration = async (req, res) => {
 
     await Event.findByIdAndUpdate(
       { _id: eventId },
-      { ticketQuantity, payStatus },
+      { ticketQuantity, payStatus,step:2 },
       { new: true }
     );
 
