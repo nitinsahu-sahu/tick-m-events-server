@@ -18,7 +18,7 @@ const eventReviewSchema = new Schema({
     status: {
         type: String,
         enum: ["pending", "block", "approved"],
-        default: "pending"
+        default: "approved"
     },
     reply: replySchema,
     createdAt: {

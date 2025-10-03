@@ -13,6 +13,7 @@ const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const TicketConfiguration = require('../../models/event-details/Ticket');
 const RefundRequest = require('../../models/refund-managment/RefundRequest');
 const Cancellation = require('../../models/event-details/event-cancelled')
+const eventRating = require('../../models/event-details/event-rating')
 const mongoose = require('mongoose');
 
 // Create Event
@@ -20,11 +21,11 @@ exports.createEvent = async (req, res, next) => {
   // Start a mongoose session for transactions
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { eventName, date, time, category, eventType, location, format, description,
       name, number, email, website, whatsapp, linkedin, facebook, tiktok } = req.body;
-      
+
     const { coverImage, portraitImage } = req.files || {};
 
     // Check if file was uploaded
@@ -40,7 +41,7 @@ exports.createEvent = async (req, res, next) => {
     // Validate file size and type
     const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
     const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-    
+
     if (coverImage.size > MAX_FILE_SIZE) {
       await session.abortTransaction();
       session.endSession();
@@ -139,8 +140,9 @@ exports.createEvent = async (req, res, next) => {
         description,
         createdBy: req.user._id,
         portraitImage: portraitImageData,
+        step: 1
       }], { session });
-      
+
       event = event[0]; // Because we used create with array
     } catch (eventError) {
       // Clean up uploaded images if event creation fails
@@ -148,7 +150,7 @@ exports.createEvent = async (req, res, next) => {
       if (portraitImageData.public_id) {
         await cloudinary.uploader.destroy(portraitImageData.public_id);
       }
-      
+
       await session.abortTransaction();
       session.endSession();
       return res.status(500).json({
@@ -180,7 +182,7 @@ exports.createEvent = async (req, res, next) => {
         await cloudinary.uploader.destroy(portraitImageData.public_id);
       }
       await Event.deleteOne({ _id: event._id }).session(session);
-      
+
       await session.abortTransaction();
       session.endSession();
       return res.status(500).json({
@@ -204,9 +206,9 @@ exports.createEvent = async (req, res, next) => {
     // This catches any unexpected errors
     await session.abortTransaction();
     session.endSession();
-    
+
     console.error("Error creating event:", error);
-    
+
     // Check if it's a mongoose validation error
     if (error.name === 'ValidationError') {
       return res.status(400).json({
@@ -215,7 +217,7 @@ exports.createEvent = async (req, res, next) => {
         errors: Object.values(error.errors).map(err => err.message)
       });
     }
-    
+
     // Check for duplicate key error
     if (error.code === 11000) {
       return res.status(400).json({
@@ -224,7 +226,7 @@ exports.createEvent = async (req, res, next) => {
         field: Object.keys(error.keyPattern)[0]
       });
     }
-    
+
     // Generic server error
     res.status(500).json({
       success: false,
@@ -242,6 +244,7 @@ exports.getEvents = async (req, res, next) => {
     // Get all events that aren't deleted and are in the future
     const events = await Event.find({
       isDelete: { $ne: true },
+      step: 4,
       $or: [
         {
           date: { $gt: currentDateTime.toISOString().split('T')[0] }
@@ -355,12 +358,13 @@ exports.getEvent = async (req, res, next) => {
     }
 
     // Fetch all related data in parallel
-    const [organizer, customization, tickets, visibility, review] = await Promise.all([
+    const [organizer, customization, tickets, visibility, review, rating] = await Promise.all([
       Organizer.findOne({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
       Customization.findOne({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
       Ticket.find({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
       Visibility.findOne({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-      eventReview.find({ eventId, status: "approved" }).select('-updatedAt -isDelete -__v').lean()
+      eventReview.find({ eventId, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
+      eventRating.find({ eventId }).select('-updatedAt -isDelete -__v').lean()
     ]);
 
     // Combine all data
@@ -370,7 +374,8 @@ exports.getEvent = async (req, res, next) => {
       customization: customization || null,
       tickets: tickets || [],
       visibility: visibility || null,
-      review: review || []
+      review: review || [],
+      rating
     };
 
     res.status(200).json({
@@ -548,7 +553,7 @@ exports.getAllCategories = async (req, res) => {
       // Find events that match any of these category names
       const events = await Event.find({
         category: { $in: categoryNames },
-        status:'approved',
+        status: 'approved',
         isDelete: false // assuming you don't want deleted events
       });
 
@@ -613,7 +618,7 @@ exports.getCategoryById = async (req, res) => {
     const events = await Event.find({
       category: { $in: categoryNames },
       isDelete: false,
-      status:"approved"
+      status: "approved"
     }).select('-__v'); // Exclude version key
 
     res.status(200).json({
@@ -981,15 +986,15 @@ exports.validateViewUpdate = async (req, res) => {
     const { id: eventId } = req.params;
 
     // Validate the input
-    if (!validationOptions || 
-        !['scan', 'list','both'].includes(validationOptions.selectedView)) {
+    if (!validationOptions ||
+      !['scan', 'list', 'both'].includes(validationOptions.selectedView)) {
       return res.status(400).json({ message: 'Invalid validation options' });
     }
 
     // If list view is selected but no methods are chosen
-    if (validationOptions.selectedView === 'list' && 
-        (!Array.isArray(validationOptions.listViewMethods) || 
-         validationOptions.listViewMethods.length === 0)) {
+    if (validationOptions.selectedView === 'list' &&
+      (!Array.isArray(validationOptions.listViewMethods) ||
+        validationOptions.listViewMethods.length === 0)) {
       return res.status(400).json({ message: 'Please select at least one list view method' });
     }
 

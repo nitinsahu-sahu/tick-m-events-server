@@ -88,6 +88,7 @@ exports.replyToReview = async (req, res) => {
 exports.submitRating = async (req, res) => {
     try {
         const { eventId, ratingValue } = req.body;
+        
         // Validate rating value (1-5 stars)
         if (!ratingValue || ratingValue < 1 || ratingValue > 5) {
             return res.status(400).json({
@@ -96,8 +97,18 @@ exports.submitRating = async (req, res) => {
             });
         }
 
+        // Validate eventId and convert to ObjectId
+        if (!eventId || !mongoose.Types.ObjectId.isValid(eventId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Please provide a valid event ID"
+            });
+        }
+
+        const eventObjectId = new mongoose.Types.ObjectId(eventId);
+
         // Check if event exists
-        const eventExists = await Event.exists({ _id: eventId });
+        const eventExists = await Event.exists({ _id: eventObjectId });
         if (!eventExists) {
             return res.status(404).json({
                 success: false,
@@ -105,37 +116,51 @@ exports.submitRating = async (req, res) => {
             });
         }
 
-        // 1. Add the new rating to Rating collection (no user tracking)
+        // 1. Add the new rating to Rating collection
         await Rating.create({
-            eventId,
+            eventId: eventObjectId,
             ratingValue
         });
 
         // 2. Calculate new average and count
         const ratingStats = await Rating.aggregate([
-            { $match: { eventId: eventId } },
+            { 
+                $match: { 
+                    eventId: eventObjectId 
+                } 
+            },
             {
                 $group: {
-                    _id: null,
+                    _id: "$eventId",
                     average: { $avg: "$ratingValue" },
                     count: { $sum: 1 }
                 }
             }
         ]);
 
-        // Round the average to nearest whole number
-        const roundedAverage = Math.round(ratingStats[0]?.average || 0);
+        // Handle case when no ratings found (shouldn't happen since we just added one)
+        let averageRating = 0;
+        let reviewCount = 0;
+
+        if (ratingStats.length > 0) {
+            averageRating = ratingStats[0].average;
+            reviewCount = ratingStats[0].count;
+        }
+
+        // Round the average to 1 decimal place for better precision
+        const roundedAverage = Math.round(averageRating * 10) / 10;
+
         // 3. Update Event document with new values
-        await Event.findByIdAndUpdate(eventId, {
+        await Event.findByIdAndUpdate(eventObjectId, {
             averageRating: roundedAverage,
-            reviewCount: ratingStats[0]?.count || 0
+            reviewCount: reviewCount
         });
 
         return res.status(200).json({
             success: true,
-            message: "Rating submitted successfully",
-            averageRating: ratingStats[0]?.average,
-            reviewCount: ratingStats[0]?.count
+            message: "Thank you for your rating...",
+            averageRating: roundedAverage,
+            reviewCount: reviewCount
         });
 
     } catch (error) {
