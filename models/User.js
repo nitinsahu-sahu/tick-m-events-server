@@ -136,7 +136,7 @@ const userSchema = new Schema({
     status: {
         type: String,
         enum: ['pending', 'block', 'active', 'inActive'],
-        default: 'pending'
+        default: 'active'
     },
     serviceCategory: {
         type: String,
