@@ -16,3 +16,6 @@ Provider
 Admin
 "email": "admin.jofra1@gmail.com",
 "password": "Jofra@123",
+
+Fapshi Test number
+671234567

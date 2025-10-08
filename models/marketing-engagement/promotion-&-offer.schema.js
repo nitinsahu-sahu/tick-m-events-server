@@ -7,6 +7,19 @@ const PromotionSchema = new mongoose.Schema({
         enum: ['percentageDiscount', 'fixedValueDiscount', 'groupOffer', 'earlyBuyerDiscount'],
         required: true
     },
+    earlyBuyerDiscountType: {
+        type: String,
+        enum: ['percentage', 'fixed'],
+        required: function () {
+            return this.promotionType === 'earlyBuyerDiscount';
+        }
+    },
+    daysBeforeEvent: {
+        type: Number,
+        required: function () {
+            return this.promotionType === 'earlyBuyerDiscount';
+        }
+    },
     eventId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Event",
