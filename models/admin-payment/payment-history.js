@@ -7,7 +7,10 @@ const adminPaymentHistorySchema = new mongoose.Schema({
     eventReqId: { type: mongoose.Schema.Types.ObjectId, ref: 'EventRequest' },
     placeABidId: { type: mongoose.Schema.Types.ObjectId, ref: 'PlaceABid' },
     bidId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bid' },
-    transactionId: {
+    transId: {
+        type: String
+    },
+    currency: {
         type: String
     },
     feeAmount: {
@@ -16,8 +19,7 @@ const adminPaymentHistorySchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['success', 'failed', 'pending'],
-        default: 'pending'
+        enum: ['initiated', 'success', 'failed', 'pending'],
     },
 }, { timestamps: true });
 
