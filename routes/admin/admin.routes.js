@@ -17,7 +17,7 @@ router.get('/ticketingActivity', verifyToken, verifyAdmin, getEventSummary);//ad
 
 // Customization
 router.post('/logo-promotion', verifyToken, verifyAdmin, uploadLogo);
-router.get('/logo-promotion/', verifyToken, verifyAdmin, getLogos);
+router.get('/logo-promotion/',  getLogos);
 router.get('/logo-promotion/:id', verifyToken, verifyAdmin, getLogo);
 router.put('/logo-promotion/:id', verifyToken, verifyAdmin, updateLogo);
 router.delete('/logo-promotion/:id', verifyToken, verifyAdmin, deleteLogo);
