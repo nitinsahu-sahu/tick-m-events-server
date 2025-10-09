@@ -14,6 +14,10 @@ const bidSchema = new Schema({
     ref: 'PlaceABid',
     required: true
   },
+  adminFeeAmount: {  
+    type: Number,
+    default: false
+  },
   providerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
