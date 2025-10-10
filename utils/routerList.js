@@ -26,9 +26,11 @@ const contractRoutes = require("../routes/contract");
 const providerRoutes = require("../routes/provider/providerRoutes");
 const rewardRoutes = require('../routes/rewards.router');
 const paymentInitationRoutes = require('../routes/payment');
+const subscriptionRoutes = require('../routes/subscription.route');
 
 // Define route configuration
 exports.routesLists = {
+  '/api/v1/subs':subscriptionRoutes,
   '/api/v1/payment':paymentInitationRoutes,
   '/api/v1/p': providerRoutes,
   '/api/v1/contact': contactRoutes,
