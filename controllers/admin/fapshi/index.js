@@ -211,7 +211,6 @@ exports.paymentWebhookController = async (req, res) => {
 // Enhanced successful payment handler
 async function handleSuccessfulPayment(paymentData, context) {
     try {
-        console.log('Processing successful payment:', paymentData);
 
         const { bidId, projectId, type } = context;
 

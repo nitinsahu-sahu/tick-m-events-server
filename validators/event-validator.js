@@ -25,3 +25,12 @@ exports.validateEventCreation = [
     next();
   }
 ];
+
+exports.validateSubscription = [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please provide a valid email address')
+    .isLength({ max: 100 })
+    .withMessage('Email must be less than 100 characters')
+];
