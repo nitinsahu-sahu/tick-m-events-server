@@ -311,4 +311,57 @@ exports.processPayout = async (req, res) => {
  
 }
 
+exports.getUserWithdrawals = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+ 
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated"
+      });
+    }
+ 
+    const withdrawals = await Withdrawal.find({ userId })
+      .sort({ createdAt: -1 })
+      .populate('userId', 'name'); // to get user name
+ 
+    const formattedWithdrawals = withdrawals.map((w) => {
+      const obj = w.toObject();
+ 
+      // Remove sensitive payment details if present
+      if (obj.payment?.details) {
+        delete obj.payment.details;
+      }
+ 
+      return {
+        _id: obj._id,
+        withdrawalId: obj.withdrawalId,
+        userId: obj.userId?._id,
+        user: obj.userId?.name || 'Unknown User',
+        amount: obj.amount,
+        payment: obj.payment,
+        withdrawalCode: obj.withdrawalCode,
+        status: obj.status,
+        createdAt: obj.createdAt,
+        updatedAt: obj.updatedAt,
+        __v: obj.__v
+      };
+    });
+ 
+    res.status(200).json({
+      success: true,
+      data: formattedWithdrawals
+    });
+ 
+  } catch (error) {
+    console.error('Get User Withdrawals Error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve user withdrawals',
+      error: error.message
+    });
+  }
+};
+
 

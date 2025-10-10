@@ -470,3 +470,80 @@ exports.resetPasswordSuccessfullyTemplate = async () => {
         <p>If you didn't perform this action, please contact support immediately.</p>
 `
 }
+
+exports.createUserConfirmationTemplate = (name) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #f8f9fa; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #fff; }
+        .footer { padding: 20px; text-align: center; color: #666; font-size: 14px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Thank You for Contacting Us</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${name},</p>
+          <p>Thank you for reaching out to us! We have successfully received your message and our team will review it shortly.</p>
+          <p>We typically respond within 24-48 hours during business days.</p>
+          <p>If you have any urgent inquiries, please feel free to contact us directly.</p>
+          <br>
+          <p>Best regards,<br>Tick-m Events Team</p>
+        </div>
+        <div class="footer">
+          <p>&copy; ${new Date().getFullYear()} Tick-m Events. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+exports.createAdminNotificationTemplate = (name, email, message) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #ffebee; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #fff; }
+        .user-info { background: #f5f5f5; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        .message { background: #fff3cd; padding: 15px; margin: 15px 0; border-radius: 5px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>New Contact Form Submission</h1>
+        </div>
+        <div class="content">
+          <p>You have received a new contact form submission with the following details:</p>
+          
+          <div class="user-info">
+            <h3>User Information:</h3>
+            <p><strong>Name:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Submitted At:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          
+          <div class="message">
+            <h3>Message:</h3>
+            <p>${message}</p>
+          </div>
+          
+          <p>Please respond to this inquiry within 24-48 hours.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};

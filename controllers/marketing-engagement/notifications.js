@@ -21,12 +21,13 @@ exports.saveNotification = async (req, res) => {
     scheduledAt,
     eventDetails,
     template,
+    ctalink,
     group,
     emails,
   } = req.body;
+    console.error('[❌ Error] Recipient list is empty',req.body);
 
   if (!emails || emails.length === 0) {
-    console.error('[❌ Error] Recipient list is empty');
     return res.status(400).json({ error: 'Recipient list is empty' });
   }
 
@@ -34,16 +35,9 @@ exports.saveNotification = async (req, res) => {
   if (notificationType === 'web-push') {
     try {
       const emailList = emails.map((u) => u.email);
-      console.log('[📧 Email List]', emailList);
-
       const userTokens = await UserFcmToken.find({ email: { $in: emailList } });
-      console.log('[🔑 User Tokens]', userTokens);
-
       const fcmTokens = userTokens.map((u) => u.fcmToken).filter(Boolean);
-      console.log('[🪪 Valid FCM Tokens]', fcmTokens);
-
       if (fcmTokens.length === 0) {
-        console.error('[⚠️ Warning] No valid FCM tokens found');
         return res.status(400).json({ error: 'No FCM tokens found for users' });
       }
 
@@ -62,21 +56,21 @@ exports.saveNotification = async (req, res) => {
         data: payload.data,
       });
 
-      console.log(`[✅ Web Push Success] Sent to ${response.successCount} users.`);
-      console.log('[📦 FCM Response]', response);
-
-      await NotificationTask.create({
+     const notification =  await NotificationTask.create({
         eventId,
         emails: emailList,
         subject,
         message,
+        ctalink,
         cta,
         notificationType,
         scheduledAt: new Date(), // immediate send time
         status: response.failureCount === 0 ? 'sent' : 'partial-failure',
         fcmResponse: response, // store response for debugging
       });
-
+console.log('====================================');
+console.log(notification,'notification');
+console.log('====================================');
       if (response.failureCount > 0) {
         console.warn('[⚠️ FCM Failures]', response.responses.filter((r) => !r.success));
       }
