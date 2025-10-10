@@ -15,7 +15,7 @@ const RefundRequest = require('../../models/refund-managment/RefundRequest');
 const Cancellation = require('../../models/event-details/event-cancelled')
 const eventRating = require('../../models/event-details/event-rating')
 const mongoose = require('mongoose');
-
+const eventPromo = require('../../models/marketing-engagement/promotion-&-offer.schema')
 // Create Event
 exports.createEvent = async (req, res, next) => {
   // Start a mongoose session for transactions
@@ -615,17 +615,58 @@ exports.getCategoryById = async (req, res) => {
     const categoryNames = getAllCategoryIds(category);
 
     // Find events that match any of these category names
+    const currentDateTime = new Date();
+
+    // Get all events that aren't deleted and are in the future
     const events = await Event.find({
       category: { $in: categoryNames },
-      isDelete: false,
-      status: "approved"
-    }).select('-__v'); // Exclude version key
+      isDelete: { $ne: true },
+      step: 4,
+      status: "approved",
+      $or: [
+        {
+          date: { $gt: currentDateTime.toISOString().split('T')[0] }
+        },
+        {
+          date: currentDateTime.toISOString().split('T')[0],
+          time: {
+            $gt: currentDateTime.toLocaleTimeString('en-US',
+              { hour12: false }
+            )
+          }
+        }
+      ]
+    })
+      .sort({ date: 1, startTime: 1 })
+      .limit(10)
+      .select('-createdBy -createdAt -updatedAt -isDelete -__v')
+      .lean();
+
+    // Get all related data for each event
+    const eventsWithDetails = await Promise.all(events.map(async (event) => {
+      const [ customization, visibility, review, ticketConfig,promotion] = await Promise.all([
+        Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+        Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+        eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
+        TicketConfiguration.findOne({ eventId: event._id }).lean(),
+        eventPromo.find({ eventId: event._id, status: "active" }).select('-updatedAt -__v').lean(),
+      ]);
+
+      return {
+        ...event,
+        customization,
+        review,
+        promotion,
+        visibility,
+        purchaseDeadlineDate: ticketConfig?.purchaseDeadlineDate || null,
+      };
+    }));
 
     res.status(200).json({
       success: true,
       category: {
         ...category.toObject(),
-        events
+        events: eventsWithDetails
       }
     });
   } catch (error) {

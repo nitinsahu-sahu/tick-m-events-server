@@ -121,91 +121,102 @@ async function storePaymentRecord(paymentData) {
 
 // Payment confirmation webhook handler
 exports.paymentWebhookController = async (req, res) => {
-  console.log('Incoming Webhook Body:', req.body);
+    console.log('Incoming Webhook Body:', req.body);
  
-  try {
-    const { transId, status, bidId, projectId } = req.body;
-    console.log(`Received webhook for transaction: ${transId}, status: ${status}`);
+    try {
+        const { transId, status } = req.body;
+        console.log('--- Extracted Values ---');
+        console.log('transId:', transId);
+        console.log('status:', status);
  
-    if (!transId || !status) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing transId or status'
-      });
-    }
+        if (!transId || !status) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing transId or status'
+            });
+        }
  
-    // Update payment record
-    const updatedPayment = await adminPaymentHistory.findOneAndUpdate(
-      { transId: transId },
-      { status: status, updatedAt: new Date() },
-      { new: true }
-    );
+        // ✅ Fetch updated payment record
+        const updatedPayment = await adminPaymentHistory.findOneAndUpdate(
+            { transId: transId },
+            { status: status.toLowerCase(), updatedAt: new Date() },
+            { new: true }
+        );
  
-    if (!updatedPayment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Payment record not found'
-      });
-    }
+        if (!updatedPayment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment record not found'
+            });
+        }
  
-    // Normalize status (Fapshi sends "SUCCESSFUL", not "successful")
-    const normalizedStatus = status.toLowerCase();
+        // ✅ Extract bidId and projectId from payment record
+        const bidId = updatedPayment.bidId;
+        const projectId = updatedPayment.projectId || updatedPayment.eventId; // adjust based on schema
  
-    // Step 2️⃣: If payment was successful
-    if (normalizedStatus === 'successful') {
-      const bid = await Bid.findById(bidId);
-      console.log('bidId received from webhook:', bidId);
+        console.log("Bid ID from DB:", bidId);
+        console.log("Project ID from DB:", projectId);
  
-      if (bid) {
-        // Update bid fields
-        bid.isOrgnizerAccepted = true;
-        bid.isProviderAccepted = true;
-        bid.status = 'accepted';
-        bid.adminFeePaid = true;
+        if (!bidId) {
+            console.warn(`⚠️ No bidId found for transId: ${transId}`);
+            return res.status(400).json({
+                success: false,
+                message: 'bidId not found in payment record'
+            });
+        }
  
-        // Use existing feeAmount from adminPaymentHistory
-        const totalAmount = updatedPayment.feeAmount || bid.bidAmount;
-        const adminFee = (totalAmount * 10) / 100; // 10% fee
+        const bid = await Bid.findById(bidId);
+        console.log("Found Bid:", bid);
  
-        bid.adminFeeAmount = adminFee;
-        bid.winningBid = totalAmount - adminFee;
+        if (!bid) {
+            console.warn(`⚠️ Bid not found for bidId: ${bidId}`);
+        } else {
+            const normalizedStatus = status.toLowerCase();
  
-        await bid.save();
+            if (normalizedStatus === 'successful') {
+                bid.isOrgnizerAccepted = true;
+                bid.isProviderAccepted = true;
+                bid.status = 'accepted';
+                bid.adminFeePaid = true;
  
-        console.log(`✅ Bid ${bidId} updated successfully. Admin fee: ${adminFee}, Winning bid: ${bid.winningBid}`);
-      } else {
-        console.warn(`⚠️ Bid not found for bidId: ${bidId}`);
-      }
+                const totalAmount = updatedPayment.feeAmount || bid.bidAmount;
+                const adminFee = (totalAmount * 10) / 100;
  
-      if (projectId) {
-        await Project.findByIdAndUpdate(projectId, {
-          status: 'assigned',
-          assignedTo: bid?.providerId,
-          assignedAt: new Date(),
+                bid.adminFeeAmount = adminFee;
+                bid.winningBid = totalAmount - adminFee;
+ 
+                await bid.save();
+ 
+                console.log(`✅ Bid ${bidId} updated successfully. Admin fee: ${adminFee}, Winning bid: ${bid.winningBid}`);
+            } else if (['failed', 'cancelled'].includes(normalizedStatus)) {
+                await Bid.findByIdAndUpdate(bidId, { status: 'rejected' });
+                console.log(`❌ Payment failed for bid ${bidId}, marked as rejected.`);
+            }
+        }
+ 
+        if (projectId && bid?.providerId) {
+            await Project.findByIdAndUpdate(projectId, {
+                status: 'assigned',
+                assignedTo: bid.providerId,
+                assignedAt: new Date(),
+            });
+            console.log(`📦 Project ${projectId} assigned to provider ${bid.providerId}`);
+        }
+ 
+        res.status(200).json({
+            success: true,
+            message: 'Webhook processed successfully',
+            data: updatedPayment
         });
-        console.log(`📦 Project ${projectId} assigned to provider ${bid?.providerId}`);
-      }
  
-    } else if (normalizedStatus === 'failed' || normalizedStatus === 'cancelled') {
-      await Bid.findByIdAndUpdate(bidId, { status: 'rejected' });
-      console.log(`❌ Payment failed for bid ${bidId}, marked as rejected.`);
+    } catch (error) {
+        console.error('Webhook processing error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Webhook processing failed',
+            error: error.message
+        });
     }
- 
-    console.log(`Webhook processed successfully for transId: ${transId}`);
-    res.status(200).json({
-      success: true,
-      message: 'Webhook processed successfully',
-      data: updatedPayment
-    });
- 
-  } catch (error) {
-    console.error('Webhook processing error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Webhook processing failed',
-      error: error.message
-    });
-  }
 };
 
 // Enhanced successful payment handler
