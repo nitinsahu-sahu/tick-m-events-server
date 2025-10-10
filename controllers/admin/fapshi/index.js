@@ -152,7 +152,7 @@ exports.paymentWebhookController = async (req, res) => {
  
         // ✅ Extract bidId and projectId from payment record
         const bidId = updatedPayment.bidId;
-        const projectId = updatedPayment.projectId || updatedPayment.eventId; // adjust based on schema
+        const projectId = updatedPayment.placeABidId || updatedPayment.eventId;
  
         console.log("Bid ID from DB:", bidId);
         console.log("Project ID from DB:", projectId);
@@ -180,12 +180,16 @@ exports.paymentWebhookController = async (req, res) => {
                 bid.adminFeePaid = true;
  
                 const totalAmount = updatedPayment.feeAmount || bid.bidAmount;
-                const adminFee = (totalAmount * 10) / 100;
+                const adminFee = updatedPayment.feeAmount || bid.bidAmount;
  
                 bid.adminFeeAmount = adminFee;
-                bid.winningBid = totalAmount - adminFee;
+                bid.winningBid = bid.bidAmount;
+                bid.organizrAmount = bid.bidAmount;
  
                 await bid.save();
+                const project = await Project.findById(projectId).lean();
+                console.log("Current project status before update:", project.status);
+ 
  
                 console.log(`✅ Bid ${bidId} updated successfully. Admin fee: ${adminFee}, Winning bid: ${bid.winningBid}`);
             } else if (['failed', 'cancelled'].includes(normalizedStatus)) {
@@ -196,9 +200,9 @@ exports.paymentWebhookController = async (req, res) => {
  
         if (projectId && bid?.providerId) {
             await Project.findByIdAndUpdate(projectId, {
-                status: 'assigned',
-                assignedTo: bid.providerId,
-                assignedAt: new Date(),
+                status: 'ongoing',
+                bidStatus: 'closed',
+                isSigned: true,
             });
             console.log(`📦 Project ${projectId} assigned to provider ${bid.providerId}`);
         }
