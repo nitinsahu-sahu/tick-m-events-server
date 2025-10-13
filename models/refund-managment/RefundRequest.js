@@ -16,6 +16,10 @@ const RefundRequestSchema = new mongoose.Schema({
     ref: 'EventOrder',
     required: true
   },
+  isAdminForwrd: {
+    type: Boolean,
+    default: false
+  },
   refundStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected', 'refunded', 'cancelled'],
@@ -43,6 +47,9 @@ const RefundRequestSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     required: true
+  },
+  adminNotes: {
+    type: String,
   },
   reason: {
     type: String

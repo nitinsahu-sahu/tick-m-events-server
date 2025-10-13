@@ -271,7 +271,7 @@ exports.updateEventVisibility = async (req, res, next) => {
 
     // Generate custom URL if visibility type changed to private
     if (visibilityState.visibilityType === 'private' && !visibilityState.customUrl) {
-      visibility.customUrl = `https://tick-m-events.vercel.app/our-event/${eventId}`;
+      visibility.customUrl = `${process.env.FRONTEND_URL}/our-event/${eventId}`;
     }
 
     // Save changes

@@ -644,7 +644,7 @@ exports.getCategoryById = async (req, res) => {
 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [ customization, visibility, review, ticketConfig,promotion] = await Promise.all([
+      const [customization, visibility, review, ticketConfig, promotion] = await Promise.all([
         Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
         eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
@@ -784,9 +784,8 @@ exports.updateEventPageCostomization = async (req, res) => {
   try {
     const { id } = req.params;
     const { themeColor, customColor, frame } = req.body;
-    const { eventLogo, coverImage } = req.files || {};
+    const { eventLogo, coverImage, portraitImage } = req.files || {};
 
-    console.log("Incoming files:", req.files);
     const eventData = await Event.findById(id);
     if (!eventData) {
       return res.status(404).json({
@@ -869,6 +868,24 @@ exports.updateEventPageCostomization = async (req, res) => {
       });
 
       eventData.coverImage = {
+        public_id: result.public_id,
+        url: result.secure_url,
+      };
+    }
+
+    // ✅ Upload portrait image (for event model)
+    if (portraitImage) {
+      if (eventData.portraitImage?.public_id) {
+        await cloudinary.uploader.destroy(eventData.portraitImage.public_id);
+      }
+
+      const result = await cloudinary.uploader.upload(portraitImage.tempFilePath, {
+        folder: 'event_portrait_images',
+        width: 800, // adjust as needed
+        crop: "scale",
+      });
+
+      eventData.portraitImage = {
         public_id: result.public_id,
         url: result.secure_url,
       };
@@ -1093,7 +1110,7 @@ exports.getEventPageCustomization = async (req, res) => {
 
     // Also send coverImage from Event if you want (some are in eventData)
     const coverImage = eventData.coverImage || null;
-
+    const portraitImage = eventData.portraitImage || null;
     return res.status(200).json({
       success: true,
       customization: {
@@ -1102,11 +1119,11 @@ exports.getEventPageCustomization = async (req, res) => {
         frame: customizationData.frame,
         eventLogo: customizationData.eventLogo,
         coverImage: coverImage,
+        portraitImage: portraitImage
       },
     });
 
   } catch (error) {
-    console.error('Error fetching customization:', error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
