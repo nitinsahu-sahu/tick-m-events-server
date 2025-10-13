@@ -313,7 +313,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean(),
                 RefundRequest.find({ eventId: event._id })
                     .populate({ path: 'userId', select: 'name email' })
-                    .populate({ path: 'orderId', select: 'paymentStatus tickets' })
+                    .populate({ path: 'orderId', select: 'refundAmount transactionId refundStatus paymentMethod paymentStatus tickets totalAmount' })
                     .lean(),
                 EventsRequest.find({
                     eventId: event._id,

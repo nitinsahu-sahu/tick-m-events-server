@@ -50,7 +50,7 @@ exports.getSocialSharePage = async (req, res) => {
     const event = await Event.findById(post.event);
     const eventName = event?.eventName || "Event";
 
-    const shareUrl = `https://tick-m-events.vercel.app/post/${postId}`;
+    const shareUrl = `${process.env.FRONTEND_URL}/post/${postId}`;
     const imageUrl = post.imageUrl || "https://via.placeholder.com/1200x630.png?text=Default+Image";
     const hashtag = post.hashtag || "#TickMEvents";
     const descriptionText = post.description?.replace(/"/g, '&quot;') || "Join us for an unforgettable experience! Get your tickets now!";
