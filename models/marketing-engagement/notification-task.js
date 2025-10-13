@@ -2,7 +2,13 @@ const mongoose = require('mongoose');
 
 const NotificationTaskSchema = new mongoose.Schema({
   eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
-  emails: [String],
+  emails: [
+    {
+      email: { type: String, required: true },
+      name: String,
+      phone: String
+    }
+  ],
   phones: [String],
   subject: String,
   message: String,
