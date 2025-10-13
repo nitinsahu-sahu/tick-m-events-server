@@ -2,6 +2,7 @@ const axios = require('axios');
 const adminPaymentHistory = require('../../../models/admin-payment/payment-history')
 const Bid = require('../../../models/event-request/bid.modal'); // Adjust path as needed
 const Project = require('../../../models/event-request/placeBid.modal'); // Adjust path as needed
+const EventRequest = require('../../../models/event-request/event-requests.model');
 
 exports.initiatePaymentController = async (req, res) => {
     try {
@@ -122,41 +123,41 @@ async function storePaymentRecord(paymentData) {
 // Payment confirmation webhook handler
 exports.paymentWebhookController = async (req, res) => {
     console.log('Incoming Webhook Body:', req.body);
- 
+
     try {
         const { transId, status } = req.body;
         console.log('--- Extracted Values ---');
         console.log('transId:', transId);
         console.log('status:', status);
- 
+
         if (!transId || !status) {
             return res.status(400).json({
                 success: false,
                 message: 'Missing transId or status'
             });
         }
- 
+
         // ✅ Fetch updated payment record
         const updatedPayment = await adminPaymentHistory.findOneAndUpdate(
             { transId: transId },
             { status: status.toLowerCase(), updatedAt: new Date() },
             { new: true }
         );
- 
+
         if (!updatedPayment) {
             return res.status(404).json({
                 success: false,
                 message: 'Payment record not found'
             });
         }
- 
+
         // ✅ Extract bidId and projectId from payment record
         const bidId = updatedPayment.bidId;
         const projectId = updatedPayment.placeABidId || updatedPayment.eventId;
- 
+
         console.log("Bid ID from DB:", bidId);
         console.log("Project ID from DB:", projectId);
- 
+
         if (!bidId) {
             console.warn(`⚠️ No bidId found for transId: ${transId}`);
             return res.status(400).json({
@@ -164,40 +165,40 @@ exports.paymentWebhookController = async (req, res) => {
                 message: 'bidId not found in payment record'
             });
         }
- 
+
         const bid = await Bid.findById(bidId);
         console.log("Found Bid:", bid);
- 
+
         if (!bid) {
             console.warn(`⚠️ Bid not found for bidId: ${bidId}`);
         } else {
             const normalizedStatus = status.toLowerCase();
- 
+
             if (normalizedStatus === 'successful') {
                 bid.isOrgnizerAccepted = true;
                 bid.isProviderAccepted = true;
                 bid.status = 'accepted';
                 bid.adminFeePaid = true;
- 
+
                 const totalAmount = updatedPayment.feeAmount || bid.bidAmount;
                 const adminFee = updatedPayment.feeAmount || bid.bidAmount;
- 
+
                 bid.adminFeeAmount = adminFee;
                 bid.winningBid = bid.bidAmount;
                 bid.organizrAmount = bid.bidAmount;
- 
+
                 await bid.save();
                 const project = await Project.findById(projectId).lean();
                 console.log("Current project status before update:", project.status);
- 
- 
+
+
                 console.log(`✅ Bid ${bidId} updated successfully. Admin fee: ${adminFee}, Winning bid: ${bid.winningBid}`);
             } else if (['failed', 'cancelled'].includes(normalizedStatus)) {
                 await Bid.findByIdAndUpdate(bidId, { status: 'rejected' });
                 console.log(`❌ Payment failed for bid ${bidId}, marked as rejected.`);
             }
         }
- 
+
         if (projectId && bid?.providerId) {
             await Project.findByIdAndUpdate(projectId, {
                 status: 'ongoing',
@@ -206,13 +207,37 @@ exports.paymentWebhookController = async (req, res) => {
             });
             console.log(`📦 Project ${projectId} assigned to provider ${bid.providerId}`);
         }
- 
+
+        if (status.toLowerCase() === 'successful' && projectId) {
+            try {
+                // Find event request using its _id (placeABidId)
+                const eventRequest = await EventRequest.findById(projectId);
+                console.log("ddd", eventRequest);
+
+                if (!eventRequest) {
+                    console.warn(`⚠️ No EventRequest found for _id: ${projectId}`);
+                } else {
+                    eventRequest.providerStatus = 'accepted';
+                    eventRequest.orgStatus = 'accepted';
+                    eventRequest.projectStatus = 'ongoing';
+                    eventRequest.isSigned = true;
+                    eventRequest.updatedAt = new Date();
+
+                    await eventRequest.save();
+
+                    console.log(`🎉 EventRequest ${eventRequest._id} updated successfully (payment successful).`);
+                }
+            } catch (err) {
+                console.error('❌ Failed to update EventRequest after successful payment:', err);
+            }
+        }
+
         res.status(200).json({
             success: true,
             message: 'Webhook processed successfully',
             data: updatedPayment
         });
- 
+
     } catch (error) {
         console.error('Webhook processing error:', error);
         res.status(500).json({
