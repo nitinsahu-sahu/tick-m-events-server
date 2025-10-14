@@ -107,7 +107,7 @@ console.log('====================================');
           ? 'interested-participants'
           : 'default';
 
-        await sendBulkEmails(emails, subject, message, cta, eventDetails, templateType);
+        await sendBulkEmails(emails, subject, message, {text: cta, url: ctalink}, eventDetails, templateType);
         console.log('[✅ Emails sent successfully]');
       } else if (notificationType === 'sms') {
         console.log('[📱 Sending SMS]');
