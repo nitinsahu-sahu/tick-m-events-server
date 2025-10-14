@@ -7,6 +7,8 @@ const User = require('../../models/User');
 const otpStore = new Map();
 const verifiedUsers = new Map();
 const axios = require('axios');
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+
 // Create Withdrawal Request
 exports.createWithdrawal = async (req, res) => {
   try {
@@ -365,4 +367,390 @@ exports.getUserWithdrawals = async (req, res) => {
   }
 };
 
+exports.getWithdrawalsRefundInvoice = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+ 
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+ 
+    const withdrawals = await Withdrawal.find({ userId })
+      .sort({ createdAt: -1 })
+      .populate('userId', 'name'); // get user name
+ 
+    const formattedWithdrawals = withdrawals.map((w) => {
+      const obj = w.toObject();
+ 
+      // Remove sensitive payment details
+      if (obj.payment?.details) {
+        delete obj.payment.details;
+      }
+ 
+      return {
+        _id: obj._id,
+        withdrawalId: obj.withdrawalId,
+        userId: obj.userId?._id,
+        eventId: obj.eventId,
+        user: obj.userId?.name || 'Unknown User',
+        amount: obj.amount,
+        payment: obj.payment,
+        status: obj.status,
+        createdAt: obj.createdAt,
+        updatedAt: obj.updatedAt,
+        transId: obj.transId, // include transId for invoice download
+      };
+    });
+ 
+    res.status(200).json({
+      success: true,
+      data: formattedWithdrawals,
+    });
+  } catch (error) {
+    console.error('Get User Withdrawals Error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve user withdrawals',
+      error: error.message,
+    });
+  }
+};
+ 
+exports.getWithdrawalInvoice = async (req, res) => {
+  try {
+    const { transId } = req.params;
+ 
+    // Fetch withdrawal and populate user & event
+    const withdrawal = await Withdrawal.findOne({ transId })
+      .populate('userId', 'name email')
+      .populate('eventId', 'eventName');
+ 
+    if (!withdrawal) return res.status(404).json({ message: 'Withdrawal not found' });
+    if (withdrawal.status.toLowerCase() !== 'approved')
+      return res.status(403).json({ message: 'Invoice can only be downloaded for approved withdrawals' });
+ 
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([600, 800]); // Increased height for better layout
+    const { width, height } = page.getSize();
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+ 
+    // Colors
+    const primaryColor = rgb(0.2, 0.4, 0.6); // Blue color for headers
+    const secondaryColor = rgb(0.3, 0.3, 0.3); // Dark gray for text
+    const accentColor = rgb(0.9, 0.9, 0.9); // Light gray for backgrounds
+ 
+    // Header Section
+    page.drawText('WITHDRAWAL INVOICE', {
+      x: 50,
+      y: height - 60,
+      size: 24,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    // Company/Platform Info
+    page.drawText('Tick-M-Event', {
+      x: width - 200,
+      y: height - 60,
+      size: 14,
+      font: boldFont,
+      color: secondaryColor,
+    });
+ 
+    page.drawText('https://tick-m.cloud', {
+      x: width - 200,
+      y: height - 80,
+      size: 10,
+      font: regularFont,
+      color: secondaryColor,
+    });
+ 
+    // Invoice Details Section
+    let currentY = height - 120;
+ 
+    // Invoice header box
+    page.drawRectangle({
+      x: 50,
+      y: currentY - 5,
+      width: width - 100,
+      height: 80,
+      color: accentColor,
+      opacity: 0.3,
+    });
+ 
+    // Invoice Number
+    page.drawText('Invoice Number:', {
+      x: 60,
+      y: currentY,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+    page.drawText(`INV-${withdrawal.transId}`, {
+      x: 180,
+      y: currentY,
+      size: 12,
+      font: regularFont,
+      color: secondaryColor,
+    });
+ 
+    // Invoice Date
+    page.drawText('Invoice Date:', {
+      x: 60,
+      y: currentY - 25,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+    page.drawText(new Date(withdrawal.dateInitiated).toLocaleDateString(), {
+      x: 180,
+      y: currentY - 25,
+      size: 12,
+      font: regularFont,
+      color: secondaryColor,
+    });
+ 
+    // Status
+    page.drawText('Status:', {
+      x: width - 200,
+      y: currentY,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+    page.drawText(withdrawal.status.toUpperCase(), {
+      x: width - 120,
+      y: currentY,
+      size: 12,
+      font: regularFont,
+      color: rgb(0, 0.5, 0), // Green color for status
+    });
+ 
+    currentY -= 100;
+ 
+    // User Information Section
+    page.drawText('USER INFORMATION', {
+      x: 50,
+      y: currentY,
+      size: 16,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 30;
+ 
+    const userInfo = [
+      ['User Name', withdrawal.userId?.name || 'Unknown'],
+      ['Email Address', withdrawal.userId?.email || 'N/A'],
+      ['Event', withdrawal.eventId?.eventName || 'N/A'],
+    ];
+ 
+    userInfo.forEach(([label, value]) => {
+      page.drawText(`${label}:`, {
+        x: 60,
+        y: currentY,
+        size: 12,
+        font: boldFont,
+        color: secondaryColor,
+      });
+      page.drawText(value, {
+        x: 200,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+      currentY -= 25;
+    });
+ 
+    currentY -= 20;
+ 
+    // Transaction Details Section
+    page.drawText('TRANSACTION DETAILS', {
+      x: 50,
+      y: currentY,
+      size: 16,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 30;
+ 
+    const transactionInfo = [
+      ['Withdrawal ID', withdrawal.withdrawalId],
+      ['Transaction ID', withdrawal.transId],
+      ['Payment Method', `${withdrawal.payment.paymentMethod.toUpperCase()} (${withdrawal.payment.method})`],
+    ];
+ 
+    transactionInfo.forEach(([label, value]) => {
+      page.drawText(`${label}:`, {
+        x: 60,
+        y: currentY,
+        size: 12,
+        font: boldFont,
+        color: secondaryColor,
+      });
+      page.drawText(value, {
+        x: 200,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+      currentY -= 25;
+    });
+ 
+    currentY -= 30;
+ 
+    // Amounts Section with table-like layout
+    page.drawText('AMOUNT SUMMARY', {
+      x: 50,
+      y: currentY,
+      size: 16,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 40;
+ 
+    // Table header background
+    page.drawRectangle({
+      x: 50,
+      y: currentY,
+      width: width - 100,
+      height: 25,
+      color: primaryColor,
+      opacity: 0.8,
+    });
+ 
+    // Table headers
+    page.drawText('Description', {
+      x: 60,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1), // White text
+    });
+ 
+    page.drawText('Amount (XAF)', {
+      x: width - 150,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1), // White text
+    });
+ 
+    currentY -= 30;
+ 
+    // Amount rows with alternating background
+    const amountData = [
+      { description: 'Total Available Balance', amount: withdrawal.balance },
+      { description: 'Withdrawal Amount', amount: -withdrawal.amount },
+      { description: 'Remaining Balance', amount: withdrawal.balance - withdrawal.amount },
+    ];
+ 
+    amountData.forEach((item, index) => {
+      // Alternate row background
+      if (index % 2 === 0) {
+        page.drawRectangle({
+          x: 50,
+          y: currentY - 5,
+          width: width - 100,
+          height: 30,
+          color: accentColor,
+          opacity: 0.2,
+        });
+      }
+ 
+      page.drawText(item.description, {
+        x: 60,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      const amountText = `${item.amount.toLocaleString()} XAF`;
+      page.drawText(amountText, {
+        x: width - 150,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      currentY -= 30;
+    });
+ 
+    currentY -= 40;
+ 
+    // Total row
+    page.drawRectangle({
+      x: 50,
+      y: currentY - 5,
+      width: width - 100,
+      height: 35,
+      color: primaryColor,
+      opacity: 0.3,
+    });
+ 
+    page.drawText('TOTAL WITHDRAWN:', {
+      x: 60,
+      y: currentY,
+      size: 14,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    page.drawText(`${withdrawal.amount.toLocaleString()} XAF`, {
+      x: width - 150,
+      y: currentY,
+      size: 14,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 60;
+ 
+    // Footer Section
+    page.drawText('Terms & Conditions:', {
+      x: 50,
+      y: currentY,
+      size: 10,
+      font: boldFont,
+      color: secondaryColor,
+    });
+ 
+    page.drawText('This is an automated invoice for withdrawal transaction. Please contact support for any discrepancies.', {
+      x: 50,
+      y: currentY - 15,
+      size: 8,
+      font: regularFont,
+      color: secondaryColor,
+      maxWidth: width - 100,
+      lineHeight: 10,
+    });
+ 
+    // Generated timestamp
+    page.drawText(`Generated on: ${new Date().toLocaleString()}`, {
+      x: 50,
+      y: 30,
+      size: 8,
+      font: regularFont,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+ 
+    const pdfBytes = await pdfDoc.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Withdrawal-Invoice-${withdrawal.transId}.pdf`);
+    res.send(Buffer.from(pdfBytes));
+  } catch (error) {
+    console.error('Invoice generation error:', error);
+    res.status(500).json({ message: 'Failed to generate invoice', error: error.message });
+  }
+};
 
