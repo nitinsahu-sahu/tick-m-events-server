@@ -25,63 +25,85 @@ exports.saveNotification = async (req, res) => {
     group,
     emails,
   } = req.body;
-    console.error('[❌ Error] Recipient list is empty',req.body);
+  console.error('[❌ Error] Recipient list is empty', req.body);
 
   if (!emails || emails.length === 0) {
     return res.status(400).json({ error: 'Recipient list is empty' });
   }
 
   // 🔔 Web Push Notification
+
   if (notificationType === 'web-push') {
     try {
+      // 1️⃣ Extract email list for lookup
       const emailList = emails.map((u) => u.email);
+
+      // 2️⃣ Find all tokens associated with those emails
       const userTokens = await UserFcmToken.find({ email: { $in: emailList } });
       const fcmTokens = userTokens.map((u) => u.fcmToken).filter(Boolean);
+
       if (fcmTokens.length === 0) {
         return res.status(400).json({ error: 'No FCM tokens found for users' });
       }
 
+      // Prepare FCM payload
       const payload = {
         data: {
           title: subject || `Event Notification: ${eventDetails?.name}`,
           body: message,
-          cta: cta || '',
+          cta: cta || 'Open Link',
+          ctalink: ctalink || 'https://tick-m.cloud/sign-in',
           eventId: eventId || '',
           emails: emailList.join(','),
+          icon: '/icons/icon-192x192.png', // optional, use in SW
         },
       };
 
+      // Send only 'data', do NOT send 'notification'
       const response = await admin.messaging().sendEachForMulticast({
         tokens: fcmTokens,
         data: payload.data,
       });
 
-     const notification =  await NotificationTask.create({
+      // 5️⃣ Save the full emails array (objects, not strings)
+      const notification = await NotificationTask.create({
         eventId,
-        emails: emailList,
+        emails, // ✅ keep full user objects (email, name, phone)
         subject,
         message,
         ctalink,
         cta,
         notificationType,
-        scheduledAt: new Date(), // immediate send time
-        status: response.failureCount === 0 ? 'sent' : 'partial-failure',
-        fcmResponse: response, // store response for debugging
+        scheduledAt: new Date(),
+        status:
+          response.failureCount === 0
+            ? 'sent'
+            : response.failureCount < fcmTokens.length
+              ? 'partial-failure'
+              : 'failed',
+        fcmResponse: response,
       });
-console.log('====================================');
-console.log(notification,'notification');
-console.log('====================================');
+
+      console.log('====================================');
+      console.log(notification, 'notification');
+      console.log('====================================');
+
       if (response.failureCount > 0) {
-        console.warn('[⚠️ FCM Failures]', response.responses.filter((r) => !r.success));
+        console.warn(
+          '[⚠️ FCM Failures]',
+          response.responses.filter((r) => !r.success)
+        );
       }
 
-      // RETURN immediately after handling web-push to avoid duplicate entries
       return res.status(200).json({ success: true });
     } catch (pushErr) {
       console.error('[❌ Web Push Error]', pushErr);
-      return res.status(500).json({ error: 'Failed to send Web Push notification', details: pushErr.message });
+      return res
+        .status(500)
+        .json({ error: 'Failed to send Web Push notification', details: pushErr.message });
     }
   }
+
 
   // 📆 Scheduled or Immediate Email/SMS
   try {
@@ -107,7 +129,7 @@ console.log('====================================');
           ? 'interested-participants'
           : 'default';
 
-        await sendBulkEmails(emails, subject, message, {text: cta, url: ctalink}, eventDetails, templateType);
+        await sendBulkEmails(emails, subject, message, { text: cta, url: ctalink }, eventDetails, templateType);
         console.log('[✅ Emails sent successfully]');
       } else if (notificationType === 'sms') {
         console.log('[📱 Sending SMS]');
@@ -137,7 +159,6 @@ console.log('====================================');
     return res.status(500).json({ error: 'Failed to send notification', details: err.message });
   }
 };
-
 
 // Save FCM token for a user
 exports.saveFcmToken = async (req, res) => {

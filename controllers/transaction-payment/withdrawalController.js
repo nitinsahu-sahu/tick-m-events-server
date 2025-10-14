@@ -6,7 +6,7 @@ const { generateOTP } = require('../../utils/GenerateOtp');
 const User = require('../../models/User');
 const otpStore = new Map();
 const verifiedUsers = new Map();
-const axios=require('axios');
+const axios = require('axios');
 // Create Withdrawal Request
 exports.createWithdrawal = async (req, res) => {
   try {
@@ -43,7 +43,7 @@ exports.createWithdrawal = async (req, res) => {
 
     const newWithdrawal = new Withdrawal({
       withdrawalId,
-       eventId, balance,
+      eventId, balance,
       userId,
       amount,
       payment,
@@ -193,34 +193,34 @@ exports.processPayout = async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`[DEBUG] processPayout called with id: ${id}`);
- 
+
     // 1. Fetch withdrawal from DB
     const withdrawal = await Withdrawal.findById(id);
     console.log('[DEBUG] Withdrawal fetched from DB:', withdrawal);
- 
+
     if (!withdrawal) {
       console.warn('[DEBUG] Withdrawal not found for id:', id);
       return res.status(404).json({ success: false, message: 'Withdrawal not found' });
     }
- 
+
     if (withdrawal.status !== 'pending') {
       console.warn('[DEBUG] Withdrawal is not pending. Current status:', withdrawal.status);
       return res.status(400).json({ success: false, message: 'Withdrawal is not pending' });
     }
- 
+
     const user = await User.findById(withdrawal.userId).select("name email");
     const userName = user?.name || 'Unknown User';
     const userEmail = user?.email || 'noreply@example.com';
     const mobileNumber = withdrawal.payment?.details?.mobileNumber;
     const method = withdrawal.payment?.method;
- 
+
     console.log('[DEBUG] Payment details:', { mobileNumber, method, userName });
- 
+
     if (!mobileNumber || !method) {
       console.error('[DEBUG] Invalid payment details:', withdrawal.payment);
       return res.status(400).json({ success: false, message: 'Invalid payment details' });
     }
- 
+
     const mapMedium = (method) => {
       if (!method) return 'mobile money';
       switch (method.toLowerCase()) {
@@ -232,9 +232,9 @@ exports.processPayout = async (req, res) => {
           return method; // fallback if already in correct format
       }
     };
- 
+
     const medium = mapMedium(withdrawal.payment?.paymentMethod);
- 
+
     // 2. Send payout request to Fapshi
     console.log('[DEBUG] Sending payout request to Fapshi with data:', {
       amount: withdrawal.amount,
@@ -246,7 +246,7 @@ exports.processPayout = async (req, res) => {
       externalId: withdrawal.withdrawalId.replace(/[^a-zA-Z0-9]/g, ''), // removes #
       message: 'User Withdrawal Payout'
     });
- 
+
     const response = await axios.post('https://sandbox.fapshi.com/payout', {
       amount: withdrawal.amount,
       phone: mobileNumber,
@@ -263,7 +263,7 @@ exports.processPayout = async (req, res) => {
         'apiuser': process.env.FAPSHI_API_USER
       }
     });
- 
+
     console.log('[DEBUG] Fapshi API Response:', response.data);
     const { transId, dateInitiated } = response.data;
     // 3. If successful, update withdrawal status
@@ -272,25 +272,25 @@ exports.processPayout = async (req, res) => {
     withdrawal.dateInitiated = new Date(dateInitiated);
     await withdrawal.save();
     console.log('[DEBUG] Withdrawal updated to approved in DB.');
- 
+
     res.status(200).json({
       success: true,
       message: 'Payout successful and withdrawal updated.',
       fapshiResponse: response.data
     });
- 
+
   } catch (error) {
     console.error('Fapshi Payout Error:', error.message);
- 
+
     let fapshiErrorMessage = 'Payout failed';
- 
+
     if (error.response) {
       console.error('[DEBUG] Fapshi Error Response:', {
         status: error.response.status,
         data: error.response.data,
         headers: error.response.headers
       });
- 
+
       // Try to extract the Fapshi message
       fapshiErrorMessage = error.response.data?.message ||
         error.response.data?.data?.message || // Some APIs wrap error in data.message
@@ -301,42 +301,43 @@ exports.processPayout = async (req, res) => {
     } else {
       console.error('[DEBUG] Error setting up Fapshi request:', error.message);
     }
- 
+
     res.status(500).json({
       success: false,
       message: fapshiErrorMessage,
       error: error.message
     });
   }
- 
+
 }
 
 exports.getUserWithdrawals = async (req, res) => {
   try {
     const userId = req.user?._id;
- 
+
     if (!userId) {
       return res.status(401).json({
         success: false,
         message: "User not authenticated"
       });
     }
- 
+
     const withdrawals = await Withdrawal.find({ userId })
       .sort({ createdAt: -1 })
       .populate('userId', 'name'); // to get user name
- 
+
     const formattedWithdrawals = withdrawals.map((w) => {
       const obj = w.toObject();
- 
+
       // Remove sensitive payment details if present
       if (obj.payment?.details) {
         delete obj.payment.details;
       }
- 
+
       return {
         _id: obj._id,
         withdrawalId: obj.withdrawalId,
+        eventId: obj.eventId,
         userId: obj.userId?._id,
         user: obj.userId?.name || 'Unknown User',
         amount: obj.amount,
@@ -348,12 +349,12 @@ exports.getUserWithdrawals = async (req, res) => {
         __v: obj.__v
       };
     });
- 
+
     res.status(200).json({
       success: true,
       data: formattedWithdrawals
     });
- 
+
   } catch (error) {
     console.error('Get User Withdrawals Error:', error.message);
     res.status(500).json({
