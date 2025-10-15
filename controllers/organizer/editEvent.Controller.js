@@ -14,7 +14,8 @@ exports.getUserEventsWithDetails = async (req, res, next) => {
     // Get all non-deleted events created by the user
     const events = await Event.find({
       createdBy: userId,
-      isDelete: false
+      isDelete: false,
+      step: 4
     }).sort({ createdAt: -1 });
 
     if (!events || events.length === 0) {

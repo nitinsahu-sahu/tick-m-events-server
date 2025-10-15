@@ -17,7 +17,8 @@ const participantSchema = new Schema({
     name: { type: String, required: true },
     age: { type: String, required: true },
     gender: { type: String, required: true },
-    validation: { type: Boolean, required: false, default: false }
+    validation: { type: Boolean, required: false, default: false },
+    entryTime: { type: Date },
 });
 
 const eventOrderSchema = new Schema({
@@ -53,7 +54,7 @@ const eventOrderSchema = new Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['credit_card','freeEvent', 'paypal', 'upi', 'cod', 'cash', 'mobile_money'],
+        enum: ['credit_card', 'freeEvent', 'cod', 'orange_money', 'cash', 'mobile_money'],
         required: true
     },
     refundStatus: {
