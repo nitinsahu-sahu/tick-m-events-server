@@ -23,7 +23,7 @@ router.get('/user/:userId', getOrdersByUser);
 
 // Generate and download ticket PDF
 router.get('/ticket/:orderId', downloadTicket);
-router.post('/verify-ticket', verifyTicket);
+router.post('/verify-ticket',verifyToken, verifyTicket);
 router.patch('/verify-entry', updateOrderVerifyEntryStatus);
 // Update order status
 // router.patch('/:id/status', updateOrderStatus);

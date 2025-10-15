@@ -927,6 +927,9 @@ exports.getAllOrders = async (req, res) => {
 
 //verify event
 exports.verifyTicket = async (req, res) => {
+  console.log(req.body);
+  console.log(req.user._id);
+  
   try {
     const { ticketCode, participantId, name } = req.body;
 

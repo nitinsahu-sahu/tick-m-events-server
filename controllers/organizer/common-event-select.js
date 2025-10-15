@@ -295,7 +295,10 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
         // Helper function to get full event details with enhanced statistics
         const eventsWithDetails = await Promise.all(upcomingEvents.map(async (event) => {
-            const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests, eventRequests, placeABid, withdrawals, ticketType] = await Promise.all([
+            const [
+                organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame,
+                refundRequests, eventRequests, placeABid, withdrawals, ticketType, verifiedTicketsData
+            ] = await Promise.all([
                 Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                 Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
@@ -335,10 +338,37 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                     .lean(),
                 Withdrawal.find({ eventId: event._id }).lean(),
                 TicketType.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+                EventOrders.find({
+                    eventId: event._id,
+                    'participantDetails.validation': true
+                })
+                    .populate('userId', 'name')
+                    .lean()
             ]);
 
+
+            const formattedTickets = verifiedTicketsData.flatMap(order => {
+                // Get all validated participants for this order
+                const validatedParticipants = order.participantDetails.filter(participant =>
+                    participant.validation === true
+                );
+
+                // Create an entry for each validated participant
+                return validatedParticipants.map(participant => ({
+                    name: participant.name,
+                    age: participant.age,
+                    gender: participant.gender,
+                    ticketType: order.tickets[0]?.ticketType || 'N/A',
+                    entryTime: participant.entryTime || null,
+                    ticketCode: order.ticketCode, // Add ticketCode to the response
+                    validation: participant.validation,
+                    orderId: order._id
+                }));
+            });
+            console.log();
+
             // NEW: Enhanced Ticket Statistics Calculation
-            const ticketStatistics = calculateTicketStatistics(tickets, eventOrder, refundRequests);
+            const ticketStatistics = calculateTicketStatistics(tickets, ticketType, eventOrder, refundRequests, formattedTickets);
 
             // NEW: Order Statistics
             const orderStatistics = calculateOrderStatistics(eventOrder, refundRequests);
@@ -430,6 +460,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
             return {
                 ...event,
+                verifiedTickets: formattedTickets || [],
                 order: enrichedOrders,
                 refundRequests,
                 organizer,
@@ -474,7 +505,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
         });
 
     } catch (error) {
-        console.log('Error in fetchEventOrganizerSelect:', error);
+        console.log('error', error);
+
         res.status(400).json({
             success: false,
             message: 'Server error',
@@ -484,49 +516,28 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
 // Helper function to calculate comprehensive ticket statistics
 // Fixed Helper function to calculate comprehensive ticket statistics
-const calculateTicketStatistics = (tickets, eventOrder, refundRequests) => {
+const calculateTicketStatistics = (tickets, ticketType, eventOrder, refundRequests, formattedTickets) => {
     // Calculate total ticket quantity available - FIXED: Parse string to number
-    const totalTicketQuantity = tickets.reduce((total, ticket) => {
-        const ticketQuantity = ticket.tickets?.reduce((ticketTotal, t) => {
-            // Parse totalTickets from string to number, default to 0 if invalid
-            const quantity = parseInt(t.totalTickets) || 0;
-            return ticketTotal + quantity;
-        }, 0) || 0;
-        return total + ticketQuantity;
+    console.log('ticketType', ticketType);
+
+    const totalTicketQuantity = ticketType.reduce((total, t) => {
+        const quantity = parseInt(t.quantity) || 0;
+        return total + quantity;
     }, 0);
 
     // Calculate sold tickets (confirmed payments only)
-    const soldTickets = eventOrder
-        .filter(order => order.paymentStatus === 'confirmed')
-        .reduce((total, order) => {
-            const orderTickets = order.tickets?.reduce((orderTotal, ticket) => {
-                return orderTotal + (ticket.quantity || 0);
-            }, 0) || 0;
-            return total + orderTickets;
-        }, 0);
-
-    // Calculate pending tickets (pending payments)
-    const pendingTickets = eventOrder
-        .filter(order => order.paymentStatus === 'pending')
-        .reduce((total, order) => {
-            const orderTickets = order.tickets?.reduce((orderTotal, ticket) => {
-                return orderTotal + (ticket.quantity || 0);
-            }, 0) || 0;
-            return total + orderTickets;
-        }, 0);
-
-    // Calculate available tickets (total - sold - pending)
-    const availableTickets = totalTicketQuantity - soldTickets - pendingTickets;
+    const soldTickets = ticketType.reduce((total, t) => {
+        const quantity = t.sold || 0;
+        return total + quantity;
+    }, 0);
 
     // Calculate verified entries
-    const verifiedEntries = eventOrder
-        .filter(order => order.verifyEntry === true)
-        .reduce((total, order) => {
-            const orderTickets = order.tickets?.reduce((orderTotal, ticket) => {
-                return orderTotal + (ticket.quantity || 0);
-            }, 0) || 0;
-            return total + orderTickets;
-        }, 0);
+    const verifiedEntries = formattedTickets.length;
+
+    // Calculate pending tickets (pending payments)
+    const pendingTickets = soldTickets - verifiedEntries
+    // Calculate available tickets (total - sold - pending)
+    const availableTickets = totalTicketQuantity - soldTickets;
 
     // Calculate unverified entries
     const unverifiedEntries = soldTickets - verifiedEntries;
@@ -548,14 +559,14 @@ const calculateTicketStatistics = (tickets, eventOrder, refundRequests) => {
     const verificationRate = soldTickets > 0 ? (verifiedEntries / soldTickets) * 100 : 0;
 
     // Enhanced: Calculate statistics per ticket type with proper parsing
-    const byTicketType = tickets.flatMap(ticketConfig => 
+    const byTicketType = tickets.flatMap(ticketConfig =>
         ticketConfig.tickets?.map(ticket => {
             const totalQuantity = parseInt(ticket.totalTickets) || 0;
-            
+
             const ticketSold = eventOrder
                 .filter(order => order.paymentStatus === 'confirmed')
                 .reduce((total, order) => {
-                    const orderTicket = order.tickets?.find(t => 
+                    const orderTicket = order.tickets?.find(t =>
                         t.ticketId.toString() === ticket.id.toString()
                     );
                     return total + (orderTicket?.quantity || 0);
@@ -564,7 +575,7 @@ const calculateTicketStatistics = (tickets, eventOrder, refundRequests) => {
             const ticketPending = eventOrder
                 .filter(order => order.paymentStatus === 'pending')
                 .reduce((total, order) => {
-                    const orderTicket = order.tickets?.find(t => 
+                    const orderTicket = order.tickets?.find(t =>
                         t.ticketId.toString() === ticket.id.toString()
                     );
                     return total + (orderTicket?.quantity || 0);
@@ -573,7 +584,7 @@ const calculateTicketStatistics = (tickets, eventOrder, refundRequests) => {
             const ticketVerified = eventOrder
                 .filter(order => order.verifyEntry === true)
                 .reduce((total, order) => {
-                    const orderTicket = order.tickets?.find(t => 
+                    const orderTicket = order.tickets?.find(t =>
                         t.ticketId.toString() === ticket.id.toString()
                     );
                     return total + (orderTicket?.quantity || 0);
@@ -582,7 +593,7 @@ const calculateTicketStatistics = (tickets, eventOrder, refundRequests) => {
             const ticketRefunded = refundRequests
                 .filter(refund => refund.refundStatus === 'approved')
                 .reduce((total, refund) => {
-                    const refundTicket = refund.tickets?.find(t => 
+                    const refundTicket = refund.tickets?.find(t =>
                         t.ticketId.toString() === ticket.id.toString()
                     );
                     return total + (refundTicket?.quantity || 0);
@@ -598,7 +609,7 @@ const calculateTicketStatistics = (tickets, eventOrder, refundRequests) => {
                 available: totalQuantity - ticketSold - ticketPending,
                 verified: ticketVerified,
                 refunded: ticketRefunded,
-                utilizationRate: totalQuantity > 0 ? 
+                utilizationRate: totalQuantity > 0 ?
                     Math.round((ticketSold / totalQuantity) * 100 * 100) / 100 : 0,
                 revenue: ticketSold * (parseInt(ticket.price) || 0)
             };
