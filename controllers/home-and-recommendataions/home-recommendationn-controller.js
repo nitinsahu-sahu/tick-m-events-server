@@ -150,7 +150,6 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
                     Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
                     Category.findById(event.categoryId).select('name').lean(),
                     Promotion.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-
                 ]);
 
                 return {
