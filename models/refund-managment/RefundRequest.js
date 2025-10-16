@@ -16,13 +16,17 @@ const RefundRequestSchema = new mongoose.Schema({
     ref: 'EventOrder',
     required: true
   },
+  transactionId: {
+    type: String,
+    required: true
+  },
   isAdminForwrd: {
     type: Boolean,
     default: false
   },
   refundStatus: {
     type: String,
-    enum: ['pending', 'approved', 'rejected', 'refunded', 'cancelled'],
+    enum: ['pending', 'approved', 'rejected', 'refunded', 'cancelled', 'processed'],
     default: 'pending'
   },
   tickets: [

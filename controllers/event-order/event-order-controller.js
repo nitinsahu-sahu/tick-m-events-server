@@ -334,7 +334,7 @@ exports.fapshiWebhook = async (req, res) => {
     } else if (status === "FAILED") {
       order.paymentStatus = "failed";
     } else {
-      order.paymentStatus = "confirmed";
+      order.paymentStatus = "pending";
     }
     
 

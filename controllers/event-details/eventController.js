@@ -275,27 +275,31 @@ exports.getEvents = async (req, res, next) => {
 
     // Get all related data for each event
     const eventsWithDetails = await Promise.all(events.map(async (event) => {
-      const [organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame, refundRequests] = await Promise.all([
-        Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-        Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-        Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-        EventOrders.find({ eventId: event._id })
-          .select('-qrCode -orderAddress -updatedAt -__v')
-          .populate({
-            path: 'userId',
-            select: 'name email', // Only get the name field from User
-            model: 'User' // Replace with your actual User model name
-          })
-          .lean(),
-        Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
-        eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
-        TicketConfiguration.findOne({ eventId: event._id }).lean(),
-        CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean(),
-        RefundRequest.find({ eventId: event._id })
-          .populate({ path: 'userId', select: 'name email' })
-          .populate({ path: 'orderId', select: 'paymentStatus tickets' })
-          .lean()
-      ]);
+      const [
+        organizer, customization, tickets, eventOrder, visibility, review, ticketConfig,
+        photoFrame, refundRequests, promotion] = await Promise.all([
+          Organizer.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+          Customization.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+          Ticket.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+          EventOrders.find({ eventId: event._id })
+            .select('-qrCode -orderAddress -updatedAt -__v')
+            .populate({
+              path: 'userId',
+              select: 'name email', // Only get the name field from User
+              model: 'User' // Replace with your actual User model name
+            })
+            .lean(),
+          Visibility.findOne({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+          eventReview.find({ eventId: event._id, status: "approved" }).select('-updatedAt -isDelete -__v').lean(),
+          TicketConfiguration.findOne({ eventId: event._id }).lean(),
+          CustomPhotoFrame.findOne({ eventId: event._id }).select('-__v').lean(),
+          RefundRequest.find({ eventId: event._id })
+            .populate({ path: 'userId', select: 'name email' })
+            .populate({ path: 'orderId', select: 'paymentStatus tickets' })
+            .lean(),
+          eventPromo.find({ eventId: event._id }).select('-createdAt -updatedAt -isDelete -__v').lean(),
+
+        ]);
 
       const enrichedOrders = eventOrder.map(orderItem => {
         const matchingRefund = refundRequests.find(refund => {
@@ -324,6 +328,7 @@ exports.getEvents = async (req, res, next) => {
         payStatus: ticketConfig?.payStatus || 'paid',
         purchaseDeadlineDate: ticketConfig?.purchaseDeadlineDate || null,
         photoFrame,
+        promotion
       };
     }));
 
