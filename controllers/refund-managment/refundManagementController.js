@@ -13,14 +13,14 @@ exports.submitRefundRequest = async (req, res) => {
     if (!order || order.userId.toString() !== userId) {
       return res.status(404).json({ message: 'Order not found or unauthorized' });
     }
-
+    const transactionId = order.transactionId;
     // Validate Event
     const event = await Event.findById(order.eventId);
     if (!event) {
       return res.status(404).json({ message: 'Associated event not found' });
     }
 
-    const existingRequest = await RefundRequest.findOne({ userId, orderId, refundStatus: { $ne: 'cancelled' } });
+    const existingRequest = await RefundRequest.findOne({ transactionId, userId, orderId, refundStatus: { $ne: 'cancelled' } });
     if (existingRequest) {
       return res.status(400).json({ message: 'Refund already requested for this order' });
     }
@@ -32,6 +32,7 @@ exports.submitRefundRequest = async (req, res) => {
 
     // Create refund request
     const newRequest = new RefundRequest({
+      transactionId: transactionId,
       userId,
       eventId: order.eventId,
       orderId,
@@ -326,7 +327,7 @@ exports.refReqApproveDeny = async (req, res) => {
       });
     }
 
-    if (!status || !['approve', 'deny'].includes(status)) {
+    if (!status || !['processed', 'deny'].includes(status)) {
       return res.status(400).json({
         success: false,
         message: 'Status is required and must be either "approve" or "deny"'
@@ -357,9 +358,9 @@ exports.refReqApproveDeny = async (req, res) => {
     // Prepare update data based on status
     let updateData = {};
 
-    if (status === 'approve') {
+    if (status === 'processed') {
       updateData = {
-        refundStatus: 'approved',
+        refundStatus: 'processed',
         isAdminForwrd: true,
         adminActionAt: new Date(),
         adminNotes: adminNotes || ''
