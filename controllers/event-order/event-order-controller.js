@@ -79,10 +79,10 @@ exports.createOrder = async (req, res) => {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
 
     // Validation
-     if (!eventId || !orderAddress || totalAmount === undefined || totalAmount === null) {
+    if (!eventId || !orderAddress || totalAmount === undefined || totalAmount === null) {
       return res.status(400).json({ message: "Missing required fields" });
     }
- 
+
     if (Number(totalAmount) > 0 && !paymentMethod) {
       return res.status(400).json({ message: "Payment method is required for paid events" });
     }
@@ -204,8 +204,8 @@ exports.createOrder = async (req, res) => {
     // 7. Handle payment methods
     let paymentUrl = null;
 
-      if (paymentMethod === "cash" || Number(totalAmount) === 0) {
- 
+    if (paymentMethod === "cash" || Number(totalAmount) === 0) {
+
       // Cash payment - commit transaction immediately
       await session.commitTransaction();
 
@@ -336,7 +336,7 @@ exports.fapshiWebhook = async (req, res) => {
     } else {
       order.paymentStatus = "pending";
     }
-    
+
 
     order.transactionId = transId || order.transactionId;
     await order.save();
@@ -926,13 +926,90 @@ exports.getAllOrders = async (req, res) => {
 };
 
 //verify event
-exports.verifyTicket = async (req, res) => {
-  console.log(req.body);
-  console.log(req.user._id);
-  
-  try {
-    const { ticketCode, participantId, name } = req.body;
+// exports.verifyTicket = async (req, res) => {
+//   try {
+//     const { ticketCode, participantId, name, eventId } = req.body;
+//     // Check if at least one field is provided
+//     if (!ticketCode && !participantId && !name) {
+//       return res.status(404).json({
+//         message: "Please provide at least one data",
+//         flag: 'field'
+//       });
+//     }
 
+//     // Check if eventId is provided
+//     if (!eventId) {
+//       return res.status(400).json({
+//         message: "Event ID is required",
+//         flag: 'invalid'
+//       });
+//     }
+
+//     // Build query based on provided fields
+//     const query = { eventId };
+//     if (ticketCode) query.ticketCode = ticketCode;
+//     if (participantId) query.userId = participantId;
+//     if (name) query.name = name;
+
+//     // Find ticket in database
+//     const ticket = await EventOrder.findOne(query)
+//       .select('userId _id eventId tickets verifyEntry entryTime participantDetails paymentStatus')
+//       .populate('userId', 'name email')
+//       .populate({
+//         path: 'eventId',
+//         select: 'eventName date time location',
+//         model: 'Event'
+//       })
+//       .lean();
+
+//     console.log(ticket.eventId);
+    
+//     if (!ticket) {
+//       return res.status(404).json({ message: "Invalid ticket", flag: 'invalid' });
+//     }
+
+//     if (ticket.verifyEntry) {
+//       return res.status(404).json({ message: "Ticket already used", flag: 'already' });
+//     }
+
+//     // Check if event date and time have passed
+//     const eventDate = new Date(ticket.eventId.date);
+//     const eventTime = ticket.eventId.time.split(':');
+
+//     // Set the hours and minutes from the event time
+//     eventDate.setHours(parseInt(eventTime[0]));
+//     eventDate.setMinutes(parseInt(eventTime[1]));
+
+//     const currentDate = new Date();
+
+//     if (currentDate > eventDate) {
+//       return res.status(400).json({
+//         message: "Event has expired. Please purchase a ticket for the next event.",
+//         flag: 'expired',
+//         eventDetails: {
+//           name: ticket.eventId.eventName,
+//           date: ticket.eventId.date,
+//           time: ticket.eventId.time,
+//           location: ticket.eventId.location
+//         }
+//       });
+//     }
+
+//     return res.status(200).json({
+//       message: "Access granted, Welcome",
+//       ticket,
+//       eventName: ticket.eventId.eventName,
+//       flag: 'granted'
+//     });
+
+//   } catch (err) {
+//     console.error("Error verifying ticket:", err);
+//     return res.status(500).json({ message: "Internal server error" });
+//   }
+// };
+exports.verifyTicket = async (req, res) => {
+  try {
+    const { ticketCode, participantId, name, eventId } = req.body;
     // Check if at least one field is provided
     if (!ticketCode && !participantId && !name) {
       return res.status(404).json({
@@ -941,8 +1018,16 @@ exports.verifyTicket = async (req, res) => {
       });
     }
 
+    // Check if eventId is provided
+    if (!eventId) {
+      return res.status(400).json({
+        message: "Event ID is required",
+        flag: 'invalid'
+      });
+    }
+
     // Build query based on provided fields
-    const query = {};
+    const query = { eventId };
     if (ticketCode) query.ticketCode = ticketCode;
     if (participantId) query.userId = participantId;
     if (name) query.name = name;
@@ -966,25 +1051,52 @@ exports.verifyTicket = async (req, res) => {
       return res.status(404).json({ message: "Ticket already used", flag: 'already' });
     }
 
-    // Check if event date and time have passed
+    // Create event datetime object
     const eventDate = new Date(ticket.eventId.date);
     const eventTime = ticket.eventId.time.split(':');
-
+    
     // Set the hours and minutes from the event time
     eventDate.setHours(parseInt(eventTime[0]));
     eventDate.setMinutes(parseInt(eventTime[1]));
+    eventDate.setSeconds(0);
+    eventDate.setMilliseconds(0);
 
     const currentDate = new Date();
 
-    if (currentDate > eventDate) {
+    // Calculate time window (2 hours before to 2 hours after event time)
+    const entryStartTime = new Date(eventDate);
+    entryStartTime.setHours(entryStartTime.getHours() - 2);
+    
+    const entryEndTime = new Date(eventDate);
+    entryEndTime.setHours(entryEndTime.getHours() + 2);
+
+    // Check if current time is within the allowed entry window
+    if (currentDate < entryStartTime) {
       return res.status(400).json({
-        message: "Event has expired. Please purchase a ticket for the next event.",
+        message: "Entry not allowed yet. You can enter from 2 hours before the event time.",
+        flag: 'too_early',
+        eventDetails: {
+          name: ticket.eventId.eventName,
+          date: ticket.eventId.date,
+          time: ticket.eventId.time,
+          location: ticket.eventId.location,
+          entryStartTime: entryStartTime.toISOString(),
+          entryEndTime: entryEndTime.toISOString()
+        }
+      });
+    }
+
+    if (currentDate > entryEndTime) {
+      return res.status(400).json({
+        message: "Entry time has expired. Entry is only allowed up to 2 hours after the event time.",
         flag: 'expired',
         eventDetails: {
           name: ticket.eventId.eventName,
           date: ticket.eventId.date,
           time: ticket.eventId.time,
-          location: ticket.eventId.location
+          location: ticket.eventId.location,
+          entryStartTime: entryStartTime.toISOString(),
+          entryEndTime: entryEndTime.toISOString()
         }
       });
     }
@@ -1001,7 +1113,6 @@ exports.verifyTicket = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 exports.updateOrderVerifyEntryStatus = async (req, res) => {
   try {
     const { entryTime, verifyEntry } = req.body;
