@@ -1048,6 +1048,9 @@ exports.validateViewUpdate = async (req, res) => {
     const { validationOptions } = req.body;
     const { id: eventId } = req.params;
 
+console.log(validationOptions);
+
+
     // Validate the input
     if (!validationOptions ||
       !['scan', 'list', 'both'].includes(validationOptions.selectedView)) {
