@@ -1,67 +1,46 @@
 const EventOrder = require('../../models/event-order/EventOrder');
 const Event = require('../../models/event-details/Event');
+const TicketConfiguration =require('../../models/event-details/Ticket');
+const mongoose = require("mongoose");
 
 exports.getOrderasPerEvent = async (req, res) => {
-    const userId = req.user._id;
-
     try {
-        // Find all orders for the current user and populate event details
-        const userOrders = await EventOrder.find({ userId })
-            .populate('eventId')
-            .sort({ createdAt: -1 });
+        const userId = req.user._id;
 
-        // Filter out orders where the event might be deleted or null
-        const validOrders = userOrders.filter(order => 
-            order.eventId && !order.eventId.isDelete
-        );
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ message: "Invalid user ID" });
+        }
 
-        // Format the response to include event details with order information
-        const eventsWithOrders = validOrders.map(order => ({
-            event: {
-                _id: order.eventId._id,
-                eventName: order.eventId.eventName,
-                date: order.eventId.date,
-                time: order.eventId.time,
-                category: order.eventId.category,
-                eventType: order.eventId.eventType,
-                location: order.eventId.location,
-                format: order.eventId.format,
-                description: order.eventId.description,
-                coverImage: order.eventId.coverImage,
-                status: order.eventId.status,
-                payStatus: order.eventId.payStatus,
-                averageRating: order.eventId.averageRating,
-                reviewCount: order.eventId.reviewCount
-            },
-            order: {
-                _id: order._id,
-                participantDetails: order.participantDetails,
-                tickets: order.tickets,
-                totalAmount: order.totalAmount,
-                paymentStatus: order.paymentStatus,
-                paymentMethod: order.paymentMethod,
-                transactionId: order.transactionId,
-                ticketCode: order.ticketCode,
-                verifyEntry: order.verifyEntry,
-                entryTime: order.entryTime,
-                refundStatus: order.refundStatus,
-                createdAt: order.createdAt
-            }
-        }));
+        // 1. Get all orders for the user
+        const orders = await EventOrder.find({ userId }).sort({ createdAt: -1 });
 
-        res.status(200).json({
-            success: true,
-            message: 'Events with orders fetched successfully',
-            data: eventsWithOrders,
-            count: eventsWithOrders.length
+        // 2. Extract all unique eventIds
+        const eventIds = [...new Set(orders.map(order => order.eventId))];
+
+        // 3. Fetch corresponding events
+        const events = await Event.find({ _id: { $in: eventIds } });
+        const eventMap = {};
+        events.forEach(event => {
+            eventMap[event._id.toString()] = event;
         });
 
+        // 5. Enrich each order
+        const enrichedOrders = orders.map(order => {
+            const event = eventMap[order.eventId] || null;
+           
+            return {
+                ...order.toObject(),
+                eventDetails: event,
+              
+            };
+        }).sort((a, b) => {
+            if (!a.eventDate) return 1;
+            if (!b.eventDate) return -1;
+            return a.eventDate - b.eventDate;
+        });
+        res.status(200).json(enrichedOrders);
     } catch (error) {
-        console.error('Error fetching events with orders:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error',
-            error: error.message
-        });
+        console.error("Error in getOrdersByUser:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
     }
-};
+}

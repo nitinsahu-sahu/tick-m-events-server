@@ -1,6 +1,10 @@
 const express = require('express');
-const { verifyToken, verifyProvider, verifyOrganizer } = require('../../middleware/VerifyToken');
-const { placeBid,getProjectBids,getMyBids,updateBid,withdrawBid,getMyBidByProject } = require('../../controllers/event-request/place-a-bid-controller');
+const { verifyToken, verifyProvider } = require('../../middleware/VerifyToken');
+const {
+    placeBid, getProjectBids, getMyBids,
+    updateBid, withdrawBid, getMyBidByProject
+} = require('../../controllers/event-request/place-a-bid-controller');
+const { getStatistics } = require('../../controllers/provider/statistics-performance');
 const router = express.Router()
 
 
@@ -21,5 +25,7 @@ router.put('/project/:bidId', verifyToken, verifyProvider, updateBid);
 
 // Withdraw a bid
 router.delete('/project/:bidId', verifyToken, verifyProvider, withdrawBid);
+
+router.get('/statistics', verifyToken, verifyProvider, getStatistics);
 
 module.exports = router

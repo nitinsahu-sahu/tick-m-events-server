@@ -3,7 +3,7 @@ const router = express.Router();
 const { getOrderasPerEvent } = require('../../controllers/participant/validation-at-entry');
 const { verifyToken } = require('../../middleware/VerifyToken');
 
-router.route('/')
+router.route('/entry-validation')
     .get(verifyToken, getOrderasPerEvent);
 
 module.exports = router;
