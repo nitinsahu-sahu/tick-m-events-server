@@ -441,7 +441,7 @@ exports.getAdminForwardedRefunds = async (req, res) => {
 
     // Execute query with pagination
     const refundRequests = await RefundRequest.find(filter)
-      .populate('userId', 'name email avatar phone')
+      .populate('userId', 'name email avatar number')
       .populate('eventId', 'title image date venue organizerId')
       .populate('orderId', 'orderNumber totalAmount paymentMethod createdAt')
       .sort(sortConfig)
@@ -460,7 +460,7 @@ exports.getAdminForwardedRefunds = async (req, res) => {
         name: request.userId.name,
         email: request.userId.email,
         avatar: request.userId.avatar,
-        phone: request.userId.phone
+        phone: request.userId.number
       },
       event: {
         _id: request.eventId._id,
@@ -478,6 +478,7 @@ exports.getAdminForwardedRefunds = async (req, res) => {
         createdAt: request.orderId.createdAt
       },
       tickets: request.tickets,
+      transactionId: request.transactionId,
       totalAmount: request.totalAmount,
       refundAmount: request.refundAmount,
       paymentMethod: request.paymentMethod,
@@ -570,5 +571,38 @@ exports.getRefundRequest = async (req, res) => {
       success: false,
       message: 'Internal server error'
     });
+  }
+};
+
+exports.updateRefundRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { refundStatus, adminNotes } = req.body;
+ 
+    // Validate input
+    if (!refundStatus && adminNotes === undefined) {
+      return res.status(400).json({ message: 'Please provide refundStatus or adminNotes' });
+    }
+ 
+    const refundRequest = await RefundRequest.findById(id);
+    if (!refundRequest) {
+      return res.status(404).json({ message: 'Refund request not found' });
+    }
+ 
+    // Update fields
+    if (refundStatus) refundRequest.refundStatus = refundStatus;
+    if (adminNotes !== undefined) refundRequest.adminNotes = adminNotes;
+ 
+    refundRequest.updatedAt = new Date();
+ 
+    await refundRequest.save();
+ 
+    return res.status(200).json({
+      message: 'Refund request updated successfully',
+      refundRequest,
+    });
+  } catch (error) {  // 👈 use the same variable name inside
+    console.error('Error updating refund request:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 };

@@ -9,6 +9,8 @@ Participants
 "email": "rachin2@gmail.com",
 "password": "Rachin@123",
 
+"email":"laura21@gmail.com",
+"password":"Laura@333"
 Provider
 "email": "provider.watson13@gmail.com",
 "password": "Watson@123",
