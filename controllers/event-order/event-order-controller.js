@@ -174,6 +174,22 @@ exports.createOrder = async (req, res) => {
 
     const savedOrder = await newOrder.save({ session });
 
+    // Check if first purchase
+    // const ticketCount = await EventOrder.countDocuments({ userId: req.user._id });
+
+    // if (ticketCount === 1) {
+    //   const user = await User.findById(req.user._id);
+    //   await User.findByIdAndUpdate(req.user._id, {
+    //       $inc: { rewardPoints: 100 },
+    //     });
+    //   if (user.referredBy) {
+    //     await User.findByIdAndUpdate(user.referredBy, {
+    //       $inc: { rewardPoints: 100 },
+    //       $inc: { referralCount: 1 },
+    //     });
+    //   }
+    // }
+
     // 5. Send confirmation email (non-critical, don't fail transaction)
     const sendEmailAsync = async () => {
       try {
@@ -247,8 +263,6 @@ exports.createOrder = async (req, res) => {
         );
 
         paymentUrl = fapshiResponse.data?.link;
-        console.log(fapshiResponse);
-        console.log(paymentUrl);
 
       } catch (fapshiError) {
         console.error("Fapshi API error:", fapshiError.message);
@@ -963,7 +977,7 @@ exports.getAllOrders = async (req, res) => {
 //       .lean();
 
 //     console.log(ticket.eventId);
-    
+
 //     if (!ticket) {
 //       return res.status(404).json({ message: "Invalid ticket", flag: 'invalid' });
 //     }
@@ -1054,7 +1068,7 @@ exports.verifyTicket = async (req, res) => {
     // Create event datetime object
     const eventDate = new Date(ticket.eventId.date);
     const eventTime = ticket.eventId.time.split(':');
-    
+
     // Set the hours and minutes from the event time
     eventDate.setHours(parseInt(eventTime[0]));
     eventDate.setMinutes(parseInt(eventTime[1]));
@@ -1066,7 +1080,7 @@ exports.verifyTicket = async (req, res) => {
     // Calculate time window (2 hours before to 2 hours after event time)
     const entryStartTime = new Date(eventDate);
     entryStartTime.setHours(entryStartTime.getHours() - 2);
-    
+
     const entryEndTime = new Date(eventDate);
     entryEndTime.setHours(entryEndTime.getHours() + 2);
 

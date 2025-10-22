@@ -106,13 +106,12 @@ exports.signup = async (req, res) => {
 
         // Create and save user
         const newUser = await User.create(userData);
-        console.log('espn', newUser);
 
         // Process referral reward if applicable
-        if (referrer) {
-            const refer = await User.processReferral(referralCode, newUser.name);
+        // if (referrer) {
+        //     await User.processReferral(referralCode, newUser.name);
 
-        }
+        // }
 
         // Omit sensitive data in response
         const userResponse = {
@@ -789,7 +788,7 @@ exports.updateAvatar = async (req, res) => {
         // Check image dimensions before uploading
         const imageInfo = await sharp(avatar.tempFilePath).metadata();
         console.log(imageInfo);
-        
+
         // if (imageInfo.width !== 192 || imageInfo.height !== 192) {
         //     return res.status(400).json({
         //         success: false,
