@@ -6,6 +6,9 @@ const TicketConfiguration = require('../../models/event-details/Ticket');
 const RefundRequest = require('../../models/refund-managment/RefundRequest');
 const Visibility = require('../../models/event-details/Visibility');
 const Withdrawal = require('../../models/transaction-&-payment/Withdrawal');
+const Wishlist = require("../../models/event-details/Wishlist");
+ 
+
 // Create Promotion
 exports.createPromotion = async (req, res) => {
   const {
@@ -291,8 +294,34 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
       const totalApprovedWithdrawals = approvedWithdrawals.reduce(
         (sum, w) => sum + (w.amount || 0), 0
       );
+
+      // Wishlist data for this event
+         const wishlistItems = await Wishlist.find({ eventId: event._id })
+          .populate("userId", "name email profilePicture")
+          .lean();
+ 
+        // Count total users who added it
+        const wishlistCount = wishlistItems.length;
+ 
+        // Check if the current user also added this event to wishlist
+        const isInWishlist = await Wishlist.exists({
+          eventId: event._id,
+          userId,
+        });
+
       return {
         ...event,
+        wishlist: {
+          count: wishlistCount,
+          users: wishlistItems.map((w) => ({
+            _id: w.userId?._id,
+            name: w.userId?.name,
+            email: w.userId?.email,
+            profilePicture: w.userId?.profilePicture,
+            addedAt: w.addedAt,
+          })),
+          isInWishlist: Boolean(isInWishlist),
+        },
         orders: ordersWithRefunds,
         totalApprovedWithdrawals,
         ticketConfiguration: ticketConfig || null, // Include ticket config or null if not found
