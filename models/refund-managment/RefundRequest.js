@@ -65,7 +65,12 @@ const RefundRequestSchema = new mongoose.Schema({
   eventDate: {
     type: Date,
     required: true
-  }
+  },
+   refundTransactionId:{
+    type: String,
+    default: null,
+    sparse: true,
+  },
 }, {
   timestamps: true
 });

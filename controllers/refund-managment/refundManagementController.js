@@ -6,33 +6,89 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 exports.submitRefundRequest = async (req, res) => {
   try {
-    const { userId, orderId, reason, refundAmount } = req.body;
-
-    // Validate Order and ownership
+    const { userId, orderId, reason, refundAmount: clientRefundAmount } = req.body;
+ 
+    // 1. Validate Order and ownership
     const order = await EventOrder.findById(orderId);
     if (!order || order.userId.toString() !== userId) {
       return res.status(404).json({ message: 'Order not found or unauthorized' });
     }
+ 
     const transactionId = order.transactionId;
-    // Validate Event
+     
+    // 2. Validate Event
     const event = await Event.findById(order.eventId);
     if (!event) {
       return res.status(404).json({ message: 'Associated event not found' });
     }
-
-    const existingRequest = await RefundRequest.findOne({ transactionId, userId, orderId, refundStatus: { $ne: 'cancelled' } });
+ 
+    // 3. Prevent duplicate refund requests
+    const existingRequest = await RefundRequest.findOne({
+      transactionId,
+      userId,
+      orderId,
+      refundStatus: { $ne: 'cancelled' }
+    });
     if (existingRequest) {
       return res.status(400).json({ message: 'Refund already requested for this order' });
     }
-
-    // Validate refundAmount
+ 
+    // 4. Determine refund amount dynamically
+    const policy = order.refundPolicy || {};
+    const today = new Date();
+    const eventDate = new Date(event.date);
+    let refundAmount = 0;
+    let refundType = req.body.refundType || "manual";
+ 
+    // ---- Case 1: Full refund up to X days before ----
+    if (policy.fullRefund) {
+      const fullRefundDaysBefore = parseInt(policy.fullRefundDaysBefore || "0");
+      const daysBeforeEvent = Math.floor((eventDate - today) / (1000 * 60 * 60 * 24));
+      if (daysBeforeEvent >= fullRefundDaysBefore) {
+        refundAmount = order.totalAmount;
+        refundType = "full";
+      }
+    }
+ 
+    // ---- Case 2: Partial refund with fee ----
+    else if (policy.partialRefund) {
+      const feePercent = parseFloat(policy.partialRefundFeePercent || 0);
+      const fee = (order.totalAmount * feePercent) / 100;
+      refundAmount = order.totalAmount - fee;
+      refundType = "partial";
+    }
+ 
+    // ---- Case 3: No refund after ticket purchase ----
+    else if (policy.noRefundAfterPurchase) {
+      refundAmount = 0;
+      refundType = "none";
+    }
+ 
+    // ---- Case 4: No refund after a set date (your current scenario) ----
+    else if (policy.noRefundAfterDate && policy.noRefundDate) {
+      const noRefundDate = new Date(policy.noRefundDate);
+      if (today <= noRefundDate) {
+        refundAmount = order.totalAmount; // ✅ Full refund before cutoff date
+        refundType = "dateBased";
+      } else {
+        refundAmount = 0; // After cutoff → no refund
+        refundType = "none";
+      }
+    }
+ 
+    // ---- Override with frontend value if explicitly provided ----
+    if (clientRefundAmount && clientRefundAmount > 0) {
+      refundAmount = clientRefundAmount;
+    }
+ 
+    // 5. Validate final refund amount
     if (typeof refundAmount !== 'number' || refundAmount <= 0 || refundAmount > order.totalAmount) {
       return res.status(400).json({ message: 'Invalid refund amount' });
     }
-
-    // Create refund request
+ 
+    // 6. Create refund request
     const newRequest = new RefundRequest({
-      transactionId: transactionId,
+      transactionId,
       userId,
       eventId: order.eventId,
       orderId,
@@ -40,21 +96,24 @@ exports.submitRefundRequest = async (req, res) => {
       totalAmount: order.totalAmount,
       refundAmount,
       paymentMethod: order.paymentMethod,
-      refundPolicy: order.refundPolicy,
+      refundPolicy: policy,
       eventDate: event.date,
       reason,
+      refundType,
       refundStatus: 'pending',
     });
-
+ 
     await newRequest.save();
+ 
+    // Update order status
     order.refundStatus = 'requestedRefund';
     await order.save();
-
+ 
     return res.status(201).json({
       message: 'Refund request submitted successfully',
       request: newRequest,
     });
-
+ 
   } catch (error) {
     console.error("Refund request error:", error);
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -577,7 +636,7 @@ exports.getRefundRequest = async (req, res) => {
 exports.updateRefundRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { refundStatus, adminNotes } = req.body;
+    const { refundStatus, adminNotes,refundTransactionId} = req.body;
  
     // Validate input
     if (!refundStatus && adminNotes === undefined) {
@@ -593,6 +652,8 @@ exports.updateRefundRequest = async (req, res) => {
     if (refundStatus) refundRequest.refundStatus = refundStatus;
     if (adminNotes !== undefined) refundRequest.adminNotes = adminNotes;
  
+    if (refundTransactionId) refundRequest.refundTransactionId = refundTransactionId;
+    
     refundRequest.updatedAt = new Date();
  
     await refundRequest.save();
