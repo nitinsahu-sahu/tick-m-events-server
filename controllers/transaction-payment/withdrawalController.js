@@ -754,3 +754,543 @@ exports.getWithdrawalInvoice = async (req, res) => {
   }
 };
 
+exports.getRefundRefundedData= async (req, res) => {
+  try {
+    const { eventId } = req.query; // pass eventId as query param
+    if (!eventId) {
+      return res.status(400).json({ success: false, message: "Event ID is required" });
+    }
+ 
+    const refunds = await Refund.find({ eventId, refundStatus: "refunded" })
+      .sort({ createdAt: -1 })
+      .populate("userId", "name email"); // optional: populate user info
+ 
+    const formatted = refunds.map(r => ({
+      _id: r._id,
+      transId: r.transactionId,
+      eventId: r.eventId,
+      amount: r.refundAmount,
+      payment: {
+        paymentMethod: r.paymentMethod,
+        method: r.paymentMethod, // optional
+      },
+      status: r.refundStatus,
+      createdAt: r.createdAt,
+    }));
+ 
+    return res.json({ success: true, data: formatted });
+  } catch (error) {
+    console.error("Error fetching refunds:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+exports.getRefundInvoice = async (req, res) => {
+  try {
+    const { transId } = req.params;
+ 
+    // Find the refunded transaction with populated data
+    const refund = await Refund.findOne({ transactionId: transId, refundStatus: "refunded" })
+      .populate("userId", "name email")
+      .populate("eventId", "eventName")
+      .populate("orderId", "createdAt paymentMethod");
+ 
+    if (!refund) {
+      return res.status(404).json({ message: "Refund transaction not found or not refunded yet" });
+    }
+ 
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([600, 800]); // Same dimensions as withdrawal invoice
+    const { width, height } = page.getSize();
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+ 
+    // Colors - Same as withdrawal invoice
+    const primaryColor = rgb(0.2, 0.4, 0.6); // Blue color for headers
+    const secondaryColor = rgb(0.3, 0.3, 0.3); // Dark gray for text
+    const accentColor = rgb(0.9, 0.9, 0.9); // Light gray for backgrounds
+ 
+    // Header Section
+    page.drawText('REFUND INVOICE', {
+      x: 50,
+      y: height - 60,
+      size: 24,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    // Company/Platform Info
+    page.drawText('Tick-M-Event', {
+      x: width - 200,
+      y: height - 60,
+      size: 14,
+      font: boldFont,
+      color: secondaryColor,
+    });
+ 
+    page.drawText('https://tick-m.cloud', {
+      x: width - 200,
+      y: height - 80,
+      size: 10,
+      font: regularFont,
+      color: secondaryColor,
+    });
+ 
+    // Invoice Details Section
+    let currentY = height - 120;
+ 
+    // Invoice header box
+    page.drawRectangle({
+      x: 50,
+      y: currentY - 5,
+      width: width - 100,
+      height: 80,
+      color: accentColor,
+      opacity: 0.3,
+    });
+ 
+    // Invoice Number
+    page.drawText('Invoice Number:', {
+      x: 60,
+      y: currentY,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+    page.drawText(`REF-INV-${refund.transactionId}`, {
+      x: 180,
+      y: currentY,
+      size: 12,
+      font: regularFont,
+      color: secondaryColor,
+    });
+ 
+    // Refund Date
+    page.drawText('Refund Date:', {
+      x: 60,
+      y: currentY - 25,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+    page.drawText(new Date(refund.updatedAt).toLocaleDateString(), {
+      x: 180,
+      y: currentY - 25,
+      size: 12,
+      font: regularFont,
+      color: secondaryColor,
+    });
+ 
+    // Status
+    page.drawText('Status:', {
+      x: width - 200,
+      y: currentY,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+    page.drawText(refund.refundStatus.toUpperCase(), {
+      x: width - 120,
+      y: currentY,
+      size: 12,
+      font: regularFont,
+      color: rgb(0, 0.5, 0), // Green color for status
+    });
+ 
+    // Refund Type
+    page.drawText('Refund Type:', {
+      x: width - 200,
+      y: currentY - 25,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+    page.drawText(refund.refundType?.toUpperCase() || 'FULL', {
+      x: width - 120,
+      y: currentY - 25,
+      size: 12,
+      font: regularFont,
+      color: secondaryColor,
+    });
+ 
+    currentY -= 100;
+ 
+    // User Information Section
+    page.drawText('USER INFORMATION', {
+      x: 50,
+      y: currentY,
+      size: 16,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 30;
+ 
+    const userInfo = [
+      ['User Name', refund.userId?.name || 'Unknown'],
+      ['Email Address', refund.userId?.email || 'N/A'],
+      ['Event', refund.eventId?.eventName || 'N/A'],
+    ];
+ 
+    userInfo.forEach(([label, value]) => {
+      page.drawText(`${label}:`, {
+        x: 60,
+        y: currentY,
+        size: 12,
+        font: boldFont,
+        color: secondaryColor,
+      });
+      page.drawText(value, {
+        x: 200,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+      currentY -= 25;
+    });
+ 
+    currentY -= 20;
+ 
+    // Transaction Details Section
+    page.drawText('TRANSACTION DETAILS', {
+      x: 50,
+      y: currentY,
+      size: 16,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 30;
+ 
+    const transactionInfo = [
+      ['Refund ID', refund.refundTransactionId],
+      ['Original Order ID', refund.transactionId || 'N/A'],
+      ['Payment Method', refund.paymentMethod?.toUpperCase() || 'N/A'],
+    ];
+ 
+    transactionInfo.forEach(([label, value]) => {
+      page.drawText(`${label}:`, {
+        x: 60,
+        y: currentY,
+        size: 12,
+        font: boldFont,
+        color: secondaryColor,
+      });
+      page.drawText(value, {
+        x: 200,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+      currentY -= 25;
+    });
+ 
+    // Refund Reason
+    page.drawText('Refund Reason:', {
+      x: 60,
+      y: currentY,
+      size: 12,
+      font: boldFont,
+      color: secondaryColor,
+    });
+   
+    // Handle long reasons with text wrapping
+    if (refund.reason && refund.reason.length > 50) {
+      const lines = [];
+      let currentLine = '';
+      refund.reason.split(' ').forEach(word => {
+        if ((currentLine + word).length > 50) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine += (currentLine ? ' ' : '') + word;
+        }
+      });
+      lines.push(currentLine);
+     
+      lines.forEach((line, index) => {
+        page.drawText(index === 0 ? line : line, {
+          x: 200,
+          y: currentY - (index * 15),
+          size: 10,
+          font: regularFont,
+          color: secondaryColor,
+        });
+      });
+      currentY -= (lines.length * 15);
+    } else {
+      page.drawText(refund.reason || 'N/A', {
+        x: 200,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+      currentY -= 25;
+    }
+ 
+    currentY -= 20;
+ 
+    // Tickets Refunded Section
+    page.drawText('TICKETS REFUNDED', {
+      x: 50,
+      y: currentY,
+      size: 16,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 40;
+ 
+    // Table header background
+    page.drawRectangle({
+      x: 50,
+      y: currentY,
+      width: width - 100,
+      height: 25,
+      color: primaryColor,
+      opacity: 0.8,
+    });
+ 
+    // Table headers
+    page.drawText('Ticket Type', {
+      x: 60,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1), // White text
+    });
+ 
+    page.drawText('Qty', {
+      x: width - 200,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+ 
+    page.drawText('Unit Price', {
+      x: width - 150,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+ 
+    page.drawText('Total', {
+      x: width - 80,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+ 
+    currentY -= 30;
+ 
+    // Ticket rows with alternating background
+    refund.tickets.forEach((ticket, index) => {
+      // Alternate row background
+      if (index % 2 === 0) {
+        page.drawRectangle({
+          x: 50,
+          y: currentY - 5,
+          width: width - 100,
+          height: 30,
+          color: accentColor,
+          opacity: 0.2,
+        });
+      }
+ 
+      const unitPrice = ticket.unitPrice || ticket.price || 0;
+      const quantity = ticket.quantity || 1;
+      const ticketTotal = unitPrice * quantity;
+ 
+      page.drawText(ticket.ticketType || 'General Ticket', {
+        x: 60,
+        y: currentY,
+        size: 10,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      page.drawText(quantity.toString(), {
+        x: width - 200,
+        y: currentY,
+        size: 10,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      page.drawText(`${unitPrice.toLocaleString()} XAF`, {
+        x: width - 150,
+        y: currentY,
+        size: 10,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      page.drawText(`${ticketTotal.toLocaleString()} XAF`, {
+        x: width - 80,
+        y: currentY,
+        size: 10,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      currentY -= 30;
+    });
+ 
+    currentY -= 30;
+ 
+    // Amounts Section with table-like layout
+    page.drawText('REFUND SUMMARY', {
+      x: 50,
+      y: currentY,
+      size: 16,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 40;
+ 
+    // Table header background
+    page.drawRectangle({
+      x: 50,
+      y: currentY,
+      width: width - 100,
+      height: 25,
+      color: primaryColor,
+      opacity: 0.8,
+    });
+ 
+    // Table headers
+    page.drawText('Description', {
+      x: 60,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1), // White text
+    });
+ 
+    page.drawText('Amount (XAF)', {
+      x: width - 150,
+      y: currentY + 7,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1), // White text
+    });
+ 
+    currentY -= 30;
+ 
+    // Amount rows with alternating background
+    const amountData = [
+      { description: 'Original Order Total', amount: refund.totalAmount },
+      { description: 'Refund Amount', amount: -refund.refundAmount },
+      { description: 'Processing Fee', amount: refund.totalAmount - refund.refundAmount },
+    ];
+ 
+    amountData.forEach((item, index) => {
+      // Alternate row background
+      if (index % 2 === 0) {
+        page.drawRectangle({
+          x: 50,
+          y: currentY - 5,
+          width: width - 100,
+          height: 30,
+          color: accentColor,
+          opacity: 0.2,
+        });
+      }
+ 
+      page.drawText(item.description, {
+        x: 60,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      const amountText = item.amount >= 0 ?
+        `${item.amount.toLocaleString()} XAF` :
+        `-${Math.abs(item.amount).toLocaleString()} XAF`;
+     
+      page.drawText(amountText, {
+        x: width - 150,
+        y: currentY,
+        size: 12,
+        font: regularFont,
+        color: secondaryColor,
+      });
+ 
+      currentY -= 30;
+    });
+ 
+    currentY -= 40;
+ 
+    // Total row
+    page.drawRectangle({
+      x: 50,
+      y: currentY - 5,
+      width: width - 100,
+      height: 35,
+      color: primaryColor,
+      opacity: 0.3,
+    });
+ 
+    page.drawText('TOTAL REFUNDED:', {
+      x: 60,
+      y: currentY,
+      size: 14,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    page.drawText(`${refund.refundAmount.toLocaleString()} XAF`, {
+      x: width - 150,
+      y: currentY,
+      size: 14,
+      font: boldFont,
+      color: primaryColor,
+    });
+ 
+    currentY -= 60;
+ 
+    // Footer Section
+    page.drawText('Terms & Conditions:', {
+      x: 50,
+      y: currentY,
+      size: 10,
+      font: boldFont,
+      color: secondaryColor,
+    });
+ 
+    page.drawText('This is an automated invoice for refund transaction. The refund amount will be credited to your original payment method within 3-5 business days.', {
+      x: 50,
+      y: currentY - 15,
+      size: 8,
+      font: regularFont,
+      color: secondaryColor,
+      maxWidth: width - 100,
+      lineHeight: 10,
+    });
+ 
+    // Generated timestamp
+    page.drawText(`Generated on: ${new Date().toLocaleString()}`, {
+      x: 50,
+      y: 30,
+      size: 8,
+      font: regularFont,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+ 
+    const pdfBytes = await pdfDoc.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Refund-Invoice-${refund.transactionId}.pdf`);
+    res.send(Buffer.from(pdfBytes));
+  } catch (error) {
+    console.error('Refund invoice generation error:', error);
+    res.status(500).json({ message: 'Failed to generate refund invoice', error: error.message });
+  }
+};
