@@ -6,6 +6,7 @@ const { loginValidation } = require('../validators/authValidator')
 const validate = require('../middleware/validateRequest')
 const { getAllServiceProvider, getAllServiceCategories } = require('../controllers/search-and-select/searchSelect.controller')
 const { logoutActivity, profileUpdatedActivity } = require('../middleware/activity')
+const { profileViewsCount } = require('../controllers/User')
 
 router
     .post("/signup", authController.signup)
@@ -29,6 +30,7 @@ router
     .put('/avatar', verifyToken, authController.updateAvatar)
     .post("/reviews", verifyToken, authController.createReview)
     .put("/reviews/:reviewId/reply", verifyToken, authController.addReply)
-    .get("/reviews", verifyToken, authController.getProviderReviews);
+    .get("/reviews", verifyToken, authController.getProviderReviews)
+    .patch("/profile-views/:userId", verifyToken, profileViewsCount);
 
 module.exports = router

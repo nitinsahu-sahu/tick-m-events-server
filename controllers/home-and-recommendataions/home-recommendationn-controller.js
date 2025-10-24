@@ -21,6 +21,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
             isDelete: { $ne: true },
             createdBy: userId,
             status: "approved",
+            step:4,
             $or: [
                 {
                     date: { $gt: currentDateTime.toISOString().split('T')[0] } // Date is in future
@@ -173,6 +174,7 @@ exports.getHomeRecommendationsEvents = async (req, res, next) => {
         const currentMonthEvents = await Event.find({
             date: { $regex: `^${currentYear}-${currentMonthFormatted}` },
             isDelete: false,
+            step:4,
             createdBy: userId,
         });
 
@@ -271,6 +273,7 @@ exports.getHomeEvents = async (req, res, next) => {
     const upcomingEvents = await Event.find({
       isDelete: { $ne: true },
       status: "approved",
+      step:4,
       $or: [
         { date: { $gt: currentDateTime.toISOString().split("T")[0] } },
         {
@@ -291,6 +294,7 @@ exports.getHomeEvents = async (req, res, next) => {
         $match: {
           isDelete: { $ne: true },
           status: "approved",
+          step:4
         },
       },
       {
@@ -334,6 +338,7 @@ exports.getHomeEvents = async (req, res, next) => {
     const latestEvents = await Event.find({
       isDelete: { $ne: true },
       status: "approved",
+      step:4,
       date: { $gte: currentDate.toISOString().split("T")[0] },
     })
       .sort({ createdAt: -1 })
