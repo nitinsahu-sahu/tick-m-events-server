@@ -19,7 +19,7 @@ router.post("/fapshi-webhook", fapshiWebhook);
 // router.get('/:id', getOrderById);
 
 // Get orders by user ID
-router.get('/user/:userId', getOrdersByUser);
+router.get('/user/:userId',verifyToken, getOrdersByUser);
 
 // Generate and download ticket PDF
 router.get('/ticket/:orderId', downloadTicket);
