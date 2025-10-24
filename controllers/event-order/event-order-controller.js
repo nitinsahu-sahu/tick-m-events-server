@@ -388,64 +388,6 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// exports.getOrdersByUser = async (req, res) => {
-//   try {
-//     const { userId } = req.params;
-
-//     if (!mongoose.Types.ObjectId.isValid(userId)) {
-//       return res.status(400).json({ message: "Invalid user ID" });
-//     }
-
-//     // 1. Get all orders for the user
-//     const orders = await EventOrder.find({ userId, verifyEntry: false }).sort({ createdAt: -1 });
-
-//     // 2. Extract all unique eventIds
-//     const eventIds = [...new Set(orders.map(order => order.eventId))];
-
-//     // 3. Fetch corresponding events
-//     const events = await Event.find({ _id: { $in: eventIds } });
-//     const eventMap = {};
-//     events.forEach(event => {
-//       eventMap[event._id.toString()] = event;
-//     });
-
-//     // 4. Fetch TicketConfiguration for those events
-//     const ticketConfigs = await TicketConfiguration.find({ 
-//       eventId: { $in: eventIds.map(id => id.toString()) } 
-//     });
-
-//     const configMap = {};
-//     ticketConfigs.forEach(config => {
-//       configMap[config.eventId] = {
-//         refundPolicy: config.refundPolicy || null,
-//         isRefundPolicyEnabled: config.isRefundPolicyEnabled || false
-//       };
-//     });
-
-//     // 5. Enrich each order
-//     const enrichedOrders = orders.map(order => {
-//       const event = eventMap[order.eventId] || null;
-//       const ticketConfig = configMap[order.eventId] || 
-//       { refundPolicy: null, isRefundPolicyEnabled: false };
-//       return {
-//         ...order.toObject(),
-//         payStatus: ticketConfig.payStatus,
-//         eventDetails: event,
-//         refundPolicy: ticketConfig.refundPolicy,
-//         isRefundPolicyEnabled: ticketConfig.isRefundPolicyEnabled,
-//         eventDate: event?.date ? new Date(event.date) : null,
-//       };
-//     }).sort((a, b) => {
-//       if (!a.eventDate) return 1;
-//       if (!b.eventDate) return -1;
-//       return a.eventDate - b.eventDate;
-//     });
-//     res.status(200).json(enrichedOrders);
-//   } catch (error) {
-//     console.error("Error in getOrdersByUser:", error);
-//     res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// };
 exports.getOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -457,25 +399,40 @@ exports.getOrdersByUser = async (req, res) => {
     // 1. Get all orders for the user
     const orders = await EventOrder.find({ userId, verifyEntry: false }).sort({ createdAt: -1 });
 
-    // 2. Extract all unique eventIds
+    // 2. Extract all unique eventIds and orderIds
     const eventIds = [...new Set(orders.map(order => order.eventId))];
+    const orderIds = orders.map(order => order._id);
 
-    // 4.5 Fetch CustomPhotoFrames for the events
+    // 3. Fetch refund requests for this user
+    const refundRequests = await RefundRequest.find({ 
+      userId,
+      orderId: { $in: orderIds }
+    }).sort({ createdAt: -1 });
+
+    // Create a map of refund requests by orderId
+    const refundRequestMap = {};
+    refundRequests.forEach(refund => {
+      refundRequestMap[refund.orderId.toString()] = refund;
+    });
+
+    // 4. Fetch CustomPhotoFrames for the events
     const photoFrames = await CustomPhotoFrame.find({ eventId: { $in: eventIds } });
     const photoFrameMap = {};
     photoFrames.forEach(frame => {
       photoFrameMap[frame.eventId.toString()] = frame;
     });
 
-    // 3. Fetch corresponding events
+    // 5. Fetch corresponding events
     const events = await Event.find({ _id: { $in: eventIds } });
     const eventMap = {};
     events.forEach(event => {
       eventMap[event._id.toString()] = event;
     });
 
-    // 4. Fetch TicketConfiguration for those events
-    const ticketConfigs = await TicketConfiguration.find({ eventId: { $in: eventIds.map(id => id.toString()) } });
+    // 6. Fetch TicketConfiguration for those events
+    const ticketConfigs = await TicketConfiguration.find({ 
+      eventId: { $in: eventIds.map(id => id.toString()) } 
+    });
 
     const configMap = {};
     ticketConfigs.forEach(config => {
@@ -485,24 +442,42 @@ exports.getOrdersByUser = async (req, res) => {
       };
     });
 
-    // 5. Enrich each order
+    // 7. Enrich each order with all related data including refund requests
     const enrichedOrders = orders.map(order => {
       const event = eventMap[order.eventId] || null;
-      const ticketConfig = configMap[order.eventId] || { refundPolicy: null, isRefundPolicyEnabled: false };
+      const ticketConfig = configMap[order.eventId] || { 
+        refundPolicy: null, 
+        isRefundPolicyEnabled: false 
+      };
       const photoFrame = photoFrameMap[order.eventId] || null;
+      const refundRequest = refundRequestMap[order._id.toString()] || null;
+      
       return {
         ...order.toObject(),
         eventDetails: event,
         refundPolicy: ticketConfig.refundPolicy,
         isRefundPolicyEnabled: ticketConfig.isRefundPolicyEnabled,
         eventDate: event?.date ? new Date(event.date) : null,
-        customPhotoFrame: photoFrame
+        customPhotoFrame: photoFrame,
+        refundRequest: refundRequest ? {
+          _id: refundRequest._id,
+          refundStatus: refundRequest.refundStatus,
+          refundAmount: refundRequest.refundAmount,
+          totalAmount: refundRequest.totalAmount,
+          reason: refundRequest.reason,
+          adminNotes: refundRequest.adminNotes,
+          isAdminForwrd: refundRequest.isAdminForwrd,
+          refundTransactionId: refundRequest.refundTransactionId,
+          createdAt: refundRequest.createdAt,
+          updatedAt: refundRequest.updatedAt
+        } : null
       };
     }).sort((a, b) => {
       if (!a.eventDate) return 1;
       if (!b.eventDate) return -1;
       return a.eventDate - b.eventDate;
     });
+
     res.status(200).json(enrichedOrders);
   } catch (error) {
     console.error("Error in getOrdersByUser:", error);
@@ -940,87 +915,6 @@ exports.getAllOrders = async (req, res) => {
 };
 
 //verify event
-// exports.verifyTicket = async (req, res) => {
-//   try {
-//     const { ticketCode, participantId, name, eventId } = req.body;
-//     // Check if at least one field is provided
-//     if (!ticketCode && !participantId && !name) {
-//       return res.status(404).json({
-//         message: "Please provide at least one data",
-//         flag: 'field'
-//       });
-//     }
-
-//     // Check if eventId is provided
-//     if (!eventId) {
-//       return res.status(400).json({
-//         message: "Event ID is required",
-//         flag: 'invalid'
-//       });
-//     }
-
-//     // Build query based on provided fields
-//     const query = { eventId };
-//     if (ticketCode) query.ticketCode = ticketCode;
-//     if (participantId) query.userId = participantId;
-//     if (name) query.name = name;
-
-//     // Find ticket in database
-//     const ticket = await EventOrder.findOne(query)
-//       .select('userId _id eventId tickets verifyEntry entryTime participantDetails paymentStatus')
-//       .populate('userId', 'name email')
-//       .populate({
-//         path: 'eventId',
-//         select: 'eventName date time location',
-//         model: 'Event'
-//       })
-//       .lean();
-
-//     console.log(ticket.eventId);
-
-//     if (!ticket) {
-//       return res.status(404).json({ message: "Invalid ticket", flag: 'invalid' });
-//     }
-
-//     if (ticket.verifyEntry) {
-//       return res.status(404).json({ message: "Ticket already used", flag: 'already' });
-//     }
-
-//     // Check if event date and time have passed
-//     const eventDate = new Date(ticket.eventId.date);
-//     const eventTime = ticket.eventId.time.split(':');
-
-//     // Set the hours and minutes from the event time
-//     eventDate.setHours(parseInt(eventTime[0]));
-//     eventDate.setMinutes(parseInt(eventTime[1]));
-
-//     const currentDate = new Date();
-
-//     if (currentDate > eventDate) {
-//       return res.status(400).json({
-//         message: "Event has expired. Please purchase a ticket for the next event.",
-//         flag: 'expired',
-//         eventDetails: {
-//           name: ticket.eventId.eventName,
-//           date: ticket.eventId.date,
-//           time: ticket.eventId.time,
-//           location: ticket.eventId.location
-//         }
-//       });
-//     }
-
-//     return res.status(200).json({
-//       message: "Access granted, Welcome",
-//       ticket,
-//       eventName: ticket.eventId.eventName,
-//       flag: 'granted'
-//     });
-
-//   } catch (err) {
-//     console.error("Error verifying ticket:", err);
-//     return res.status(500).json({ message: "Internal server error" });
-//   }
-// };
 exports.verifyTicket = async (req, res) => {
   try {
     const { ticketCode, participantId, name, eventId } = req.body;
@@ -1127,6 +1021,7 @@ exports.verifyTicket = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 exports.updateOrderVerifyEntryStatus = async (req, res) => {
   try {
     const { entryTime, verifyEntry } = req.body;

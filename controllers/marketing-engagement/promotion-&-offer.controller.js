@@ -7,7 +7,7 @@ const RefundRequest = require('../../models/refund-managment/RefundRequest');
 const Visibility = require('../../models/event-details/Visibility');
 const Withdrawal = require('../../models/transaction-&-payment/Withdrawal');
 const Wishlist = require("../../models/event-details/Wishlist");
- 
+
 
 // Create Promotion
 exports.createPromotion = async (req, res) => {
@@ -295,19 +295,51 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
         (sum, w) => sum + (w.amount || 0), 0
       );
 
+      const allWithdrawals = await Withdrawal.find({
+        eventId: event._id
+      })
+        .populate('userId', 'name email profilePicture')
+        .lean();
+
+      // Compute totals for each status
+      const totalPendingWithdrawals = allWithdrawals
+        .filter(w => w.status === 'pending')
+        .reduce((sum, w) => sum + (w.amount || 0), 0);
+
+      const totalRejectedWithdrawals = allWithdrawals
+        .filter(w => w.status === 'rejected')
+        .reduce((sum, w) => sum + (w.amount || 0), 0);
+
+      // Prepare structured withdrawal data
+      const withdrawalData = {
+        all: allWithdrawals,
+        stats: {
+          total: allWithdrawals.length,
+          approved: allWithdrawals.filter(w => w.status === 'approved').length,
+          pending: allWithdrawals.filter(w => w.status === 'pending').length,
+          rejected: allWithdrawals.filter(w => w.status === 'rejected').length,
+        },
+        totals: {
+          approvedAmount: totalApprovedWithdrawals,
+          pendingAmount: totalPendingWithdrawals,
+          rejectedAmount: totalRejectedWithdrawals,
+        }
+      };
+
+
       // Wishlist data for this event
-         const wishlistItems = await Wishlist.find({ eventId: event._id })
-          .populate("userId", "name email profilePicture")
-          .lean();
- 
-        // Count total users who added it
-        const wishlistCount = wishlistItems.length;
- 
-        // Check if the current user also added this event to wishlist
-        const isInWishlist = await Wishlist.exists({
-          eventId: event._id,
-          userId,
-        });
+      const wishlistItems = await Wishlist.find({ eventId: event._id })
+        .populate("userId", "name email profilePicture")
+        .lean();
+
+      // Count total users who added it
+      const wishlistCount = wishlistItems.length;
+
+      // Check if the current user also added this event to wishlist
+      const isInWishlist = await Wishlist.exists({
+        eventId: event._id,
+        userId,
+      });
 
       return {
         ...event,
@@ -322,6 +354,7 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
           })),
           isInWishlist: Boolean(isInWishlist),
         },
+        withdrawalDetails: withdrawalData,
         orders: ordersWithRefunds,
         totalApprovedWithdrawals,
         ticketConfiguration: ticketConfig || null, // Include ticket config or null if not found
@@ -354,23 +387,23 @@ exports.eventListWithOrderAndParticipant = async (req, res) => {
 exports.validatePromo = async (req, res) => {
   try {
     const { promoCode, eventId, selectedTickets } = req.body;
- 
+
     if (!promoCode || !eventId) {
       return res.status(400).json({
         success: false,
         message: "Promo code and Event ID are required",
       });
     }
- 
+
     const promo = await Promotion.findOne({ promoCode: promoCode.toUpperCase() });
     if (!promo) {
       return res.status(404).json({ success: false, message: "Invalid or expired promo code" });
     }
- 
+
     if (promo.status !== "active") {
       return res.status(400).json({ success: false, message: "Promo code is not active" });
     }
- 
+
     // Validity period check
     const now = new Date();
     const start = new Date(promo.validityPeriodStart);
@@ -378,12 +411,12 @@ exports.validatePromo = async (req, res) => {
     if (now < start || now > end) {
       return res.status(400).json({ success: false, message: "Promo not valid at this time" });
     }
- 
+
     // Event check
     if (promo.eventId.toString() !== eventId) {
       return res.status(400).json({ success: false, message: "Promo not valid for this event" });
     }
- 
+
     // Ticket selection check
     if (promo.ticketSelection) {
       const selectedTicketIds = selectedTickets.map(t => typeof t === "string" ? t : t.ticketId);
@@ -391,34 +424,34 @@ exports.validatePromo = async (req, res) => {
         return res.status(400).json({ success: false, message: "Promo not valid for selected tickets" });
       }
     }
- 
+
     // ===================== 💰 FIXED Discount Calculation =====================
     let subtotal = 0;
     let discount = 0;
- 
+
     // Calculate subtotal first
     for (const ticket of selectedTickets) {
       const totalForTicket = ticket.unitPrice * ticket.quantity;
       subtotal += totalForTicket;
     }
- 
+
     // Check if promo is applicable
     const isApplicable = !promo.ticketSelection ||
       selectedTickets.some(ticket =>
         promo.ticketSelection.toString() === ticket.ticketId.toString()
       );
- 
+
     if (isApplicable) {
       switch (promo.promotionType) {
         case "percentageDiscount":
           discount = (subtotal * Number(promo.discountValue)) / 100;
           break;
- 
+
         case "fixedValueDiscount":
           // FIXED: Apply fixed discount once to entire subtotal, not per ticket
           discount = Math.min(Number(promo.discountValue), subtotal);
           break;
- 
+
         case "groupOffer":
           if (promo.groupBuy && promo.groupGet) {
             for (const ticket of selectedTickets) {
@@ -427,7 +460,7 @@ exports.validatePromo = async (req, res) => {
             }
           }
           break;
- 
+
         case "earlyBuyerDiscount":
           if (promo.earlyBuyerDiscountType === "percentage") {
             discount = (subtotal * Number(promo.discountValue)) / 100;
@@ -437,14 +470,14 @@ exports.validatePromo = async (req, res) => {
           break;
       }
     }
- 
+
     // Check minimum purchase requirement
     if (promo.minPurchase && subtotal < promo.minPurchase) {
       discount = 0;
     }
- 
+
     const netAmount = Math.max(0, subtotal - discount);
- 
+
     // Map type for frontend
     let promoType;
     switch (promo.promotionType) {
@@ -454,7 +487,7 @@ exports.validatePromo = async (req, res) => {
       case "earlyBuyerDiscount": promoType = "earlyBuyer"; break;
       default: promoType = "unknown";
     }
- 
+
     return res.json({
       success: true,
       message: "Promo applied successfully",
@@ -481,7 +514,7 @@ exports.validatePromo = async (req, res) => {
         netAmount
       }
     });
- 
+
   } catch (error) {
     return res.status(500).json({ success: false, message: "Server error" });
   }
