@@ -16,6 +16,7 @@ const Cancellation = require('../../models/event-details/event-cancelled')
 const eventRating = require('../../models/event-details/event-rating')
 const mongoose = require('mongoose');
 const eventPromo = require('../../models/marketing-engagement/promotion-&-offer.schema')
+
 // Create Event
 exports.createEvent = async (req, res, next) => {
   // Start a mongoose session for transactions
@@ -352,7 +353,8 @@ exports.getEvent = async (req, res, next) => {
     // Get the event (if not deleted)
     const event = await Event.findOne({
       _id: eventId,
-      isDelete: { $ne: true }
+      isDelete: { $ne: true },
+      step:4,
     }).select('-createdBy -createdAt -updatedAt -isDelete -__v').lean();
 
     if (!event) {
@@ -928,6 +930,7 @@ exports.getTodayEvents = async (req, res, next) => {
     // Get all events that aren't deleted and are today
     const events = await Event.find({
       isDelete: { $ne: true },
+      step:4,
       $expr: {
         $and: [
           {
@@ -1047,10 +1050,6 @@ exports.validateViewUpdate = async (req, res) => {
   try {
     const { validationOptions } = req.body;
     const { id: eventId } = req.params;
-
-console.log(validationOptions);
-
-
     // Validate the input
     if (!validationOptions ||
       !['scan', 'list', 'both'].includes(validationOptions.selectedView)) {
@@ -1096,6 +1095,7 @@ exports.getEventPageCustomization = async (req, res) => {
       });
     }
 
+    
     // Check if event exists
     const eventData = await Event.findById(id);
     if (!eventData) {
