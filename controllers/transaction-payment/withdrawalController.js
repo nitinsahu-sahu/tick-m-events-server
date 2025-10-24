@@ -69,6 +69,7 @@ exports.createWithdrawal = async (req, res) => {
     });
   }
 };
+
 exports.sendWithdrawalOTP = async (req, res) => {
   const { userId } = req.body;
 
@@ -104,6 +105,7 @@ exports.sendWithdrawalOTP = async (req, res) => {
     });
   }
 };
+
 exports.verifyWithdrawalOTP = async (req, res) => {
   const { userId, otp } = req.body;
 
