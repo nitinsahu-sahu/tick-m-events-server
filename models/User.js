@@ -37,19 +37,19 @@ const userSchema = new Schema({
     gigsCounts: {
         pending: {
             type: Number,
-            default:0
+            default: 0
         },
         ongoing: {
             type: Number,
-            default:0
+            default: 0
         },
         completed: {
             type: Number,
-            default:0
+            default: 0
         },
         cancelled: {
             type: Number,
-            default:0
+            default: 0
         },
     },
     username: {
@@ -127,7 +127,16 @@ const userSchema = new Schema({
         type: Boolean,
         default: false
     },
-
+    profileViews: {
+        currentMonth: {
+            count: { type: Number, default: 0 },
+            viewers: [{ type: Schema.Types.ObjectId, ref: 'User' }]
+        },
+        history: [{
+            month: { type: String, required: true },
+            count: { type: Number, required: true }
+        }]
+    },
     role: {
         type: String,
         enum: ['organizer', 'admin', 'participant', 'provider'],

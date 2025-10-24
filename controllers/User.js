@@ -1,4 +1,5 @@
 const User = require("../models/User")
+const mongoose = require("mongoose")
 
 exports.getById = async (req, res) => {
     try {
@@ -91,6 +92,115 @@ exports.updateById = async (req, res) => {
         const updated = (await User.findByIdAndUpdate(id, req.body, { new: true })).toObject()
         delete updated.password
         res.status(200).json(updated)
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: 'Error getting your details, please try again later' })
+    }
+}
+
+exports.profileViewsCount = async (req, res) => {
+    try {
+        const { userId } = req.params; // Get userId from URL params
+        const viewerId = req.user?._id; // Assuming you have authenticated user info
+
+        // Validate userId
+        if (!userId) {
+            return res.status(400).json({ message: 'User ID is required' });
+        }
+
+        // Find the user
+        const user = await User.findById(userId);
+        
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Get current date info for monthly tracking
+        const currentDate = new Date();
+        const currentMonth = currentDate.toISOString().slice(0, 7); // "YYYY-MM"
+
+        // Initialize profileViews if it doesn't exist
+        if (!user.profileViews) {
+            user.profileViews = {
+                currentMonth: {
+                    count: 0,
+                    viewers: []
+                },
+                history: []
+            };
+        }
+
+        // Initialize currentMonth if it doesn't exist
+        if (!user.profileViews.currentMonth) {
+            user.profileViews.currentMonth = {
+                count: 0,
+                viewers: []
+            };
+        }
+
+        // Check if we need to reset monthly stats (new month)
+        const lastViewMonth = user.profileViews.currentMonth.lastReset || currentMonth;
+        if (lastViewMonth !== currentMonth) {
+            // Move current month to history
+            if (user.profileViews.currentMonth.count > 0) {
+                user.profileViews.history.push({
+                    month: lastViewMonth,
+                    count: user.profileViews.currentMonth.count
+                });
+            }
+
+            // Reset current month
+            user.profileViews.currentMonth = {
+                count: 0,
+                viewers: [],
+                lastReset: currentMonth
+            };
+        }
+
+        let isNewView = false;
+
+        // Check if viewer is provided and not already viewed this month
+        if (viewerId && mongoose.Types.ObjectId.isValid(viewerId)) {
+            const viewerObjectId = new mongoose.Types.ObjectId(viewerId);
+            
+            // Check if this viewer already viewed this month
+            const alreadyViewed = user.profileViews.currentMonth.viewers.some(
+                viewer => viewer.equals(viewerObjectId)
+            );
+
+            if (!alreadyViewed) {
+                // Add viewer to the list
+                user.profileViews.currentMonth.viewers.push(viewerObjectId);
+                
+                // Increment count
+                user.profileViews.currentMonth.count += 1;
+                isNewView = true;
+            }
+        } else {
+            // If no viewer ID provided, just increment count
+            user.profileViews.currentMonth.count += 1;
+            isNewView = true;
+        }
+
+        // Ensure history exists
+        if (!user.profileViews.history) {
+            user.profileViews.history = [];
+        }
+
+        // Save the updated user
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile views updated successfully',
+            data: {
+                profileViews: user.profileViews.currentMonth.count,
+                totalUniqueViewers: user.profileViews.currentMonth.viewers.length,
+                isNewView: isNewView,
+                currentMonth: currentMonth
+            }
+        });
 
     } catch (error) {
         console.log(error);

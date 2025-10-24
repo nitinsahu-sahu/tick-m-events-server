@@ -288,6 +288,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
             isDelete: { $ne: true },
             createdBy: userId,
             status: "approved",
+            step:4
         })
             .sort({ date: 1 })
             .limit(10)
