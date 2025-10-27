@@ -3,39 +3,44 @@ const RefundRequest = require('../../models/refund-managment/RefundRequest');
 const EventOrder = require('../../models/event-order/EventOrder');
 const Event = require('../../models/event-details/Event');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const path = require("path");
+const fs = require("fs");
+const User = require("../../models/User");
+const { sendRefundEmail } = require("../../utils/Emails-template");
+
 
 exports.submitRefundRequest = async (req, res) => {
   try {
     const { userId, orderId, reason, refundAmount: clientRefundAmount } = req.body;
- 
+
     // 1️⃣ Validate Order and Ownership
     const order = await EventOrder.findById(orderId);
     if (!order || order.userId.toString() !== userId) {
       return res.status(404).json({ message: 'Order not found or unauthorized' });
     }
- 
+
     const transactionId = order.transactionId;
- 
+
     // 2️⃣ Validate Event
     const event = await Event.findById(order.eventId);
     if (!event) {
       return res.status(404).json({ message: 'Associated event not found' });
     }
- 
+
     // 3️⃣ Check if a refund request already exists
     let existingRequest = await RefundRequest.findOne({
       transactionId,
       userId,
       orderId,
     });
- 
+
     // 4️⃣ Calculate refund amount dynamically
     const policy = order.refundPolicy || {};
     const today = new Date();
     const eventDate = new Date(event.date);
     let refundAmount = 0;
     let refundType = req.body.refundType || "manual";
- 
+
     if (policy.fullRefund) {
       const fullRefundDaysBefore = parseInt(policy.fullRefundDaysBefore || "0");
       const daysBeforeEvent = Math.floor((eventDate - today) / (1000 * 60 * 60 * 24));
@@ -61,15 +66,15 @@ exports.submitRefundRequest = async (req, res) => {
         refundType = "none";
       }
     }
- 
+
     if (clientRefundAmount && clientRefundAmount > 0) {
       refundAmount = clientRefundAmount;
     }
- 
+
     if (typeof refundAmount !== 'number' || refundAmount <= 0 || refundAmount > order.totalAmount) {
       return res.status(400).json({ message: 'Invalid refund amount' });
     }
- 
+
     // 5️⃣ If refund already exists, update it instead of creating a new one
     if (existingRequest) {
       // Only allow re-request if previous was rejected or cancelled
@@ -78,26 +83,26 @@ exports.submitRefundRequest = async (req, res) => {
           message: `Refund is already ${existingRequest.refundStatus}. Cannot re-request.`,
         });
       }
- 
+
       existingRequest.refundStatus = 'pending';
       existingRequest.reason = reason || existingRequest.reason;
       existingRequest.refundAmount = refundAmount;
       existingRequest.refundType = refundType;
       existingRequest.adminNotes = ''; // clear old rejection notes
       existingRequest.updatedAt = new Date();
- 
+
       await existingRequest.save();
- 
+
       // Update order status
       order.refundStatus = 'requestedRefund';
       await order.save();
- 
+
       return res.status(200).json({
         message: 'Refund request re-submitted successfully',
         request: existingRequest,
       });
     }
- 
+
     // 6️⃣ Otherwise, create a new refund request (first time only)
     const newRequest = new RefundRequest({
       transactionId,
@@ -114,17 +119,17 @@ exports.submitRefundRequest = async (req, res) => {
       refundType,
       refundStatus: 'pending',
     });
- 
+
     await newRequest.save();
- 
+
     order.refundStatus = 'requestedRefund';
     await order.save();
- 
+
     return res.status(201).json({
       message: 'Refund request submitted successfully',
       request: newRequest,
     });
- 
+
   } catch (error) {
     console.error("Refund request error:", error);
     return res.status(500).json({ message: 'Server error', error: error.message });
@@ -644,37 +649,135 @@ exports.getRefundRequest = async (req, res) => {
   }
 };
 
+const generateRefundInvoice = async (refundRequest, user, order, refundTransactionId) => {
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([600, 800]);
+    const { width, height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const primaryColor = rgb(0.07, 0.18, 0.29);
+    const secondaryColor = rgb(0.12, 0.56, 0.80);
+    const successColor = rgb(0.20, 0.63, 0.33);
+
+    // HEADER
+    page.drawRectangle({ x: 0, y: height - 120, width, height: 120, color: primaryColor });
+    page.drawText("TICK-M-EVENT", { x: 50, y: height - 60, size: 24, font: boldFont, color: rgb(1, 1, 1) });
+    page.drawText("Refund Invoice", { x: 50, y: height - 90, size: 18, font: boldFont, color: rgb(1, 1, 1) });
+
+    let y = height - 160;
+
+    // INVOICE IDENTIFIERS
+    page.drawText(`Refund ID: ${refundRequest._id}`, { x: 50, y, size: 10, font: boldFont, color: primaryColor });
+    y -= 15;
+    page.drawText(`Transaction ID: ${refundRequest.refundTransactionId || refundTransactionId || "N/A"}`, {
+      x: 50, y, size: 10, font, color: primaryColor
+    });
+    y -= 15;
+    page.drawText(`Order ID: ${refundRequest.orderId?._id || "N/A"}`, { x: 50, y, size: 10, font, color: primaryColor });
+    y -= 15;
+    page.drawText(`Event ID: ${refundRequest.eventId || "N/A"}`, { x: 50, y, size: 10, font, color: primaryColor });
+    y -= 15;
+    page.drawText(`Payment Method: ${refundRequest.paymentMethod || "N/A"}`, { x: 50, y, size: 10, font, color: primaryColor });
+    y -= 15;
+    page.drawText(`Refund Date: ${new Date(refundRequest.updatedAt).toLocaleString()}`, {
+      x: 50, y, size: 10, font, color: primaryColor
+    });
+
+    // CUSTOMER SECTION
+    y -= 40;
+    const left = 50;
+    const right = 300;
+
+    page.drawText("CUSTOMER INFORMATION", { x: left, y, size: 12, font: boldFont, color: secondaryColor });
+    y -= 20;
+
+    const customerInfo = [
+      ["Name", user.name || "N/A"],
+      ["Email", user.email],
+      ["Phone", user.number || user.phone || "N/A"],
+      ["User ID", user._id]
+    ];
+
+    customerInfo.forEach(([label, value]) => {
+      page.drawText(`${label}:`, { x: left, y, size: 10, font: boldFont, color: primaryColor });
+      page.drawText(value.toString(), { x: left + 100, y, size: 10, font });
+      y -= 15;
+    });
+
+    // REFUND DETAILS
+    y -= 30;
+    page.drawText("REFUND DETAILS", { x: left, y, size: 14, font: boldFont, color: secondaryColor });
+    y -= 25;
+
+    const items = [
+      ["Original Payment Amount", `${refundRequest.totalAmount || order?.totalAmount || 0} XAF`],
+      ["Refund Amount", `${refundRequest.refundAmount || 0} XAF`],
+      ["Processing Fee", `${(refundRequest.totalAmount || 0) - (refundRequest.refundAmount || 0)} XAF`],
+      ["Refund Reason", refundRequest.reason || "N/A"],
+      ["Admin Notes", refundRequest.adminNotes || "N/A"]
+    ];
+
+    items.forEach(([desc, value]) => {
+      page.drawText(desc, { x: left, y, size: 10, font });
+      page.drawText(value.toString(), { x: right + 50, y, size: 10, font });
+      y -= 15;
+    });
+
+    // TOTAL
+    y -= 25;
+    page.drawText("TOTAL REFUND AMOUNT:", { x: left, y, size: 12, font: boldFont, color: primaryColor });
+    page.drawText(`${refundRequest.refundAmount || 0} XAF`, {
+      x: right + 50, y, size: 12, font: boldFont, color: successColor
+    });
+
+    // SAVE PDF
+    const pdfBytes = await pdfDoc.save();
+    const invoicesDir = path.join(__dirname, "../invoices");
+    if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true });
+
+    const invoicePath = path.join(invoicesDir, `refund_invoice_${refundRequest._id}.pdf`);
+    fs.writeFileSync(invoicePath, pdfBytes);
+
+    return invoicePath;
+  } catch (err) {
+    console.error("PDF generation error:", err);
+    return null;
+  }
+};
+
+
 exports.updateRefundRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { refundStatus, adminNotes,refundTransactionId} = req.body;
- 
-    // Validate input
-    if (!refundStatus && adminNotes === undefined) {
-      return res.status(400).json({ message: 'Please provide refundStatus or adminNotes' });
-    }
- 
-    const refundRequest = await RefundRequest.findById(id);
-    if (!refundRequest) {
-      return res.status(404).json({ message: 'Refund request not found' });
-    }
- 
-    // Update fields
+    const { refundStatus, adminNotes, refundTransactionId } = req.body;
+
+    const refundRequest = await RefundRequest.findById(id).populate("userId").populate("orderId");
+    if (!refundRequest) return res.status(404).json({ message: "Refund request not found" });
+
     if (refundStatus) refundRequest.refundStatus = refundStatus;
     if (adminNotes !== undefined) refundRequest.adminNotes = adminNotes;
- 
     if (refundTransactionId) refundRequest.refundTransactionId = refundTransactionId;
-    
     refundRequest.updatedAt = new Date();
- 
     await refundRequest.save();
- 
+
+    let attachmentPath = null;
+    if (refundStatus === "refunded") {
+      attachmentPath = await generateRefundInvoice(refundRequest, refundRequest.userId, refundRequest.orderId, refundTransactionId);
+    }
+
+    if (refundStatus === "refunded" || refundStatus === "rejected") {
+      
+      await sendRefundEmail(refundRequest.userId, refundRequest, refundStatus, refundTransactionId, attachmentPath);
+    }
+
     return res.status(200).json({
-      message: 'Refund request updated successfully',
+      message: "Refund request updated successfully",
       refundRequest,
     });
-  } catch (error) {  // 👈 use the same variable name inside
-    console.error('Error updating refund request:', error);
-    return res.status(500).json({ message: 'Internal server error', error: error.message });
+  } catch (err) {
+    console.error("Error updating refund:", err);
+    return res.status(500).json({ message: "Internal server error", error: err.message });
   }
 };
