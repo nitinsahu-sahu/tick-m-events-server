@@ -5,6 +5,7 @@ const {
     updateBid, withdrawBid, getMyBidByProject
 } = require('../../controllers/event-request/place-a-bid-controller');
 const { getStatistics } = require('../../controllers/provider/statistics-performance');
+const { getReservactionContracts } = require('../../controllers/provider/reservation-contract');
 const router = express.Router()
 
 
@@ -26,6 +27,10 @@ router.put('/project/:bidId', verifyToken, verifyProvider, updateBid);
 // Withdraw a bid
 router.delete('/project/:bidId', verifyToken, verifyProvider, withdrawBid);
 
+// Statistics Page
 router.get('/statistics', verifyToken, verifyProvider, getStatistics);
+
+// Reservation And Contracts Page
+router.get('/reservation-contracts', verifyToken, verifyProvider, getReservactionContracts);
 
 module.exports = router

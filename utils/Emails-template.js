@@ -1,3 +1,51 @@
+const nodemailer = require("nodemailer");
+const fs = require("fs");
+
+exports.sendRefundEmail = async (user, refundRequest, refundStatus, refundTransactionId, attachmentPath) => {
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL,
+      pass: process.env.PASSWORD,
+    },
+  });
+ 
+  let subject, html;
+ 
+  if (refundStatus === "refunded") {
+    subject = "🎉 Refund Processed Successfully - TICK-M-EVENT";
+    html = `
+      <h2 style="color:green;">Refund Processed Successfully</h2>
+      <p>Hi ${user.name || "Valued Customer"},</p>
+      <p>Your refund of <strong>${refundRequest.refundAmount} XAF</strong> has been processed successfully.</p>
+      <p>Transaction ID: ${refundTransactionId || "N/A"}</p>
+      <p>Check attached invoice for full details.</p>
+    `;
+  } else {
+    subject = "❌ Refund Request Rejected - TICK-M-EVENT";
+    html = `
+      <h2 style="color:red;">Refund Request Not Approved</h2>
+      <p>Hi ${user.name || "Valued Customer"},</p>
+      <p>Unfortunately, your refund request has been rejected.</p>
+      <p>Reason: ${refundRequest.adminNotes || "Please contact support for details."}</p>
+    `;
+  }
+ 
+  const mailOptions = {
+    from: `"TICK-M-EVENT Refunds" <${process.env.EMAIL}>`,
+    to: user.email,
+    subject,
+    html,
+  };
+ 
+  if (attachmentPath && fs.existsSync(attachmentPath)) {
+    mailOptions.attachments = [{ filename: "Refund_Invoice.pdf", path: attachmentPath }];
+  }
+ 
+  await transporter.sendMail(mailOptions);
+  console.log("✅ Refund email sent to:", user.email);
+};
+
 exports.createBidStatusEmailTemplate = async (projectDetails, bidDetails, status, reason = null, acceptedAmount = null) => {
   const statusColor = status === 'accepted' ? '#4CAF50' : '#F44336';
   const statusText = status === 'accepted' ? 'Accepted' : 'Rejected';
