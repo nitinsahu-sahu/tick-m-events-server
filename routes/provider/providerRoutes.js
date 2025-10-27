@@ -31,6 +31,6 @@ router.delete('/project/:bidId', verifyToken, verifyProvider, withdrawBid);
 router.get('/statistics', verifyToken, verifyProvider, getStatistics);
 
 // Reservation And Contracts Page
-router.get('/reservation-contracts', verifyToken, verifyProvider, getReservactionContracts);
+router.get('/reservation-contracts', verifyToken,getReservactionContracts);
 
 module.exports = router

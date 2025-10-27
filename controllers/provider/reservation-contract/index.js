@@ -10,13 +10,13 @@ exports.getReservactionContracts = async (req, res) => {
             providerId: providerId,
             isSigned: true,
             projectStatus: { $ne: 'completed' }
-        }).populate('eventId serviceCategoryId');
+        }).populate('eventId serviceRequestId providerId organizerId');
 
         // Get Completed Projects from EventReq (where projectStatus is completed)
         const completedEventReqProjects = await EventReq.find({
             providerId: providerId,
             projectStatus: 'completed'
-        }).populate('eventId serviceCategoryId');
+        }).populate('eventId serviceRequestId providerId organizerId');
 
         // Get Active Projects from PlaceABid/Bid (where adminFeePaid is true and winningBid > 0)
         const activeBidProjects = await Bid.find({
