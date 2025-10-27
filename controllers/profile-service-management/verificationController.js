@@ -32,7 +32,7 @@ exports.sendEmailOtp = async (req, res) => {
         try {
             const emailHtml = await createEmailVerificationTemplate(otp, otpExpires, user.name);
             await sendMail(
-                'nitinsahu911111@gmail.com',
+                user.email,
                 'Email Confirmation',
                 emailHtml
             );
@@ -216,12 +216,12 @@ exports.verifyWhatsAppOTP = async (req, res) => {
 exports.verifyIdentity = async (req, res) => {
     const { identity } = req.files;
     const { type } = req.body;
-  
+
     try {
         if (!identity) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'No file uploaded' 
+            return res.status(400).json({
+                success: false,
+                message: 'No file uploaded'
             });
         }
 
@@ -281,7 +281,7 @@ exports.verifyIdentity = async (req, res) => {
                 url: result.secure_url,
                 public_id: result.public_id,
                 status: 'pending',
-                 type,
+                type,
             });
         }
 
@@ -328,9 +328,9 @@ exports.approveIdentity = async (req, res) => {
             if (!verification) {
                 await session.abortTransaction();
                 session.endSession();
-                return res.status(404).json({ 
-                    success: false, 
-                    message: 'Verification record not found' 
+                return res.status(404).json({
+                    success: false,
+                    message: 'Verification record not found'
                 });
             }
 
@@ -344,9 +344,9 @@ exports.approveIdentity = async (req, res) => {
             if (!user) {
                 await session.abortTransaction();
                 session.endSession();
-                return res.status(404).json({ 
-                    success: false, 
-                    message: 'User not found' 
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
                 });
             }
 
@@ -386,7 +386,7 @@ exports.getAllVerifications = async (req, res) => {
         const verifications = await Verification.find()
             .populate('userId', 'name email') // joins user info
             .lean();
- 
+
         const formatted = verifications.map(v => ({
             _id: v._id,
             user: {
@@ -410,7 +410,7 @@ exports.getAllVerifications = async (req, res) => {
             createdAt: v.createdAt,
             updatedAt: v.updatedAt
         }));
- 
+
         res.status(200).json({ success: true, data: formatted });
     } catch (error) {
         console.error('Failed to get verification records:', error);
@@ -421,38 +421,38 @@ exports.getAllVerifications = async (req, res) => {
         });
     }
 };
- 
+
 exports.rejectIdentity = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { reason } = req.body;
- 
-    const verification = await Verification.findOne({ userId });
- 
-    if (!verification) {
-      return res.status(404).json({ success: false, message: 'Verification record not found' });
+    try {
+        const { userId } = req.params;
+        const { reason } = req.body;
+
+        const verification = await Verification.findOne({ userId });
+
+        if (!verification) {
+            return res.status(404).json({ success: false, message: 'Verification record not found' });
+        }
+
+        // Update all identity documents to rejected + set rejectionReason
+        verification.identityDocuments.forEach((doc) => {
+            doc.status = 'rejected';
+            doc.rejectionReason = reason;
+        });
+
+        await verification.save();
+
+        // TODO: Send notification to user about rejection with reason
+
+        res.status(200).json({
+            success: true,
+            message: 'Identity rejected',
+            data: verification
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Rejection failed',
+            error: error.message
+        });
     }
- 
-    // Update all identity documents to rejected + set rejectionReason
-    verification.identityDocuments.forEach((doc) => {
-      doc.status = 'rejected';
-      doc.rejectionReason = reason;
-    });
- 
-    await verification.save();
- 
-    // TODO: Send notification to user about rejection with reason
- 
-    res.status(200).json({
-      success: true,
-      message: 'Identity rejected',
-      data: verification
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Rejection failed',
-      error: error.message
-    });
-  }
 };
