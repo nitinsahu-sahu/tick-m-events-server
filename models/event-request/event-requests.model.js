@@ -22,6 +22,10 @@ const eventRequestSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  winningBid: {
+    type: Number,
+    default: 0
+  },
   projectStatus: {
     type: String,
     enum: ['pending', 'ongoing', 'completed', 'cancelled'],
