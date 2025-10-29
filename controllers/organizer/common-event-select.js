@@ -282,20 +282,47 @@ exports.updateBidStatus = async (req, res, next) => {
 exports.fetchEventOrganizerSelect = async (req, res, next) => {
     try {
         const userId = req.user?._id;
+        const currentDateTime = new Date();
 
-        // 1. Get upcoming events (events with date in future)
-        const upcomingEvents = await Event.find({
+        // 1. Get all events (both upcoming and past)
+        const allEvents = await Event.find({
             isDelete: { $ne: true },
             createdBy: userId,
             status: "approved",
-            step:4
-        })
-            .sort({ date: 1 })
-            .limit(10)
-            .lean();
+            step: 4
+        }).lean();
+
+        // Separate events into upcoming and past
+        const upcomingEvents = allEvents
+            .filter(event => {
+                const eventDateTime = new Date(`${event.date}T${event.time}`);
+                return eventDateTime > currentDateTime;
+            })
+            .sort((a, b) => {
+                const dateTimeA = new Date(`${a.date}T${a.time}`);
+                const dateTimeB = new Date(`${b.date}T${b.time}`);
+                return dateTimeA - dateTimeB; // Ascending order (soonest first)
+            });
+
+        const pastEvents = allEvents
+            .filter(event => {
+                const eventDateTime = new Date(`${event.date}T${event.time}`);
+                return eventDateTime <= currentDateTime;
+            })
+            .sort((a, b) => {
+                const dateTimeA = new Date(`${a.date}T${a.time}`);
+                const dateTimeB = new Date(`${b.date}T${b.time}`);
+                return dateTimeB - dateTimeA; // Descending order (most recent past events first)
+            });
+
+        // Combine: upcoming events first, then past events
+        const sortedEvents = [...upcomingEvents, ...pastEvents].slice(0, 10); // Limit to 10 total
 
         // Helper function to get full event details with enhanced statistics
-        const eventsWithDetails = await Promise.all(upcomingEvents.map(async (event) => {
+        const eventsWithDetails = await Promise.all(sortedEvents.map(async (event) => {
+            const eventDateTime = new Date(`${event.date}T${event.time}`);
+            const isUpcoming = eventDateTime > currentDateTime;
+            
             const [
                 organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame,
                 refundRequests, eventRequests, placeABid, withdrawals, ticketType, verifiedTicketsData
@@ -347,37 +374,27 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                     .lean()
             ]);
 
-
             const formattedTickets = verifiedTicketsData.flatMap(order => {
-                // Get all validated participants for this order
                 const validatedParticipants = order.participantDetails.filter(participant =>
                     participant.validation === true
                 );
 
-                // Create an entry for each validated participant
                 return validatedParticipants.map(participant => ({
                     name: participant.name,
                     age: participant.age,
                     gender: participant.gender,
                     ticketType: order.tickets[0]?.ticketType || 'N/A',
                     entryTime: participant.entryTime || null,
-                    ticketCode: order.ticketCode, // Add ticketCode to the response
+                    ticketCode: order.ticketCode,
                     validation: participant.validation,
                     orderId: order._id
                 }));
             });
-            console.log();
 
-            // NEW: Enhanced Ticket Statistics Calculation
             const ticketStatistics = calculateTicketStatistics(tickets, ticketType, eventOrder, refundRequests, formattedTickets);
-
-            // NEW: Order Statistics
             const orderStatistics = calculateOrderStatistics(eventOrder, refundRequests);
-
-            // NEW: Payment Statistics
             const paymentStatistics = calculatePaymentStatistics(eventOrder);
 
-            // NEW: Get signed projects with provider details
             const signedProjects = await Promise.all(
                 placeABid
                     .filter(project => project.isSigned)
@@ -425,7 +442,6 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 };
             });
 
-            // Enrich placeABid with subcategory names
             const enrichedPlaceABid = await Promise.all(placeABid.map(async (bid) => {
                 if (bid.subcategoryId) {
                     const category = await Category.findOne(
@@ -450,7 +466,6 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 return bid;
             }));
 
-            // Get project statistics for the event
             const projectStatistics = {
                 totalProjects: placeABid.length,
                 signedProjects: placeABid.filter(project => project.isSigned).length,
@@ -461,6 +476,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
 
             return {
                 ...event,
+                eventStatus: isUpcoming ? 'upcoming' : 'past', // Add event status for frontend
                 verifiedTickets: formattedTickets || [],
                 order: enrichedOrders,
                 refundRequests,
@@ -480,12 +496,10 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 signedProjects,
                 projectStatistics,
                 ticketType: ticketType || [],
-                // NEW: Enhanced Statistics
                 statistics: {
                     tickets: ticketStatistics,
                     orders: orderStatistics,
                     payments: paymentStatistics,
-                    // Overall Event Statistics
                     overall: {
                         totalRevenue: orderStatistics.totalRevenue,
                         netRevenue: orderStatistics.netRevenue,
@@ -503,6 +517,11 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
             success: true,
             message: "Events fetched successfully",
             __event: eventsWithDetails,
+            metadata: {
+                totalEvents: sortedEvents.length,
+                upcomingCount: upcomingEvents.length,
+                pastCount: pastEvents.length
+            }
         });
 
     } catch (error) {

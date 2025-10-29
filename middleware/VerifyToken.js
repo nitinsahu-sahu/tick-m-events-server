@@ -78,6 +78,15 @@ exports.verifyProvider = (req, res, next) => {
     next();
 };
 
+exports.verifyParticipant = (req, res, next) => {
+    if (req.user?.role !== 'participant') {
+        return res.status(403).json({
+            success: false,
+            message: "Access denied. Provider privileges required."
+        });
+    }
+    next();
+};
 
 // Grant access to specific roles
 // exports.authorize = (...roles) => {
