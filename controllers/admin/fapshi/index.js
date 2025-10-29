@@ -7,7 +7,7 @@ const EventRequest = require('../../../models/event-request/event-requests.model
 exports.initiatePaymentController = async (req, res) => {
     try {
         // Validate request body
-        const { amount, email, userId, currency = 'XAF', redirectUrl, placeABidId, bidId, eventId } = req.body;
+        const { amount, email, userId, currency = 'XAF', redirectUrl, placeABidId, eventReqId, bidId, eventId } = req.body;
 
         if (!amount || !email || !userId) {
             return res.status(400).json({
@@ -56,7 +56,7 @@ exports.initiatePaymentController = async (req, res) => {
                 organizerId: userId,
                 status: 'initiated',
                 paymentLink: fapshiRes.data.link,
-                placeABidId, bidId, eventId
+                placeABidId, bidId, eventId, eventReqId
             });
 
             return res.status(200).json({
@@ -122,14 +122,8 @@ async function storePaymentRecord(paymentData) {
 
 // Payment confirmation webhook handler
 exports.paymentWebhookController = async (req, res) => {
-    console.log('Incoming Webhook Body:', req.body);
-
     try {
-        const { transId, status } = req.body;
-        console.log('--- Extracted Values ---');
-        console.log('transId:', transId);
-        console.log('status:', status);
-
+        const { transId, status, winningBid } = req.body;
         if (!transId || !status) {
             return res.status(400).json({
                 success: false,
@@ -154,12 +148,9 @@ exports.paymentWebhookController = async (req, res) => {
         // ✅ Extract bidId and projectId from payment record
         const bidId = updatedPayment.bidId;
         const projectId = updatedPayment.placeABidId || updatedPayment.eventId;
-
-        console.log("Bid ID from DB:", bidId);
-        console.log("Project ID from DB:", projectId);
+        const eventReqId = updatedPayment.eventReqId;
 
         if (!bidId) {
-            console.warn(`⚠️ No bidId found for transId: ${transId}`);
             return res.status(400).json({
                 success: false,
                 message: 'bidId not found in payment record'
@@ -167,10 +158,11 @@ exports.paymentWebhookController = async (req, res) => {
         }
 
         const bid = await Bid.findById(bidId);
-        console.log("Found Bid:", bid);
-
         if (!bid) {
-            console.warn(`⚠️ Bid not found for bidId: ${bidId}`);
+            return res.status(400).json({
+                success: false,
+                message: `⚠️ Bid not found for bidId: ${bidId}`
+            });
         } else {
             const normalizedStatus = status.toLowerCase();
 
@@ -179,23 +171,17 @@ exports.paymentWebhookController = async (req, res) => {
                 bid.isProviderAccepted = true;
                 bid.status = 'accepted';
                 bid.adminFeePaid = true;
-
-                const totalAmount = updatedPayment.feeAmount || bid.bidAmount;
                 const adminFee = updatedPayment.feeAmount || bid.bidAmount;
-
                 bid.adminFeeAmount = adminFee;
-                bid.winningBid = bid.bidAmount;
+                bid.winningBid = winningBid;
                 bid.organizrAmount = bid.bidAmount;
 
                 await bid.save();
                 const project = await Project.findById(projectId).lean();
-                console.log("Current project status before update:", project.status);
 
 
-                console.log(`✅ Bid ${bidId} updated successfully. Admin fee: ${adminFee}, Winning bid: ${bid.winningBid}`);
             } else if (['failed', 'cancelled'].includes(normalizedStatus)) {
                 await Bid.findByIdAndUpdate(bidId, { status: 'rejected' });
-                console.log(`❌ Payment failed for bid ${bidId}, marked as rejected.`);
             }
         }
 
@@ -205,30 +191,31 @@ exports.paymentWebhookController = async (req, res) => {
                 bidStatus: 'closed',
                 isSigned: true,
             });
-            console.log(`📦 Project ${projectId} assigned to provider ${bid.providerId}`);
         }
 
-        if (status.toLowerCase() === 'successful' && projectId) {
+        if (status.toLowerCase() === 'successful' && eventReqId) {
             try {
                 // Find event request using its _id (placeABidId)
-                const eventRequest = await EventRequest.findById(projectId);
-                console.log("ddd", eventRequest);
-
+                const eventRequest = await EventRequest.findById(eventReqId);
                 if (!eventRequest) {
-                    console.warn(`⚠️ No EventRequest found for _id: ${projectId}`);
+                    return res.status(400).json({
+                        success: false,
+                        message: `⚠️ No EventRequest found for _id: ${eventReqId}`
+                    });
                 } else {
                     eventRequest.providerStatus = 'accepted';
                     eventRequest.orgStatus = 'accepted';
                     eventRequest.projectStatus = 'ongoing';
                     eventRequest.isSigned = true;
                     eventRequest.updatedAt = new Date();
-
+                    eventRequest.winningBid = winningBid;
                     await eventRequest.save();
-
-                    console.log(`🎉 EventRequest ${eventRequest._id} updated successfully (payment successful).`);
                 }
             } catch (err) {
-                console.error('❌ Failed to update EventRequest after successful payment:', err);
+                res.status(400).json({
+                    success: false,
+                    message: `❌ Failed to update EventRequest after successful payment:`,
+                });
             }
         }
 
@@ -239,7 +226,6 @@ exports.paymentWebhookController = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Webhook processing error:', error);
         res.status(500).json({
             success: false,
             message: 'Webhook processing failed',
