@@ -14,6 +14,8 @@ const RefundRequest = require("../../models/refund-managment/RefundRequest");
 const User = require("../../models/User");
 const axios = require("axios");
 const RewardTransaction = require("../../models/RewardTrans");
+const fs = require('fs');
+const path = require('path');
 
 // Get Validated tickets
 exports.fetchUserValidatedTickets = async (req, res) => {
@@ -168,6 +170,7 @@ exports.createOrder = async (req, res) => {
       transactionId,
       ticketCode,
       qrCode: qrImage,
+      fapshiExternalId: transactionId.toString(),
       deviceUsed,
       paymentStatus: "pending"
     });
@@ -328,19 +331,27 @@ exports.createOrder = async (req, res) => {
 
 exports.fapshiWebhook = async (req, res) => {
   try {
-
     const { externalId, status, transId } = req.body;
 
-    // externalId = transactionId you sent when creating order
     if (!externalId) {
       return res.status(400).json({ message: "Missing externalId" });
     }
 
     // Find order by transactionId
-    const order = await EventOrder.findOne({ transactionId: externalId });
+    const order = await EventOrder.findOne({
+      $or: [
+        { transactionId: externalId },
+        { fapshiExternalId: externalId },
+        { transactionId: transId }
+      ]
+    });
+
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    // Store original payment status for comparison
+    const originalStatus = order.paymentStatus;
 
     // Update payment status
     if (status === "SUCCESSFUL") {
@@ -351,16 +362,55 @@ exports.fapshiWebhook = async (req, res) => {
       order.paymentStatus = "pending";
     }
 
-
     order.transactionId = transId || order.transactionId;
+
     await order.save();
 
     console.log(`Order ${order._id} updated to ${order.paymentStatus}`);
 
-    // Respond so Fapshi knows we received the webhook
+    // Reward logic with better logging
+    if (status === "SUCCESSFUL") {
+      const userId = order.userId;
+
+      if (userId) {
+        // Check if order was already confirmed (duplicate webhook)
+        if (originalStatus === "confirmed") {
+          console.log(`🔄 Order ${order._id} was already confirmed, no reward given.`);
+        } else {
+          // Check if this is the user's first confirmed order
+          const previousOrders = await EventOrder.find({
+            userId,
+            paymentStatus: "confirmed",
+            _id: { $ne: order._id }
+          });
+
+          if (previousOrders.length === 0) {
+            // Credit 100 points for first purchase
+            const rewardTx = new RewardTransaction({
+              userId,
+              points: 100,
+              type: "credit",
+              reason: "First Purchase Bonus",
+              reference: order._id,
+              referenceModel: "Order",
+              status: "available",
+            });
+
+            await rewardTx.save();
+            console.log(`🎉 100 reward points credited to user ${userId} for first purchase.`);
+          } else {
+            console.log(`ℹ️ User ${userId} already has ${previousOrders.length} previous confirmed orders, no bonus awarded.`);
+          }
+        }
+      }
+    } else {
+      console.log(`❌ Payment status: ${status}, no reward given.`);
+    }
+
     res.status(200).json({ message: "Webhook processed" });
 
   } catch (err) {
+    console.error("Webhook error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -404,7 +454,7 @@ exports.getOrdersByUser = async (req, res) => {
     const orderIds = orders.map(order => order._id);
 
     // 3. Fetch refund requests for this user
-    const refundRequests = await RefundRequest.find({ 
+    const refundRequests = await RefundRequest.find({
       userId,
       orderId: { $in: orderIds }
     }).sort({ createdAt: -1 });
@@ -430,8 +480,8 @@ exports.getOrdersByUser = async (req, res) => {
     });
 
     // 6. Fetch TicketConfiguration for those events
-    const ticketConfigs = await TicketConfiguration.find({ 
-      eventId: { $in: eventIds.map(id => id.toString()) } 
+    const ticketConfigs = await TicketConfiguration.find({
+      eventId: { $in: eventIds.map(id => id.toString()) }
     });
 
     const configMap = {};
@@ -445,13 +495,13 @@ exports.getOrdersByUser = async (req, res) => {
     // 7. Enrich each order with all related data including refund requests
     const enrichedOrders = orders.map(order => {
       const event = eventMap[order.eventId] || null;
-      const ticketConfig = configMap[order.eventId] || { 
-        refundPolicy: null, 
-        isRefundPolicyEnabled: false 
+      const ticketConfig = configMap[order.eventId] || {
+        refundPolicy: null,
+        isRefundPolicyEnabled: false
       };
       const photoFrame = photoFrameMap[order.eventId] || null;
       const refundRequest = refundRequestMap[order._id.toString()] || null;
-      
+
       return {
         ...order.toObject(),
         eventDetails: event,
@@ -486,328 +536,378 @@ exports.getOrdersByUser = async (req, res) => {
 };
 
 const generateTicketPDF = async ({ order, event }) => {
-  const { eventName, date, time, category, location, description } = event
-  const { _id, orderAddress, createdAt, tickets, totalAmount, paymentStatus, transactionId, paymentMethod } = order
+  const { eventName, date, time, category, location, description } = event;
+  const {
+    _id,
+    orderAddress,
+    createdAt,
+    tickets,
+    totalAmount,
+    paymentStatus,
+    transactionId,
+    paymentMethod,
+    participantDetails,
+    userId,
+    ticketCode,
+    qrCode
+  } = order;
 
   try {
     // Create a new PDFDocument
     const pdfDoc = await PDFDocument.create();
     pdfDoc.registerFontkit(fontkit);
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
+    const titleFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     // Add a new page (A4 size: 595.28 x 841.89 points)
     const page = pdfDoc.addPage([595.28, 841.89]);
     const { width, height } = page.getSize();
 
+    // Colors
+    const primaryColor = rgb(0.2, 0.4, 0.8); // Blue theme
+    const secondaryColor = rgb(0.95, 0.95, 0.95); // Light gray
+    const textColor = rgb(0, 0, 0);
 
-    // Add header
-    page.drawText('EVENT TICKET', {
-      x: 50,
-      y: height - 50,
-      size: 24,
-      font: font,
-      color: rgb(0, 0, 0),
+    // Header with background - Reduced height
+    page.drawRectangle({
+      x: 0,
+      y: height - 80, // Reduced from 100 to 80
+      width: width,
+      height: 80,
+      color: primaryColor,
     });
 
-    // Draw divider line
-    page.drawLine({
-      start: { x: 50, y: height - 70 },
-      end: { x: width - 50, y: height - 70 },
-      thickness: 2,
-      color: rgb(0, 0, 0),
-    });
+    // Add Logo at the top right of the header
+    try {
+      const logoPath = path.join(__dirname, '../../assets/logo-mobile.png');
+      const logoImage = await pdfDoc.embedPng(fs.readFileSync(logoPath));
 
-    // Event details section
-    let yPosition = height - 100;
-    page.drawText('Event Details:', {
-      x: 50,
-      y: yPosition,
-      size: 16,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 30;
+      // Fixed logo dimensions as requested
+      const logoWidth = 50;
+      const logoHeight = 50;
 
-    // Populate event data (assuming order.eventId is populated)
-    if (order.eventId) {
-      page.drawText(`• Event: ${eventName || 'N/A'}`, {
-        x: 60,
-        y: yPosition,
-        size: 12,
-        font: regularFont,
-        color: rgb(0, 0, 0),
+      // Position logo at top left of header with some margin
+      const logoX = 50; // Left aligned with 50px margin
+      const logoY = height - 40 - logoHeight / 2; // Vertically centered in header
+
+      page.drawImage(logoImage, {
+        x: logoX,
+        y: logoY,
+        width: logoWidth,
+        height: logoHeight,
       });
-      yPosition -= 20;
-
-      page.drawText(`• Date: ${date || 'N/A'}`, {
-        x: 60,
-        y: yPosition,
-        size: 12,
-        font: regularFont,
-        color: rgb(0, 0, 0),
-      });
-      yPosition -= 20;
-
-      page.drawText(`• Time: ${time || 'N/A'}`, {
-        x: 60,
-        y: yPosition,
-        size: 12,
-        font: regularFont,
-        color: rgb(0, 0, 0),
-      });
-      yPosition -= 20;
-
-      page.drawText(`• Category: ${category || 'N/A'}`, {
-        x: 60,
-        y: yPosition,
-        size: 12,
-        font: regularFont,
-        color: rgb(0, 0, 0),
-      });
-      yPosition -= 20;
-
-      page.drawText(`• Venue: ${location || 'N/A'}`, {
-        x: 60,
-        y: yPosition,
-        size: 12,
-        font: regularFont,
-        color: rgb(0, 0, 0),
-      });
-      yPosition -= 30;
+    } catch (logoError) {
+      console.warn('Could not load logo, continuing without it:', logoError.message);
     }
 
-    // User details section
-    page.drawText('Attendee Information:', {
+    // Event Ticket Title - Adjusted to accommodate logo on right
+    page.drawText('EVENT TICKET', {
+      x: width / 2 - 70, // Centered, but logo will be on right
+      y: height - 40, // Adjusted position
+      size: 20, // Reduced from 24 to 20
+      font: titleFont,
+      color: rgb(1, 1, 1),
+    });
+
+    page.drawText(`Status: ${paymentStatus.toUpperCase()}`, {
+      x: width - 120,
+      y: height - 65, // Adjusted position
+      size: 10, // Reduced from 12 to 10
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+
+    // Ticket Code
+    page.drawText(`Ticket Code: ${ticketCode}`, {
       x: 50,
-      y: yPosition,
-      size: 16,
-      font: font,
-      color: rgb(0, 0, 0),
+      y: height - 65, // Adjusted position
+      size: 10, // Reduced from 12 to 10
+      font: boldFont,
+      color: rgb(1, 1, 1),
     });
-    yPosition -= 30;
 
-    // Populate user data (assuming order.userId is populated)
-    page.drawText(`• Name: ${orderAddress.name || 'N/A'}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 20;
-    page.drawText(`• Number: ${orderAddress.number || 'N/A'}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 20;
+    let yPosition = height - 100; // Adjusted starting position
 
-    page.drawText(`• Gender: ${orderAddress.gender || 'N/A'}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 20;
+    // Compact section drawer
+    const drawCompactSection = (title, content, startY) => {
+      let currentY = startY;
 
-    page.drawText(`• Address: ${orderAddress.city || 'N/A'}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 20;
-    page.drawText(`• Age: ${orderAddress.age || 'N/A'}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 20;
-    page.drawText(`• Email: ${orderAddress.email || 'N/A'}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 30;
+      // Reduced top margin
+      currentY -= 15;
 
-    // Order details section
-    page.drawText('Order Information:', {
-      x: 50,
-      y: yPosition,
-      size: 16,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 30;
+      // Section title with smaller font
+      page.drawText(title, {
+        x: 50,
+        y: currentY,
+        size: 14, // Reduced from 16 to 14
+        font: boldFont,
+        color: primaryColor,
+      });
+      currentY -= 22; // Reduced from 30 to 22
 
-    page.drawText(`• Order ID: ${_id.toString()}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 20;
+      // Calculate section height with reduced padding
+      const sectionHeight = (content.length * 20) + 30; // Reduced padding
 
-    page.drawText(`• Purchase Date: ${new Date(createdAt).toLocaleString()}`, {
-      x: 60,
-      y: yPosition,
-      size: 12,
-      font: regularFont,
-      color: rgb(0, 0, 0),
-    });
-    yPosition -= 20;
-
-
-    // Draw table headers
-    const headers = ['#item', 'Type', 'Qty', 'Unit Price', 'Total'];
-    const columnWidths = [100, 150, 50, 80, 80];
-    const startX = 50;
-    // Table styling constants
-    const TABLE_STYLE = {
-      headerBgColor: rgb(0.9, 0.9, 0.9), // Light gray
-      headerBorderColor: rgb(0.7, 0.7, 0.7),
-      rowBgColor: '#3c74f0fc', // Very light gray
-      textColor: rgb(0, 0, 0), // Black
-      borderColor: '#3c74f0fc',
-      rowHeight: 20,
-      headerHeight: 22,
-      padding: 5,
-    };
-    // Draw header row
-    headers.forEach((header, i) => {
-      const columnX = startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
-
-      // Header background
+      // Section background
       page.drawRectangle({
-        x: columnX,
-        y: yPosition - TABLE_STYLE.headerHeight + 10,
-        width: columnWidths[i],
-        height: TABLE_STYLE.headerHeight,
-        color: TABLE_STYLE.headerBgColor,
-        borderColor: TABLE_STYLE.headerBorderColor,
+        x: 45,
+        y: currentY - sectionHeight + 15,
+        width: width - 90,
+        height: sectionHeight,
+        color: secondaryColor,
+        borderColor: primaryColor,
         borderWidth: 0.5,
       });
 
-      // Header text
-      page.drawText(header, {
-        x: columnX + TABLE_STYLE.padding,
-        y: yPosition,
-        size: 10,
-        font: boldFont,
-        color: TABLE_STYLE.textColor,
+      // Content with smaller fonts
+      content.forEach(item => {
+        if (item.label && item.value) {
+          page.drawText(item.label, {
+            x: 55,
+            y: currentY,
+            size: 10, // Reduced from 12 to 10
+            font: boldFont,
+            color: textColor,
+          });
+
+          page.drawText(item.value, {
+            x: 180, // Adjusted position
+            y: currentY,
+            size: 10, // Reduced from 12 to 10
+            font: regularFont,
+            color: textColor,
+          });
+        }
+
+        currentY -= 20; // Reduced from 25 to 20
       });
-    });
-    yPosition -= 10;
 
-    // Draw header underline
-    page.drawLine({
-      start: { x: startX, y: yPosition - 5 },
-      end: { x: startX + columnWidths.reduce((a, b) => a + b, 0), y: yPosition - 5 },
-      thickness: 1,
-      color: rgb(0, 0, 0),
-    });
+      return currentY - 8; // Reduced bottom margin
+    };
 
-    yPosition -= 20;
+    // Event Details Section - Compact version
+    const eventDetails = [
+      { label: 'Event Name:', value: eventName || 'N/A' },
+      { label: 'Date:', value: date || 'N/A' },
+      { label: 'Time:', value: time || 'N/A' },
+      { label: 'Venue:', value: location || 'N/A' },
+      { label: 'Category:', value: category || 'N/A' },
+    ];
 
-    // Draw ticket rows
-    order.tickets.forEach((ticket, index) => {
-      const rowData = [
-        (index + 1).toString(), // Now starts at 1 instead of 0
+    yPosition = drawCompactSection('Event Details', eventDetails, yPosition);
+
+    // Compact table drawer function
+    const drawCompactTable = (title, headers, columnWidths, data, startY) => {
+      let currentY = startY;
+      currentY -= 20;
+      // Section title
+      page.drawText(title, {
+        x: 50,
+        y: currentY,
+        size: 14, // Reduced from 16 to 14
+        font: boldFont,
+        color: primaryColor,
+      });
+      currentY -= 20; // Reduced from 30 to 20
+
+      const tableStartX = 50;
+
+      // Table header background - reduced height
+      page.drawRectangle({
+        x: tableStartX,
+        y: currentY - 20, // Reduced height
+        width: columnWidths.reduce((a, b) => a + b, 0),
+        height: 20, // Reduced from 25 to 20
+        color: primaryColor,
+      });
+
+      // Header text - smaller font
+      headers.forEach((header, i) => {
+        const columnX = tableStartX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
+        page.drawText(header, {
+          x: columnX + 8, // Reduced padding
+          y: currentY - 12, // Adjusted position
+          size: 9, // Reduced from 11 to 9
+          font: boldFont,
+          color: rgb(1, 1, 1),
+        });
+      });
+
+      currentY -= 25; // Reduced from 35 to 25
+
+      // Data rows
+      data.forEach((item, index) => {
+        const rowColor = index % 2 === 0 ? rgb(1, 1, 1) : secondaryColor;
+
+        page.drawRectangle({
+          x: tableStartX,
+          y: currentY - 16, // Reduced height
+          width: columnWidths.reduce((a, b) => a + b, 0),
+          height: 16, // Reduced from 20 to 16
+          color: rowColor,
+        });
+
+        item.forEach((text, i) => {
+          const columnX = tableStartX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
+          page.drawText(text, {
+            x: columnX + 8, // Reduced padding
+            y: currentY - 10, // Adjusted position
+            size: 8, // Reduced from 10 to 8
+            font: regularFont,
+            color: textColor,
+          });
+        });
+
+        currentY -= 18; // Reduced from 25 to 18
+      });
+
+      return currentY - 10; // Reduced bottom margin
+    };
+
+    // Attendee Information Section in Compact Table
+    const attendeeHeaders = ['#', 'Name', 'Age', 'Gender'];
+    const attendeeColumnWidths = [40, 220, 50, 90]; // Adjusted widths
+
+    const attendeeData = [];
+    if (participantDetails && participantDetails.length > 0) {
+      participantDetails.forEach((participant, index) => {
+        attendeeData.push([
+          (index + 1).toString(),
+          participant.name || 'N/A',
+          participant.age || 'N/A',
+          participant.gender || 'N/A'
+        ]);
+      });
+    } else {
+      // Fallback data
+      attendeeData.push([
+        '1',
+        orderAddress?.name || userId?.name || 'N/A',
+        orderAddress?.age || 'N/A',
+        orderAddress?.gender || userId?.gender || 'N/A'
+      ]);
+    }
+
+    yPosition = drawCompactTable('Attendee Information', attendeeHeaders, attendeeColumnWidths, attendeeData, yPosition);
+
+    // Order Information Section - Compact version
+    const orderDetails = [
+      { label: 'Order ID:', value: _id.toString().substring(0, 12) + '...' }, // Truncated ID
+      { label: 'Purchase Date:', value: new Date(createdAt).toLocaleDateString() }, // Date only
+      { label: 'Transaction ID:', value: transactionId || 'N/A' },
+      { label: 'Payment Method:', value: paymentMethod ? paymentMethod.replace('_', ' ').toUpperCase() : 'N/A' },
+      { label: 'Status:', value: paymentStatus.toUpperCase() },
+    ];
+
+    yPosition = drawCompactSection('Order Information', orderDetails, yPosition);
+
+    // Tickets Table Section - Compact version
+    const ticketHeaders = ['Ticket Type', 'Qty', 'Unit Price', 'Total'];
+    const ticketColumnWidths = [180, 50, 90, 90]; // Adjusted widths
+
+    const ticketData = [];
+    tickets.forEach((ticket) => {
+      ticketData.push([
         ticket.ticketType,
         ticket.quantity.toString(),
-        `${(ticket.unitPrice).toFixed(2)} XAF`, // Assuming price is in cents
-        `${(ticket.quantity * ticket.unitPrice).toFixed(2)} XAF`
-      ];
-
-      rowData.forEach((text, i) => {
-        page.drawText(text, {
-          x: startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0),
-          y: yPosition,
-          size: 10,
-          font: regularFont,
-          color: rgb(0, 0, 0),
-        });
-      });
-
-      yPosition -= 15;
-
-      // Add row separator
-      if (index < order.tickets.length - 1) {
-        page.drawLine({
-          start: { x: startX, y: yPosition - 5 },
-          end: { x: startX + columnWidths.reduce((a, b) => a + b, 0), y: yPosition - 5 },
-          thickness: 0.5,
-          color: rgb(0.8, 0.8, 0.8),
-        });
-        yPosition -= 5;
-      }
+        `${ticket.unitPrice.toFixed(0)} XAF`, // Removed decimals
+        `${(ticket.quantity * ticket.unitPrice).toFixed(0)} XAF` // Removed decimals
+      ]);
     });
 
-    // Draw table bottom border
-    page.drawLine({
-      start: { x: startX, y: yPosition - 5 },
-      end: { x: startX + columnWidths.reduce((a, b) => a + b, 0), y: yPosition - 5 },
-      thickness: 1,
-      color: rgb(0, 0, 0),
+    yPosition = drawCompactTable('Ticket Details', ticketHeaders, ticketColumnWidths, ticketData, yPosition);
+
+    // Total amount - compact version
+    yPosition -= 5;
+    page.drawRectangle({
+      x: 50 + ticketColumnWidths.slice(0, 2).reduce((a, b) => a + b, 0),
+      y: yPosition - 20,
+      width: ticketColumnWidths.slice(2).reduce((a, b) => a + b, 0),
+      height: 20,
+      color: primaryColor,
     });
 
-    yPosition -= 20;
-
-    // Add total amount
-    page.drawText(`Total Amount: ${(totalAmount).toFixed(2)} XAF`, {
-      x: startX + columnWidths.slice(0, 3).reduce((a, b) => a + b, 0),
-      y: yPosition,
-      size: 12,
+    page.drawText('TOTAL:', {
+      x: 50 + ticketColumnWidths.slice(0, 2).reduce((a, b) => a + b, 0) + 8,
+      y: yPosition - 12,
+      size: 10,
       font: boldFont,
-      color: rgb(0, 0, 0),
-    })
-    yPosition -= 30;
+      color: rgb(1, 1, 1),
+    });
 
-    // Order details section
-    page.drawText(`Transaction No.: ${transactionId}`, {
-      x: 50,
-      y: yPosition,
+    page.drawText(`${totalAmount.toFixed(0)} XAF`, {
+      x: 50 + ticketColumnWidths.slice(0, 3).reduce((a, b) => a + b, 0) + 8,
+      y: yPosition - 12,
       size: 10,
-      font: font,
-      color: rgb(0, 0, 0),
+      font: boldFont,
+      color: rgb(1, 1, 1),
     });
-    yPosition -= 20;
-    page.drawText(`Payment Method: ${paymentMethod}`, {
+
+    // QR Code Section - Fixed positioning at bottom right
+    if (qrCode && qrCode.startsWith('data:image')) {
+      try {
+        // Extract base64 data from data URL
+        const base64Data = qrCode.split(',')[1];
+        const qrImage = await pdfDoc.embedPng(Buffer.from(base64Data, 'base64'));
+
+        // Fixed QR code size and position
+        const qrSize = 100; // Fixed size
+        const qrX = width - qrSize - 50; // Right aligned with margin
+        const qrY = 80; // Fixed position from bottom (above footer)
+
+        // Draw QR code
+        page.drawImage(qrImage, {
+          x: qrX,
+          y: qrY,
+          width: qrSize,
+          height: qrSize,
+        });
+
+        // QR code label
+        page.drawText('Scan for Entry', {
+          x: qrX + qrSize / 2 - 25,
+          y: qrY + qrSize + 5,
+          size: 8,
+          font: boldFont,
+          color: primaryColor,
+        });
+
+        // Draw border around QR code
+        page.drawRectangle({
+          x: qrX - 2,
+          y: qrY - 2,
+          width: qrSize + 4,
+          height: qrSize + 4,
+          borderColor: primaryColor,
+          borderWidth: 1,
+        });
+      } catch (qrError) {
+        console.error('Error embedding QR code:', qrError);
+      }
+    }
+
+    // Compact Footer
+    page.drawText('Thank you for your purchase! Present this ticket at the entrance.', {
+      x: width / 2 - 180,
+      y: 40,
+      size: 9,
+      font: regularFont,
+      color: textColor,
+    });
+
+    page.drawText(`Generated: ${new Date().toLocaleDateString()}`, {
       x: 50,
-      y: yPosition,
-      size: 10,
-
-      font: font,
-      color: rgb(0, 0, 0),
+      y: 40,
+      size: 7,
+      font: regularFont,
+      color: textColor,
     });
-    yPosition -= 20;
-
-    // Add footer
-    page.drawText('Thank you for your purchase!', {
-      x: width / 2 - 100,
-      y: 50,
-      size: 14,
-      font: font,
-      color: rgb(0, 0, 0),
-    });
-
 
     return await pdfDoc.save();
   } catch (error) {
-    console.error('Error generate pdf:', error.message);
-
+    console.error('Error generating PDF:', error.message);
+    throw error;
   }
 };
 
@@ -818,7 +918,8 @@ exports.downloadTicket = async (req, res) => {
       .populate('userId', 'name email number gender') // Specify fields you need
       .exec();
     const event = await Event.findOne({ _id: order.eventId })
-      .select('eventName _id date time category location description formate ') // Specify fields you need
+      .select('eventName _id date time location description formate ') // Specify fields you need
+
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });

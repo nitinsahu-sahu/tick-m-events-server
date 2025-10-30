@@ -5,7 +5,8 @@ const Event = require('../../models/event-details/Event');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const path = require("path");
 const fs = require("fs");
-const User = require("../../models/User");
+const fontkit = require('@pdf-lib/fontkit'); // Required for proper font handling
+
 const { sendRefundEmail } = require("../../utils/Emails-template");
 
 
@@ -180,172 +181,515 @@ exports.refundRequestCancel = async (req, res) => {
 };
 
 const generateInvoicePDF = async ({ order, event }) => {
-  const pdfDoc = await PDFDocument.create();
+  const { eventName, date, time, category, location, description } = event;
+  const {
+    _id,
+    orderAddress,
+    createdAt,
+    tickets,
+    totalAmount,
+    paymentStatus,
+    transactionId,
+    paymentMethod,
+    participantDetails,
+    userId,
+    ticketCode,
+    qrCode
+  } = order;
 
-  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  try {
+    // Create a new PDFDocument
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.registerFontkit(fontkit);
+    const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const titleFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Create an A4 size page (595.28 x 841.89 points)
-  const page = pdfDoc.addPage([595.28, 841.89]);
-  const { width, height } = page.getSize();
+    // Add a new page (A4 size: 595.28 x 841.89 points)
+    const page = pdfDoc.addPage([595.28, 841.89]);
+    const { width, height } = page.getSize();
 
-  // Helper to capitalize first letter
-  const capitalizeFirstLetter = (str) => {
-    if (!str) return '';
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  };
+    // Colors
+    const primaryColor = rgb(0.2, 0.4, 0.8); // Blue theme
+    const secondaryColor = rgb(0.95, 0.95, 0.95); // Light gray
+    const textColor = rgb(0, 0, 0);
 
-  // Start y position from top of the page
-  let yPosition = height - 50;
-
-  // Header
-  page.drawText('INVOICE', {
-    x: 50,
-    y: yPosition,
-    size: 24,
-    font: boldFont,
-    color: rgb(0, 0, 0),
-  });
-  yPosition -= 30;
-
-  page.drawText(`Invoice for Order ID: ${order._id}`, {
-    x: 50,
-    y: yPosition,
-    size: 12,
-    font: helveticaFont,
-    color: rgb(0, 0, 0),
-  });
-  yPosition -= 20;
-
-  page.drawText(`Event: ${capitalizeFirstLetter(event.eventName)}`, {
-    x: 50,
-    y: yPosition,
-    size: 12,
-    font: helveticaFont,
-    color: rgb(0, 0, 0),
-  });
-  yPosition -= 20;
-
-  page.drawText(`Event Date: ${new Date(event.date).toLocaleDateString()}`, {
-    x: 50,
-    y: yPosition,
-    size: 12,
-    font: helveticaFont,
-    color: rgb(0, 0, 0),
-  });
-  yPosition -= 30;
-
-  // Table Headers & styling
-  const headers = ['#Item', 'Ticket Type', 'Quantity', 'Unit Price', 'Total Price'];
-  const columnWidths = [60, 180, 60, 90, 90];
-  const startX = 50;
-
-  // Draw header background rectangle
-  page.drawRectangle({
-    x: startX,
-    y: yPosition - 15,
-    width: columnWidths.reduce((a, b) => a + b, 0),
-    height: 20,
-    color: rgb(0.9, 0.9, 0.9),
-  });
-
-  // Draw header texts
-  headers.forEach((header, i) => {
-    const colX = startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
-    page.drawText(header, {
-      x: colX + 5,
-      y: yPosition - 10,
-      size: 12,
-      font: boldFont,
-      color: rgb(0, 0, 0),
+    // Header with background
+    page.drawRectangle({
+      x: 0,
+      y: height - 100,
+      width: width,
+      height: 100,
+      color: primaryColor,
     });
-  });
 
-  yPosition -= 35;
+    // Add Logo at the top left of the header
+    try {
+      const logoPath = path.join(__dirname, '../../assets/logo-mobile.png');
+      const logoImage = await pdfDoc.embedPng(fs.readFileSync(logoPath));
 
-  // Draw rows for tickets
-  order.tickets.forEach((ticket, index) => {
-    const rowHeight = 20;
-    const colXPositions = columnWidths.reduce((acc, w, i) => {
-      acc.push(startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0));
-      return acc;
-    }, []);
+      const logoWidth = 50;
+      const logoHeight = 50;
 
-    // Draw row background for alternating rows
-    if (index % 2 === 0) {
+      const logoX = 50;
+      const logoY = height - 50 - logoHeight / 2;
+
+      page.drawImage(logoImage, {
+        x: logoX,
+        y: logoY,
+        width: logoWidth,
+        height: logoHeight,
+      });
+    } catch (logoError) {
+      console.warn('Could not load logo, continuing without it:', logoError.message);
+    }
+
+    // Invoice Title
+    page.drawText('INVOICE', {
+      x: width / 2 - 40,
+      y: height - 50,
+      size: 24,
+      font: titleFont,
+      color: rgb(1, 1, 1),
+    });
+
+    // Invoice Number and Status
+    page.drawText(`Invoice #: ${_id.toString().substring(0, 12)}...`, {
+      x: width - 200,
+      y: height - 80,
+      size: 10,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+
+    page.drawText(`Status: ${paymentStatus.toUpperCase()}`, {
+      x: width - 200,
+      y: height - 95,
+      size: 10,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+
+    let yPosition = height - 130;
+
+    // Invoice Details Section
+    const drawInvoiceSection = (title, content, startY) => {
+      let currentY = startY;
+      currentY -= 20;
+
+      // Section title
+      page.drawText(title, {
+        x: 50,
+        y: currentY,
+        size: 16,
+        font: boldFont,
+        color: primaryColor,
+      });
+      currentY -= 25;
+
+      // Calculate section height
+      const sectionHeight = (content.length * 20) + 30;
+
+      // Section background
       page.drawRectangle({
-        x: startX,
-        y: yPosition - rowHeight + 5,
-        width: columnWidths.reduce((a, b) => a + b, 0),
-        height: rowHeight,
-        color: rgb(0.95, 0.95, 0.95),
+        x: 45,
+        y: currentY - sectionHeight + 15,
+        width: width - 90,
+        height: sectionHeight,
+        color: secondaryColor,
+        borderColor: primaryColor,
+        borderWidth: 0.5,
+      });
+
+      // Content
+      content.forEach(item => {
+        if (item.label && item.value) {
+          page.drawText(item.label, {
+            x: 55,
+            y: currentY,
+            size: 11,
+            font: boldFont,
+            color: textColor,
+          });
+
+          page.drawText(item.value, {
+            x: 200,
+            y: currentY,
+            size: 11,
+            font: regularFont,
+            color: textColor,
+          });
+        }
+        currentY -= 20;
+      });
+
+      return currentY - 10;
+    };
+
+    // Event Details (Simplified for invoice)
+    const eventDetails = [
+      { label: 'Event:', value: eventName || 'N/A' },
+      { label: 'Date:', value: date || 'N/A' },
+      { label: 'Time:', value: time || 'N/A' },
+      { label: 'Venue:', value: location || 'N/A' },
+    ];
+
+    yPosition = drawInvoiceSection('Event Information', eventDetails, yPosition);
+
+    // Billing Information
+    const billingDetails = [
+      { label: 'Invoice Date:', value: new Date(createdAt).toLocaleDateString() },
+      { label: 'Transaction ID:', value: transactionId || 'N/A' },
+      { label: 'Payment Method:', value: paymentMethod ? paymentMethod.replace('_', ' ').toUpperCase() : 'N/A' },
+    ];
+
+    // Add customer information if available
+    if (orderAddress?.name || userId?.name) {
+      billingDetails.unshift({ 
+        label: 'Customer:', 
+        value: orderAddress?.name || userId?.name || 'N/A' 
       });
     }
 
-    // Prepare row data
-    const rowData = [
-      (index + 1).toString(),
-      capitalizeFirstLetter(ticket.ticketType),
-      ticket.quantity.toString(),
-      `XAF ${ticket.unitPrice.toFixed(2)}`,
-      `XAF ${(ticket.unitPrice * ticket.quantity).toFixed(2)}`,
-    ];
+    yPosition = drawInvoiceSection('Billing Information', billingDetails, yPosition);
 
-    // Draw row text
-    rowData.forEach((text, i) => {
-      page.drawText(text, {
-        x: colXPositions[i] + 5,
-        y: yPosition - 15,
-        size: 12,
-        font: helveticaFont,
-        color: rgb(0, 0, 0),
+    // Items Table (Tickets)
+    const drawItemsTable = (headers, columnWidths, data, startY) => {
+      let currentY = startY;
+      currentY -= 20;
+
+      // Table title
+      page.drawText('Items', {
+        x: 50,
+        y: currentY,
+        size: 16,
+        font: boldFont,
+        color: primaryColor,
       });
+      currentY -= 25;
+
+      const tableStartX = 50;
+      const totalTableWidth = columnWidths.reduce((a, b) => a + b, 0);
+
+      // Table header background
+      page.drawRectangle({
+        x: tableStartX,
+        y: currentY - 25,
+        width: totalTableWidth,
+        height: 25,
+        color: primaryColor,
+      });
+
+      // Header text
+      headers.forEach((header, i) => {
+        const columnX = tableStartX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
+        page.drawText(header, {
+          x: columnX + 10,
+          y: currentY - 15,
+          size: 11,
+          font: boldFont,
+          color: rgb(1, 1, 1),
+        });
+      });
+
+      currentY -= 30;
+
+      // Data rows
+      data.forEach((item, index) => {
+        const rowColor = index % 2 === 0 ? rgb(1, 1, 1) : secondaryColor;
+
+        page.drawRectangle({
+          x: tableStartX,
+          y: currentY - 20,
+          width: totalTableWidth,
+          height: 20,
+          color: rowColor,
+        });
+
+        item.forEach((text, i) => {
+          const columnX = tableStartX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
+          page.drawText(text, {
+            x: columnX + 10,
+            y: currentY - 12,
+            size: 10,
+            font: regularFont,
+            color: textColor,
+          });
+        });
+
+        currentY -= 22;
+      });
+
+      return currentY - 15;
+    };
+
+    // Items Table Data
+    const itemHeaders = ['Description', 'Quantity', 'Unit Price', 'Amount'];
+    const itemColumnWidths = [250, 80, 100, 100];
+
+    const itemData = [];
+    let subtotal = 0;
+
+    tickets.forEach((ticket) => {
+      const ticketTotal = ticket.quantity * ticket.unitPrice;
+      subtotal += ticketTotal;
+      
+      itemData.push([
+        `Ticket: ${ticket.ticketType}`,
+        ticket.quantity.toString(),
+        `${ticket.unitPrice.toFixed(0)} XAF`,
+        `${ticketTotal.toFixed(0)} XAF`
+      ]);
     });
 
-    yPosition -= rowHeight;
-  });
+    yPosition = drawItemsTable(itemHeaders, itemColumnWidths, itemData, yPosition);
 
-  yPosition -= 10;
+    // Total Section
+    yPosition -= 20;
+    const totalSectionX = 50 + itemColumnWidths.slice(0, 2).reduce((a, b) => a + b, 0);
+    const totalSectionWidth = itemColumnWidths.slice(2).reduce((a, b) => a + b, 0);
 
-  // Draw total amount line
-  page.drawText(`Total Amount: XAF ${order.totalAmount.toFixed(2)}`, {
-    x: startX + columnWidths.slice(0, 3).reduce((a, b) => a + b, 0),
-    y: yPosition - 10,
-    size: 14,
-    font: boldFont,
-    color: rgb(0, 0, 0),
-  });
+    // Subtotal
+    page.drawText('Subtotal:', {
+      x: totalSectionX + 10,
+      y: yPosition,
+      size: 11,
+      font: boldFont,
+      color: textColor,
+    });
 
-  yPosition -= 40;
+    page.drawText(`${subtotal.toFixed(0)} XAF`, {
+      x: totalSectionX + itemColumnWidths[2] + 10,
+      y: yPosition,
+      size: 11,
+      font: regularFont,
+      color: textColor,
+    });
 
-  // Payment Method uppercase
-  page.drawText(`Payment Method: ${order.paymentMethod.toUpperCase()}`, {
-    x: startX,
-    y: yPosition,
-    size: 12,
-    font: helveticaFont,
-    color: rgb(0, 0, 0),
-  });
+    yPosition -= 20;
 
-  yPosition -= 20;
+    // Total
+    page.drawRectangle({
+      x: totalSectionX,
+      y: yPosition - 25,
+      width: totalSectionWidth,
+      height: 25,
+      color: primaryColor,
+    });
 
-  // Footer
-  page.drawText('Thank you for your business!', {
-    x: width / 2 - 100,
-    y: 50,
-    size: 14,
-    font: boldFont,
-    color: rgb(0, 0, 0),
-  });
+    page.drawText('TOTAL:', {
+      x: totalSectionX + 10,
+      y: yPosition - 15,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
 
-  // Return the PDF bytes
-  return await pdfDoc.save();
+    page.drawText(`${totalAmount.toFixed(0)} XAF`, {
+      x: totalSectionX + itemColumnWidths[2] + 10,
+      y: yPosition - 15,
+      size: 12,
+      font: boldFont,
+      color: rgb(1, 1, 1),
+    });
+
+    // Footer
+    page.drawText('Thank you for your business!', {
+      x: width / 2 - 80,
+      y: 60,
+      size: 10,
+      font: regularFont,
+      color: textColor,
+    });
+
+    page.drawText(`Invoice generated on: ${new Date().toLocaleDateString()}`, {
+      x: 50,
+      y: 40,
+      size: 8,
+      font: regularFont,
+      color: textColor,
+    });
+
+    // Terms and Conditions
+    page.drawText('Terms & Conditions: This is an automated invoice. Please contact support for any discrepancies.', {
+      x: 50,
+      y: 20,
+      size: 7,
+      font: regularFont,
+      color: textColor,
+    });
+
+    return await pdfDoc.save();
+  } catch (error) {
+    console.error('Error generating PDF:', error.message);
+    throw error;
+  }
 };
+// const generateInvoicePDF = async ({ order, event }) => {
+//   const pdfDoc = await PDFDocument.create();
+
+//   const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+//   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+//   // Create an A4 size page (595.28 x 841.89 points)
+//   const page = pdfDoc.addPage([595.28, 841.89]);
+//   const { width, height } = page.getSize();
+
+//   // Helper to capitalize first letter
+//   const capitalizeFirstLetter = (str) => {
+//     if (!str) return '';
+//     return str.charAt(0).toUpperCase() + str.slice(1);
+//   };
+
+//   // Start y position from top of the page
+//   let yPosition = height - 50;
+
+//   // Header
+//   page.drawText('INVOICE', {
+//     x: 50,
+//     y: yPosition,
+//     size: 24,
+//     font: boldFont,
+//     color: rgb(0, 0, 0),
+//   });
+//   yPosition -= 30;
+
+//   page.drawText(`Invoice for Order ID: ${order._id}`, {
+//     x: 50,
+//     y: yPosition,
+//     size: 12,
+//     font: helveticaFont,
+//     color: rgb(0, 0, 0),
+//   });
+//   yPosition -= 20;
+
+//   page.drawText(`Event: ${capitalizeFirstLetter(event.eventName)}`, {
+//     x: 50,
+//     y: yPosition,
+//     size: 12,
+//     font: helveticaFont,
+//     color: rgb(0, 0, 0),
+//   });
+//   yPosition -= 20;
+
+//   page.drawText(`Event Date: ${new Date(event.date).toLocaleDateString()}`, {
+//     x: 50,
+//     y: yPosition,
+//     size: 12,
+//     font: helveticaFont,
+//     color: rgb(0, 0, 0),
+//   });
+//   yPosition -= 30;
+
+//   // Table Headers & styling
+//   const headers = ['#Item', 'Ticket Type', 'Quantity', 'Unit Price', 'Total Price'];
+//   const columnWidths = [60, 180, 60, 90, 90];
+//   const startX = 50;
+
+//   // Draw header background rectangle
+//   page.drawRectangle({
+//     x: startX,
+//     y: yPosition - 15,
+//     width: columnWidths.reduce((a, b) => a + b, 0),
+//     height: 20,
+//     color: rgb(0.9, 0.9, 0.9),
+//   });
+
+//   // Draw header texts
+//   headers.forEach((header, i) => {
+//     const colX = startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
+//     page.drawText(header, {
+//       x: colX + 5,
+//       y: yPosition - 10,
+//       size: 12,
+//       font: boldFont,
+//       color: rgb(0, 0, 0),
+//     });
+//   });
+
+//   yPosition -= 35;
+
+//   // Draw rows for tickets
+//   order.tickets.forEach((ticket, index) => {
+//     const rowHeight = 20;
+//     const colXPositions = columnWidths.reduce((acc, w, i) => {
+//       acc.push(startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0));
+//       return acc;
+//     }, []);
+
+//     // Draw row background for alternating rows
+//     if (index % 2 === 0) {
+//       page.drawRectangle({
+//         x: startX,
+//         y: yPosition - rowHeight + 5,
+//         width: columnWidths.reduce((a, b) => a + b, 0),
+//         height: rowHeight,
+//         color: rgb(0.95, 0.95, 0.95),
+//       });
+//     }
+
+//     // Prepare row data
+//     const rowData = [
+//       (index + 1).toString(),
+//       capitalizeFirstLetter(ticket.ticketType),
+//       ticket.quantity.toString(),
+//       `XAF ${ticket.unitPrice.toFixed(2)}`,
+//       `XAF ${(ticket.unitPrice * ticket.quantity).toFixed(2)}`,
+//     ];
+
+//     // Draw row text
+//     rowData.forEach((text, i) => {
+//       page.drawText(text, {
+//         x: colXPositions[i] + 5,
+//         y: yPosition - 15,
+//         size: 12,
+//         font: helveticaFont,
+//         color: rgb(0, 0, 0),
+//       });
+//     });
+
+//     yPosition -= rowHeight;
+//   });
+
+//   yPosition -= 10;
+
+//   // Draw total amount line
+//   page.drawText(`Total Amount: XAF ${order.totalAmount.toFixed(2)}`, {
+//     x: startX + columnWidths.slice(0, 3).reduce((a, b) => a + b, 0),
+//     y: yPosition - 10,
+//     size: 14,
+//     font: boldFont,
+//     color: rgb(0, 0, 0),
+//   });
+
+//   yPosition -= 40;
+
+//   // Payment Method uppercase
+//   page.drawText(`Payment Method: ${order.paymentMethod.toUpperCase()}`, {
+//     x: startX,
+//     y: yPosition,
+//     size: 12,
+//     font: helveticaFont,
+//     color: rgb(0, 0, 0),
+//   });
+
+//   yPosition -= 20;
+
+//   // Footer
+//   page.drawText('Thank you for your business!', {
+//     x: width / 2 - 100,
+//     y: 50,
+//     size: 14,
+//     font: boldFont,
+//     color: rgb(0, 0, 0),
+//   });
+
+//   // Return the PDF bytes
+//   return await pdfDoc.save();
+// };
 
 exports.downloadInvoice = async (req, res) => {
   const orderId = req.params.id;
-  console.log("Invoice download requested for orderId:", orderId);
-
   try {
     const order = await EventOrder.findById(orderId)
       .populate('userId', 'name email number gender')
