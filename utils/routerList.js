@@ -28,6 +28,7 @@ const rewardRoutes = require('../routes/rewards.router');
 const paymentInitationRoutes = require('../routes/payment');
 const subscriptionRoutes = require('../routes/subscription.route');
 const participantRoutes = require('../routes/participant/index');
+const secrueRoutes = require('../routes/secure-info.route');
 
 // Define route configuration
 exports.routesLists = {
@@ -61,4 +62,5 @@ exports.routesLists = {
   '/api/v1/transaction-payment': transactionPaymentRoutes,
   '/api/v1/event-requests': eventRequestRoutes,
   '/api/v1/loyalty': rewardRoutes,
+  '/api/v1/secure': secrueRoutes,
 };
