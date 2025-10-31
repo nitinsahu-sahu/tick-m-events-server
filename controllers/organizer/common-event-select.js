@@ -1105,3 +1105,26 @@ async function updateUserGigCounts(userId, previousStatus, newStatus) {
 
     await user.save();
 }
+
+exports.organizerBalance = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { availableBalance } = req.body;
+    if (!eventId) {
+      return res.status(400).json({ message: "Missing eventId in request params" });
+    }
+    const updatedEvent = await Event.findByIdAndUpdate(
+      eventId,
+      { availableBalance },
+      { new: true }
+    );
+ 
+    if (!updatedEvent) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    res.json(updatedEvent);
+ 
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
