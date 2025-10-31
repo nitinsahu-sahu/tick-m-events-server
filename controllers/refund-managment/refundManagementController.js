@@ -28,6 +28,20 @@ exports.submitRefundRequest = async (req, res) => {
       return res.status(404).json({ message: 'Associated event not found' });
     }
 
+    // ✅ 2.1 Check Event's Available Balance
+    if (!event.availableBalance || event.availableBalance <= 0) {
+      return res.status(400).json({
+        message: "Refund cannot be requested because the event's available balance is zero.",
+      });
+    }
+
+    // If refund amount provided by client, validate against event balance
+    if (clientRefundAmount && clientRefundAmount > event.availableBalance) {
+      return res.status(400).json({
+        message: "Insufficient organizer balance to process the refund.",
+      });
+    }
+
     // 3️⃣ Check if a refund request already exists
     let existingRequest = await RefundRequest.findOne({
       transactionId,
@@ -96,7 +110,7 @@ exports.submitRefundRequest = async (req, res) => {
 
       // Update order status
       order.refundStatus = 'requestedRefund';
-      await order.save();
+      await order.save({ validateModifiedOnly: true });
 
       return res.status(200).json({
         message: 'Refund request re-submitted successfully',
@@ -345,9 +359,9 @@ const generateInvoicePDF = async ({ order, event }) => {
 
     // Add customer information if available
     if (orderAddress?.name || userId?.name) {
-      billingDetails.unshift({ 
-        label: 'Customer:', 
-        value: orderAddress?.name || userId?.name || 'N/A' 
+      billingDetails.unshift({
+        label: 'Customer:',
+        value: orderAddress?.name || userId?.name || 'N/A'
       });
     }
 
@@ -433,7 +447,7 @@ const generateInvoicePDF = async ({ order, event }) => {
     tickets.forEach((ticket) => {
       const ticketTotal = ticket.quantity * ticket.unitPrice;
       subtotal += ticketTotal;
-      
+
       itemData.push([
         `Ticket: ${ticket.ticketType}`,
         ticket.quantity.toString(),
@@ -1112,7 +1126,7 @@ exports.updateRefundRequest = async (req, res) => {
     }
 
     if (refundStatus === "refunded" || refundStatus === "rejected") {
-      
+
       await sendRefundEmail(refundRequest.userId, refundRequest, refundStatus, refundTransactionId, attachmentPath);
     }
 
