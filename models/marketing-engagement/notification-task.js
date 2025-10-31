@@ -16,7 +16,7 @@ const NotificationTaskSchema = new mongoose.Schema({
   ctalink: String,
   notificationType: { type: String, enum: ['email', 'sms', 'web-push'] },
   scheduledAt: Date,
-  status: { type: String, enum: ['pending', 'sent', 'failed'], default: 'pending' },
+  status: { type: String, enum: ['pending', 'sent', 'failed','partial-failure'], default: 'pending' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('NotificationTask', NotificationTaskSchema);
