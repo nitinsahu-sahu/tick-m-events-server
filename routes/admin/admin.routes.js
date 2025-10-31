@@ -5,12 +5,14 @@ const { verifyToken, verifyAdmin } = require('../../middleware/VerifyToken');
 const { getDashbordData } = require('../../controllers/admin/dashboard.controller');
 const { paymentHistoryController } = require('../../controllers/admin/payment-history.controller');
 const { uploadLogo, getLogos, getLogo, updateLogo, deleteLogo } = require('../../controllers/admin/customization/logoController');
+const { getAllAdminTransactions } = require('../../controllers/admin/ticketAndTransectionSupervision/verify-tran');
 
 router.get('/', verifyToken, getAllUsers);
 router.put('/validate/:userId', verifyToken, validateUser);
 router.put('/block/:userId', verifyToken, blockUser);
 router.get('/gogs/pro-list', verifyToken, verifyAdmin, providerList);
 router.post('/verify-admin-fee-payment', verifyToken, paymentHistoryController);
+router.get('/admin-payments', verifyToken, getAllAdminTransactions);
 router.get('/dashboard', verifyToken, verifyAdmin, getDashbordData);
 router.get('/ticketingActivity', verifyToken, verifyAdmin, getEventSummary);//add routes
 
