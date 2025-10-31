@@ -25,28 +25,29 @@ exports.saveNotification = async (req, res) => {
     group,
     emails,
   } = req.body;
-  console.error('[❌ Error] Recipient list is empty', req.body);
-
+ 
   if (!emails || emails.length === 0) {
+    console.error('[❌ Error] Recipient list is empty', req.body);
     return res.status(400).json({ error: 'Recipient list is empty' });
   }
-
+ 
   // 🔔 Web Push Notification
-
+ 
   if (notificationType === 'web-push') {
+    if (!emails || emails.length === 0) {
+      console.error('[❌ Error] Recipient list is empty', req.body);
+      return res.status(400).json({ error: 'Recipient list is empty' });
+    }
+ 
     try {
-      // 1️⃣ Extract email list for lookup
       const emailList = emails.map((u) => u.email);
-
-      // 2️⃣ Find all tokens associated with those emails
       const userTokens = await UserFcmToken.find({ email: { $in: emailList } });
       const fcmTokens = userTokens.map((u) => u.fcmToken).filter(Boolean);
-
+ 
       if (fcmTokens.length === 0) {
         return res.status(400).json({ error: 'No FCM tokens found for users' });
       }
-
-      // Prepare FCM payload
+ 
       const payload = {
         data: {
           title: subject || `Event Notification: ${eventDetails?.name}`,
@@ -55,20 +56,18 @@ exports.saveNotification = async (req, res) => {
           ctalink: ctalink || 'https://tick-m.cloud/sign-in',
           eventId: eventId || '',
           emails: emailList.join(','),
-          icon: '/icons/icon-192x192.png', // optional, use in SW
+          icon: '/icons/icon-192x192.png',
         },
       };
-
-      // Send only 'data', do NOT send 'notification'
+ 
       const response = await admin.messaging().sendEachForMulticast({
         tokens: fcmTokens,
         data: payload.data,
       });
-
-      // 5️⃣ Save the full emails array (objects, not strings)
+ 
       const notification = await NotificationTask.create({
         eventId,
-        emails, // ✅ keep full user objects (email, name, phone)
+        emails,
         subject,
         message,
         ctalink,
@@ -83,18 +82,23 @@ exports.saveNotification = async (req, res) => {
               : 'failed',
         fcmResponse: response,
       });
-
-      console.log('====================================');
-      console.log(notification, 'notification');
-      console.log('====================================');
-
+ 
       if (response.failureCount > 0) {
-        console.warn(
-          '[⚠️ FCM Failures]',
-          response.responses.filter((r) => !r.success)
-        );
+        console.warn('[⚠️ FCM Failures]', response.responses.filter((r) => !r.success));
+ 
+        // Optional cleanup
+        const failedTokens = [];
+        response.responses.forEach((r, i) => {
+          if (!r.success && r.error.code === 'messaging/registration-token-not-registered') {
+            failedTokens.push(fcmTokens[i]);
+          }
+        });
+        if (failedTokens.length) {
+          await UserFcmToken.deleteMany({ fcmToken: { $in: failedTokens } });
+          console.log(`[🧹 Removed ${failedTokens.length} invalid tokens]`);
+        }
       }
-
+ 
       return res.status(200).json({ success: true });
     } catch (pushErr) {
       console.error('[❌ Web Push Error]', pushErr);
@@ -103,8 +107,7 @@ exports.saveNotification = async (req, res) => {
         .json({ error: 'Failed to send Web Push notification', details: pushErr.message });
     }
   }
-
-
+ 
   // 📆 Scheduled or Immediate Email/SMS
   try {
     if (isScheduled && scheduledAt) {
@@ -128,7 +131,7 @@ exports.saveNotification = async (req, res) => {
         const templateType = group === 'Interested participants (Waitlist but no purchase yet)'
           ? 'interested-participants'
           : 'default';
-
+ 
         await sendBulkEmails(emails, subject, message, { text: cta, url: ctalink }, eventDetails, templateType);
         console.log('[✅ Emails sent successfully]');
       } else if (notificationType === 'sms') {
@@ -151,7 +154,7 @@ exports.saveNotification = async (req, res) => {
           }
         }
       }
-
+ 
       return res.status(200).json({ success: true });
     }
   } catch (err) {
