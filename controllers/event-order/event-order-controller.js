@@ -253,7 +253,7 @@ exports.createOrder = async (req, res) => {
       // Then call Fapshi API
       try {
         const fapshiResponse = await axios.post(
-          "https://sandbox.fapshi.com/initiate-pay",
+          `${process.env.FAPSHI_BASE_URL}/initiate-pay`,
           fapshiPayload,
           {
             headers: {

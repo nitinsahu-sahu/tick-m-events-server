@@ -12,7 +12,7 @@ exports.paymentHistoryController = async (req, res) => {
 
         // Verify payment with Fapshi
         const verificationResponse = await axios.get(
-            `https://sandbox.fapshi.com/transaction/${transId}`,
+            `${process.env.FAPSHI_BASE_URL}/transaction/${transId}`,
             {
                 headers: {
                     'Content-Type': 'application/json',

@@ -13,6 +13,7 @@ build
 
 # environment variables
 .env
+.env-live
 .env.local
 .env.development.local
 .env.test.local
