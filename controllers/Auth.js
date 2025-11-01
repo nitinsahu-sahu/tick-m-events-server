@@ -189,12 +189,16 @@ exports.login = async (req, res) => {
             return res.status(400).json({ message: "Invalid credentials" });
         }
 
-        if (existingUser.status !== 'active') {
+        if (existingUser.status === 'pending') {
             return res.status(403).json({
                 message: "Your account is not activated yet. Please contact the admin."
             });
         }
-
+        if (existingUser.status === 'block') {
+            return res.status(403).json({
+                message: "Your account is temporary blocked. Please contact the admin."
+            });
+        }
         const isPasswordMatch = await bcrypt.compare(password, existingUser.password);
         if (!isPasswordMatch) {
             res.clearCookie('token');
@@ -523,7 +527,7 @@ exports.resetPasswordWithCode = async (req, res) => {
         if (!email || !code || !newPassword) {
             return res.status(400).json({
                 success: false,
-                message: 'Email, code, and new password are required'
+                message: 'Email, code, and new password are required.'
             });
         }
 
