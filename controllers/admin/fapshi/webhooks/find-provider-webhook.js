@@ -32,7 +32,7 @@ exports.findAproviderInitiatePayment = async (req, res) => {
 
         // Make request to Fapshi API
         const fapshiRes = await axios.post(
-            "https://sandbox.fapshi.com/initiate-pay",
+            `${process.env.FAPSHI_BASE_URL}/initiate-pay`,
             fapshiPayload,
             {
                 headers: {

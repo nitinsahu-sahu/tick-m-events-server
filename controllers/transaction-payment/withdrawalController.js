@@ -252,7 +252,7 @@ exports.processPayout = async (req, res) => {
       message: 'User Withdrawal Payout'
     });
 
-    const response = await axios.post('https://sandbox.fapshi.com/payout', {
+    const response = await axios.post(`${process.env.FAPSHI_BASE_URL}/payout`, {
       amount: withdrawal.amount,
       phone: mobileNumber,
       medium,

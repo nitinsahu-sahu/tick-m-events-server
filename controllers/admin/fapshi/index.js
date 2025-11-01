@@ -34,7 +34,7 @@ exports.initiatePaymentController = async (req, res) => {
 
         // Make request to Fapshi API
         const fapshiRes = await axios.post(
-            "https://sandbox.fapshi.com/initiate-pay",
+            `${process.env.FAPSHI_BASE_URL}/initiate-pay`,
             fapshiPayload,
             {
                 headers: {
@@ -141,7 +141,7 @@ exports.paymentWebhookController = async (req, res) => {
         let paymentMedium = null;
         try {
             const fapshiStatusRes = await axios.get(
-                `https://sandbox.fapshi.com/payment-status/${transId}`,
+                `${process.env.FAPSHI_BASE_URL}/payment-status/${transId}`,
                 {
                     headers: {
                         "Content-Type": "application/json",
