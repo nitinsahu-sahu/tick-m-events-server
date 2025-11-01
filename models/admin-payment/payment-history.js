@@ -7,7 +7,7 @@ const adminPaymentHistorySchema = new mongoose.Schema({
     eventReqId: { type: mongoose.Schema.Types.ObjectId, ref: 'EventRequest' },
     placeABidId: { type: mongoose.Schema.Types.ObjectId, ref: 'PlaceABid' },
     bidId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bid' },
-     bidAmount: { type: Number, default: 0 },
+    bidAmount: { type: Number, default: 0 },
     transId: {
         type: String
     },
@@ -22,6 +22,7 @@ const adminPaymentHistorySchema = new mongoose.Schema({
         type: String,
         enum: ['initiated', 'success', 'failed', 'pending'],
     },
+    paymentMethod: { type: String },
 }, { timestamps: true });
 
 module.exports = mongoose.model('adminPaymentHistory', adminPaymentHistorySchema);

@@ -132,14 +132,48 @@ exports.paymentWebhookController = async (req, res) => {
                 message: 'Missing transId or status',
             });
         }
+        if (status.toLowerCase() !== 'successful') {
+            return res.status(200).json({
+                success: true,
+                message: `Payment status is '${status}', no further action taken.`,
+            });
+        }
+        let paymentMedium = null;
+        try {
+            const fapshiStatusRes = await axios.get(
+                `https://sandbox.fapshi.com/payment-status/${transId}`,
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        apikey: process.env.FAPSHI_API_KEY,
+                        apiuser: process.env.FAPSHI_API_USER,
+                    },
+                    timeout: 10000,
+                }
+            );
+ 
+            const responseData = fapshiStatusRes.data;
+ 
+            // Handle if array or single object
+            if (Array.isArray(responseData) && responseData.length > 0) {
+                paymentMedium = responseData[0].medium || null;
+            } else if (responseData && typeof responseData === "object") {
+                paymentMedium = responseData.medium || null;
+            }
+        } catch (fetchErr) {
+            console.error('⚠️ Error fetching payment status from Fapshi:', fetchErr.message);
+        }
  
         // ✅ Update payment record in adminPaymentHistory
         const updatedPayment = await adminPaymentHistory.findOneAndUpdate(
             { transId: transId },
-            { status: status.toLowerCase(), updatedAt: new Date() },
+            {
+                status: status.toLowerCase(),
+                updatedAt: new Date(),
+                paymentMethod: paymentMedium,
+            },
             { new: true }
         );
- 
         if (!updatedPayment) {
             return res.status(404).json({
                 success: false,
