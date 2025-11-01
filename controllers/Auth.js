@@ -527,7 +527,7 @@ exports.resetPasswordWithCode = async (req, res) => {
         if (!email || !code || !newPassword) {
             return res.status(400).json({
                 success: false,
-                message: 'Email, code, and new password are required'
+                message: 'Email, code, and new password are required.'
             });
         }
 
