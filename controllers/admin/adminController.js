@@ -47,7 +47,7 @@ exports.blockUser = async (req, res) => {
     user.status = 'block';
     await user.save();
 
-    res.status(200).json({ success: true, message: 'User blocked successfully', data: user });
+    res.status(200).json({ success: true, message: 'User blocked successfully...', data: user });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error' });
   }
