@@ -190,18 +190,18 @@ exports.saveFcmToken = async (req, res) => {
 
 exports.getUserNotifications = async (req, res) => {
   const userEmail = req.query.email;
-
+ 
   if (!userEmail) {
     return res.status(400).json({ error: "Email query param required" });
   }
-
+ 
   try {
-    // Fetch notifications for this email that are pending or unread
+    // ✅ Fix: match nested field inside the array of objects
     const notifications = await NotificationTask.find({
-      emails: userEmail,
+      "emails.email": userEmail,
       status: { $in: ["sent", "pending"] },
     }).sort({ createdAt: -1 });
-
+ 
     res.json({ notifications });
   } catch (err) {
     console.error("[❌ Error fetching notifications]", err);
@@ -218,48 +218,4 @@ exports.markNotificationRead = async (req, res) => {
     res.status(500).json({ error: "Failed to mark notification as read" });
   }
 };
-
-// exports.saveNotification =  async (req, res) => {
-//   const {
-//     eventId,
-//     // emails,
-//     message,
-//     cta,
-//     notificationType,
-//     subject,
-//     isScheduled,
-//     scheduledAt
-//   } = req.body;
-
-//    const emails = ['pulkitamga0610@gmail.com'];
-
-//   if (!emails || emails.length === 0) {
-//     return res.status(400).json({ error: 'Recipient list is empty' });
-//   }
-
-//   try {
-//     if (isScheduled && scheduledAt) {
-//       // Save to DB and use a scheduler like Agenda, Bull, or cron later
-//       const task = await NotificationTask.create({
-//         eventId,
-//         emails,
-//         subject,
-//         message,
-//         cta,
-//         notificationType,
-//         scheduledAt,
-//         status: 'pending',
-//       });
-//       return res.status(200).json({ success: true, scheduled: true, task });
-//     } else {
-//       // Immediate send (simplified for now)
-//       await sendBulkEmails(emails, subject, message, cta);
-//       return res.status(200).json({ success: true });
-//     }
-//   } catch (err) {
-//     console.error(err);
-//     return res.status(500).json({ error: 'Failed to send notification' });
-//   }
-// };
-
 
