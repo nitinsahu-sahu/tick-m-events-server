@@ -2,7 +2,7 @@ const express = require('express')
 const { getAllUsers, validateUser, blockUser, providerList, getEventSummary } = require('../../controllers/admin/adminController');
 const router = express.Router()
 const { verifyToken, verifyAdmin } = require('../../middleware/VerifyToken');
-const { getDashbordData } = require('../../controllers/admin/dashboard.controller');
+const { getDashbordData,getMoniteringProvider,getProviderList } = require('../../controllers/admin/dashboard.controller');
 const { paymentHistoryController } = require('../../controllers/admin/payment-history.controller');
 const { uploadLogo, getLogos, getLogo, updateLogo, deleteLogo } = require('../../controllers/admin/customization/logoController');
 const { getAllAdminTransactions } = require('../../controllers/admin/ticketAndTransectionSupervision/verify-tran');
@@ -14,6 +14,8 @@ router.get('/gogs/pro-list', verifyToken, verifyAdmin, providerList);
 router.post('/verify-admin-fee-payment', verifyToken, paymentHistoryController);
 router.get('/admin-payments', verifyToken, getAllAdminTransactions);
 router.get('/dashboard', verifyToken, verifyAdmin, getDashbordData);
+router.get('/monitering-providers/:providerId', verifyToken, verifyAdmin, getMoniteringProvider);
+router.get('/role-providers', verifyToken, verifyAdmin, getProviderList);
 router.get('/ticketingActivity', verifyToken, verifyAdmin, getEventSummary);//add routes
 
 
