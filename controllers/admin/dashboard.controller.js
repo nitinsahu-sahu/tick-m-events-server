@@ -1,9 +1,7 @@
 const User = require('../../models/User');
 const Event = require('../../models/event-details/Event');
-const TicketConfiguration = require('../../models/event-details/Ticket');
+const TicketType = require('../../models/TicketType');
 const PaymentHistory = require('../../models/admin-payment/payment-history');
-const CategorySchema = require('../../models/event-details/Category');
-const EventSchema = require('../../models/event-details/Event');
 const ServiceRequest = require('../../models/service-reequest/service-request');
 const mongoose = require('mongoose');
 
@@ -22,23 +20,22 @@ exports.getDashbordData = async (req, res) => {
     });
 
     // Calculate total revenue from all ticket configurations
-    const allTicketConfigs = await TicketConfiguration.find()
+    const allTickets = await TicketType.find()
       .populate('eventId', 'status') // Only populate status to check if event is approved
       .lean();
 
     let totalRevenue = 0;
 
-    allTicketConfigs.forEach(config => {
+    allTickets.forEach(ticket => {
       // Only count revenue from approved events
-      if (config.eventId && config.eventId.status === 'approved') {
-        config.tickets.forEach(ticket => {
-          // Extract numeric value from price string (e.g., "5000 XAF" -> 5000)
-          const priceStr = ticket.price.split(' ')[0];
-          const price = parseFloat(priceStr) || 0;
-          const quantity = parseInt(ticket.totalTickets) || 0;
+      if (ticket.eventId && ticket.eventId.status === 'approved') {
+        // Extract numeric value from price string (e.g., "5000 XAF" -> 5000)
+        const priceStr = ticket.price.split(' ')[0];
+        const price = parseFloat(priceStr) || 0;
+        const soldQuantity = parseInt(ticket.sold) || 0;
 
-          totalRevenue += price * quantity;
-        });
+        // Revenue = price × quantity sold
+        totalRevenue += price * soldQuantity;
       }
     });
 
