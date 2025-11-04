@@ -4,10 +4,7 @@ const cloudinary = require('cloudinary').v2;
 // Create Service Request
 exports.createServiceRequest = async (req, res) => {
     const { serviceType, eventLocation, budget, description, additionalOptions, status } = req.body;
-    console.log('====================================');
-    console.log(req.body);
-    console.log(req.files);
-    console.log('====================================');
+
     try {
         let imagesData = [];
 

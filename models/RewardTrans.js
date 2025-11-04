@@ -26,19 +26,29 @@ const rewardTransactionSchema = new Schema({
   },
   referenceModel: {
     type: String,
-    enum: ['User', 'Order','Other']
+    enum: ['User', 'Order', 'Other']
   },
-   usedAt: {
+  usedAt: {
     type: Date,
-    default: null 
+    default: null
   },
   status: {
     type: String,
     enum: ['available', 'used'],
     default: 'available'
   },
-   debitUsedFor: {
+  debitUsedFor: {
     type: String,
+    default: null
+  },
+  discountValue: { type: Number, default: null },
+  discountType: { type: String, enum: ['percent', 'fixed', null], default: null },
+  redeemCode: {
+    type: String,
+    default: null
+  },
+  codeGeneratedAt: {
+    type: Date,
     default: null
   }
 }, { timestamps: true });
