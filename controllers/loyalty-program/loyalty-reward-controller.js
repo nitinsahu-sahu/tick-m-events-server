@@ -148,50 +148,51 @@ exports.getRewardHistory = async (req, res) => {
 exports.redeemReward = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { rewardId, code } = req.body; // get code from frontend
-
+    const { rewardId, code, discountValue, discountType } = req.body;
+ 
     if (!code) {
-      return res.status(400).json({
-        success: false,
-        message: "Redeem code is required",
-      });
+      return res.status(400).json({ success: false, message: "Redeem code is required" });
     }
-
-    // Find existing transaction for this reward and user
-    let transaction = await RewardTransaction.findOne({
-      userId,
-       _id: rewardId,
-      // optionally filter by type: 'credit' or whatever fits your logic
-    });
-
+ 
+    // Find the existing transaction by its _id and userId
+    let transaction = await RewardTransaction.findOne({ _id: rewardId, userId });
+ 
     if (!transaction) {
-      return res.status(404).json({
-        success: false,
-        message: "No transaction found for this reward",
-      });
+      return res.status(404).json({ success: false, message: "Transaction not found" });
     }
-
-    // If code already exists, return it (or update it if you want)
+ 
+    // If code already exists, return it
     if (transaction.redeemCode) {
+      // Update discount info if provided
+      transaction.discountValue = discountValue ?? transaction.discountValue;
+      transaction.discountType = discountType ?? transaction.discountType;
+ 
+      await transaction.save(); // save updated values
+ 
       return res.status(200).json({
         success: true,
-        code: transaction.redeemCode,
         message: "Reward code already generated",
+        code: transaction.redeemCode,
+        discountValue: transaction.discountValue,
+        discountType: transaction.discountType,
       });
     }
-
-    // Save the provided code to the existing transaction
+ 
+    // Update only the fields you need
     transaction.redeemCode = code;
+    transaction.discountValue = discountValue != null ? String(discountValue) : null;
+    transaction.discountType = discountType || null;
     transaction.codeGeneratedAt = new Date();
-
+ 
     await transaction.save();
-
     return res.status(200).json({
       success: true,
-      code,
       message: "Reward code saved successfully",
+      code: transaction.redeemCode,
+      discountValue: transaction.discountValue,
+      discountType: transaction.discountType,
     });
-
+ 
   } catch (err) {
     return res.status(500).json({
       success: false,
@@ -200,4 +201,5 @@ exports.redeemReward = async (req, res) => {
     });
   }
 };
+ 
 
