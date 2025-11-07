@@ -122,8 +122,6 @@ async function processInAppReminders() {
             { _id: reminder._id },
             { $set: { [`sentReminders.${label}`]: true } }
           );
-        } else {
-          console.log(`  [DEBUG] Time difference NOT within margin for "${label}".`);
         }
       }
     }
