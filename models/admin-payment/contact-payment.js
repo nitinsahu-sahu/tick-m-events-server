@@ -13,6 +13,11 @@ const paymentSchema = new mongoose.Schema({
     type: String,
     default: 'XAF'
   },
+  flag: {
+    type: String,
+    default: 'contact'
+  },
+
   transactionId: {
     type: String,
     unique: true

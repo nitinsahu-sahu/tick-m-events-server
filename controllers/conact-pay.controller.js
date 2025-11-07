@@ -3,9 +3,10 @@ const axios = require('axios');
 
 // Initialize payment
 exports.initiateContactPay = async (req, res) => {
+console.log(req.body);
 
     try {
-        const { userId, amount = 200 } = req.body;
+        const { userId, amount = 200,flag } = req.body;
 
         const paymentData = {
             amount: amount,
@@ -32,7 +33,8 @@ exports.initiateContactPay = async (req, res) => {
             amount: amount,
             transactionId: response.data.transId,
             paymentUrl: response.data.link,
-            status: 'pending'
+            status: 'pending',
+            flag
         });
 
         await payment.save();
