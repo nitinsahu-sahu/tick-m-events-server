@@ -11,6 +11,7 @@ const fileUpload = require('express-fileupload');
 const User = require('./models/User');
 const errorHandler  = require('./utils/errorHandler');
 const initReminderScheduler = require("./schedulers/reminderScheduler")
+const timezoneMiddleware = require('./middleware/timezoneMiddleware');
 // const cron = require("./schedulers/reminderScheduler");
 const port = process.env.PORT || 3000;
 const SOCKET_PORT = process.env.SOCKET_PORT || 8000;
@@ -41,7 +42,7 @@ server.use(fileUpload({
   useTempFiles: true,
   tempFileDir: '/tmp/',
 }));
-
+server.use(timezoneMiddleware);
 
 server.use(cors(
   {

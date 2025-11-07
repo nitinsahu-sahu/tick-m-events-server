@@ -29,9 +29,11 @@ const paymentInitationRoutes = require('../routes/payment');
 const subscriptionRoutes = require('../routes/subscription.route');
 const participantRoutes = require('../routes/participant/index');
 const secrueRoutes = require('../routes/secure-info.route');
+const contactPayRoutes = require('../routes/contact-payment.route');
 
 // Define route configuration
 exports.routesLists = {
+  '/api/v1/contact-pay':contactPayRoutes,
   '/api/v1/participant':participantRoutes,
   '/api/v1/subs':subscriptionRoutes,
   '/api/v1/payment':paymentInitationRoutes,

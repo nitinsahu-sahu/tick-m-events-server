@@ -19,6 +19,13 @@ router.get('/monitering-providers/:providerId', verifyToken, verifyAdmin, getMon
 router.get('/role-providers', verifyToken, verifyAdmin, getProviderList);
 router.get('/ticketingActivity', verifyToken, verifyAdmin, getEventSummary);//add routes
 
+// router.get("/check", (req, res) => {
+//   const now = new Date();
+//   res.json({
+//     msg: "Testing timezone middleware in payment route",
+//     currentTime: now
+//   });
+// });
 
 // Customization
 router.post('/logo-promotion', verifyToken, verifyAdmin, uploadLogo);
