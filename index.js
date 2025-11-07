@@ -42,7 +42,7 @@ server.use(fileUpload({
   useTempFiles: true,
   tempFileDir: '/tmp/',
 }));
-server.use(timezoneMiddleware);
+// server.use(timezoneMiddleware);
 
 server.use(cors(
   {
