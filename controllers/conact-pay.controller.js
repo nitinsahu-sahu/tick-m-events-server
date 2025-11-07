@@ -92,9 +92,6 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
 exports.webhookContactPay = async (req, res) => {
     try {
         const { transId, status } = req.body;
-
-        // Verify webhook secret (add your verification logic)
-        console.log(`Webhook received for transaction: ${transId}, status: ${status}`);
         // Update payment status
         const updatedPayment = await Payment.findOneAndUpdate(
             { transactionId: transId },
