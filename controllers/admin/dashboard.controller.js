@@ -78,8 +78,8 @@ exports.getDashbordData = async (req, res) => {
       totalEvents,
       activeProviders,
       totalRevenue: totalRevenue,
-      processedTransactions: processedTransactions, // or use successfulTransactions
-      successfulTransactions: successfulTransactions,
+      processedTransactions: processedTransactions || 0, // or use successfulTransactions
+      successfulTransactions: successfulTransactions|| 0,
       transactionStats: {
         totalProcessedAmount: stats.totalProcessedAmount,
         totalFeeAmount: stats.totalFeeAmount,
