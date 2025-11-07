@@ -11,7 +11,7 @@ exports.getDashbordData = async (req, res) => {
     const totalUsers = await User.countDocuments();
 
     // Get total events count
-    const totalEvents = await Event.countDocuments({ isDelete: false });
+    const totalEvents = await Event.countDocuments({ isDelete: false, step: 4 });
 
     // Get active providers count (status: 'active' and role: 'provider')
     const activeProviders = await User.countDocuments({
@@ -77,7 +77,7 @@ exports.getDashbordData = async (req, res) => {
       totalUsers,
       totalEvents,
       activeProviders,
-      totalRevenue: `${totalRevenue.toLocaleString()} XAF`,
+      totalRevenue: totalRevenue,
       processedTransactions: processedTransactions, // or use successfulTransactions
       successfulTransactions: successfulTransactions,
       transactionStats: {

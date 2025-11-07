@@ -3,7 +3,6 @@ const Organizer = require('../../models/event-details/Organizer');
 const Ticket = require('../../models/event-details/Ticket');
 const EventOrders = require('../../models/event-order/EventOrder');
 const Event = require('../../models/event-details/Event');
-const mongoose = require('mongoose');
 
 exports.getAllUsers = async (req, res) => {
   try {
@@ -67,7 +66,8 @@ exports.providerList = async (req, res) => {
 exports.getEventSummary = async (req, res) => {
   try {
     const events = await Event.find({
-      isDelete: { $ne: true }
+      isDelete: { $ne: true },
+      step:4
     })
       .sort({ date: 1 })
       .lean();
