@@ -3,10 +3,8 @@ const axios = require('axios');
 
 // Initialize payment
 exports.initiateContactPay = async (req, res) => {
-console.log(req.body);
-
     try {
-        const { userId, amount = 200,flag } = req.body;
+        const { userId, amount = 200, flag } = req.body;
 
         const paymentData = {
             amount: amount,
@@ -33,7 +31,7 @@ console.log(req.body);
             amount: amount,
             transactionId: response.data.transId,
             paymentUrl: response.data.link,
-            status: 'pending',
+            status: 'initiate',
             flag
         });
 
@@ -43,7 +41,7 @@ console.log(req.body);
             success: true,
             paymentUrl: response.data.link,
             transactionId: response.data.transId,
-            message:"Initiate successfully..."
+            message: "Initiate successfully..."
         });
     } catch (error) {
         console.error('Payment initiation error:', error.response?.data || error.message);
@@ -59,6 +57,8 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
     try {
         const { transactionId } = req.params;
 
+        let paymentMedium = null;
+
         const response = await axios.get(
             `${process.env.FAPSHI_BASE_URL}/payment-status/${transactionId}`,
             {
@@ -70,15 +70,26 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
             }
         );
 
+        const res = response.data;
+        // Handle if array or single object
+        if (Array.isArray(res) && res.length > 0) {
+            paymentMedium = res[0].medium || null;
+        } else if (res && typeof res === "object") {
+            paymentMedium = res.medium || null;
+        }
         // Update payment status in database
         await Payment.findOneAndUpdate(
-            { transactionId: response.data.transId },
-            { status: response.data.status.toLowerCase() }
+            { transactionId: res.transId },
+            {
+                status: res.status.toLowerCase(),
+                paymentMethod: paymentMedium,
+
+            }
         );
 
         res.json({
             success: true,
-            status: response.data.status.toLowerCase(),
+            status: res.status.toLowerCase(),
             message: "Check successfully..."
         });
     } catch (error) {
@@ -103,17 +114,6 @@ exports.webhookContactPay = async (req, res) => {
             },
             { new: true }
         );
-
-        if (updatedPayment) {
-            console.log(`Payment ${transId} successfully updated to: ${status}`);
-
-            // Here you can trigger other actions:
-            // - Send confirmation email
-            // - Update user permissions
-            // - Create order, etc.
-        } else {
-            console.log(`Payment ${transId} not found in database`);
-        }
 
         res.status(200).json({ received: true });
     } catch (error) {

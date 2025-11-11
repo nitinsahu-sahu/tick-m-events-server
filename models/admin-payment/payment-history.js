@@ -23,6 +23,7 @@ const adminPaymentHistorySchema = new mongoose.Schema({
         enum: ['initiated', 'success', 'failed', 'pending'],
     },
     paymentMethod: { type: String },
+      financialTransId: { type: String },
 }, { timestamps: true });
 
 module.exports = mongoose.model('adminPaymentHistory', adminPaymentHistorySchema);

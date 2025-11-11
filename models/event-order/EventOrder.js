@@ -87,6 +87,7 @@ const eventOrderSchema = new Schema({
         enum: ['Smartphones', 'Tablets', 'Laptops', 'Desktops', 'Unknown'],
         default: 'Unknown'
     },
+      financialTransId: { type: String },
     createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

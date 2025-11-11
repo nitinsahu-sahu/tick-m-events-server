@@ -3,6 +3,8 @@ const adminPaymentHistory = require('../../../models/admin-payment/payment-histo
 const Bid = require('../../../models/event-request/bid.modal'); // Adjust path as needed
 const Project = require('../../../models/event-request/placeBid.modal'); // Adjust path as needed
 const EventRequest = require('../../../models/event-request/event-requests.model');
+const EventOrder = require('../../../models/event-order/EventOrder');
+const RewardTransaction = require("../../../models/RewardTrans");
 
 exports.initiatePaymentController = async (req, res) => {
     try {
@@ -50,14 +52,19 @@ exports.initiatePaymentController = async (req, res) => {
         if (fapshiRes.data && fapshiRes.data.link) {
             // Store payment record in database (you should implement this)
             await storePaymentRecord({
-                bidAmount,
                 transId: fapshiRes.data.transId,
-                feeAmount: amount,
-                currency: currency,
-                organizerId: userId,
                 status: 'initiated',
                 paymentLink: fapshiRes.data.link,
-                placeABidId, bidId, eventId, eventReqId
+                currency: currency,
+
+                feeAmount: amount,
+                organizerId: userId,
+                placeABidId, 
+                bidId, 
+                eventId, 
+                eventReqId,
+                bidAmount,
+
             });
 
             return res.status(200).json({
@@ -120,6 +127,7 @@ async function storePaymentRecord(paymentData) {
         return false;
     }
 }
+
 
 // Payment confirmation webhook handler
 exports.paymentWebhookController = async (req, res) => {
@@ -200,7 +208,7 @@ exports.paymentWebhookController = async (req, res) => {
                 eventRequest.providerStatus = 'accepted';
                 eventRequest.orgStatus = 'accepted';
                 eventRequest.projectStatus = 'ongoing';
-                eventRequest.isSigned = false;
+                eventRequest.isSigned = true;
                 eventRequest.winningBid = bidAmount;
                 eventRequest.updatedAt = new Date();
  
@@ -336,7 +344,171 @@ async function handleFailedPayment(paymentData) {
     console.log('Payment failed:', paymentData);
 }
 
-async function handleCancelledPayment(paymentData) {
-    // Implement cancelled payment logic
-    console.log('Payment cancelled:', paymentData);
-}
+exports.fapshiWebhookController = async (req, res) => {
+  try {
+    const { transId, externalId, status, financialTransId } = req.body;
+ 
+    if (!transId && !externalId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing transId or externalId",
+      });
+    }
+ 
+    console.log("Incoming Webhook:", req.body);
+ 
+    let normalizedStatus = status?.toLowerCase() || "pending";
+    if (normalizedStatus === "successful") normalizedStatus = "success";
+ 
+    // 🟢 Step 1: Try to find admin payment by financialTransId or transId
+    let adminPayment = null;
+ 
+    if (financialTransId) {
+      adminPayment = await adminPaymentHistory.findOne({
+        $or: [{ financialTransId }, { transId }, { transId: externalId }],
+      });
+    } else {
+      adminPayment = await adminPaymentHistory.findOne({
+        $or: [{ transId }, { transId: externalId }],
+      });
+    }
+ 
+    if (adminPayment) {
+      console.log("🏦 Found AdminPaymentHistory record");
+ 
+      // ✅ SAVE financialTransId to admin payment record
+      if (financialTransId && !adminPayment.financialTransId) {
+        adminPayment.financialTransId = financialTransId;
+      }
+     
+      adminPayment.status = normalizedStatus;
+      adminPayment.paymentMethod = req.body.medium || adminPayment.paymentMethod;
+      adminPayment.updatedAt = new Date();
+      await adminPayment.save();
+ 
+      console.log(`✅ AdminPayment ${adminPayment._id} updated to ${normalizedStatus}, financialTransId: ${financialTransId}`);
+ 
+      // 🧩 If payment successful, update related Bid / EventRequest
+      if (normalizedStatus === "success") {
+        const { eventReqId, bidId, bidAmount } = adminPayment;
+ 
+        // ✅ CASE 1: Update Bid
+        if (bidId) {
+          try {
+            const bid = await Bid.findById(bidId);
+            if (bid) {
+              bid.isOrgnizerAccepted = true;
+              bid.isProviderAccepted = true;
+              bid.status = "accepted";
+              bid.adminFeePaid = true;
+              bid.adminFeeAmount = adminPayment.feeAmount || 0;
+              bid.winningBid = bidAmount || 0;
+              bid.organizrAmount = bid.bidAmount;
+              bid.updatedAt = new Date();
+              await bid.save();
+ 
+              console.log(`✅ Bid ${bidId} updated successfully`);
+ 
+              // 🏗️ Also update linked Project if exists
+              if (bid.projectId) {
+                const project = await Project.findById(bid.projectId);
+                if (project) {
+                  project.status = "ongoing";
+                  project.bidStatus = "closed";
+                  project.isSigned = false;
+                  project.updatedAt = new Date();
+                  await project.save();
+                  console.log(`🏗️ Project ${bid.projectId} updated successfully`);
+                }
+              }
+            } else {
+              console.log(`⚠️ No Bid found for ID: ${bidId}`);
+            }
+          } catch (err) {
+            console.error(`❌ Error updating Bid ${bidId}:`, err.message);
+          }
+        }
+ 
+        // ✅ CASE 2: Update EventRequest
+        if (eventReqId) {
+          try {
+            const eventRequest = await EventRequest.findById(eventReqId);
+            console.log("eventReqId",eventReqId);
+            if (eventRequest) {
+              eventRequest.providerStatus = "accepted";
+              eventRequest.orgStatus = "accepted";
+              eventRequest.projectStatus = "ongoing";
+              eventRequest.isSigned = true;
+              eventRequest.winningBid = bidAmount || eventRequest.winningBid;
+              eventRequest.updatedAt = new Date();
+              await eventRequest.save();
+ 
+              console.log(`✅ EventRequest ${eventReqId} updated successfully`);
+            } else {
+              console.log(`⚠️ No EventRequest found for ID: ${eventReqId}`);
+            }
+          } catch (err) {
+            console.error(`❌ Error updating EventRequest ${eventReqId}:`, err.message);
+          }
+        }
+      }
+ 
+      return res.status(200).json({
+        success: true,
+        message: "Admin payment webhook processed successfully",
+      });
+    }
+ 
+    // 🟣 Step 2: If not admin payment → check EventOrder
+    console.log("🎟️ Processing Event Order Flow...");
+    const order = await EventOrder.findOne({
+      $or: [
+        { fapshiExternalId: externalId },
+        { transactionId: transId },
+        { transactionId: externalId },
+      ],
+    });
+ 
+    if (order) {
+      // ✅ SAVE financialTransId to EventOrder
+      if (financialTransId && !order.financialTransId) {
+        order.financialTransId = financialTransId;
+      }
+     
+      // ✅ Also save transId if not already present
+      if (transId && !order.transId) {
+        order.transId = transId;
+      }
+     
+      order.paymentStatus = normalizedStatus;
+      order.updatedAt = new Date();
+      order.paymentMethod = req.body.medium || order.paymentMethod;
+     
+      // ✅ If payment is successful, also set payment date
+      if (normalizedStatus === "success" && !order.paymentDate) {
+        order.paymentDate = new Date();
+      }
+     
+      await order.save();
+ 
+      console.log(`🎟️ EventOrder ${order._id} updated to ${normalizedStatus}, financialTransId: ${financialTransId}`);
+      return res.status(200).json({
+        success: true,
+        message: "Event order webhook processed successfully",
+      });
+    }
+ 
+    console.log("⚠️ No matching record found for", { transId, externalId, financialTransId });
+    return res.status(404).json({
+      success: false,
+      message: "No matching record found",
+    });
+  } catch (error) {
+    console.error("❌ Webhook Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error in payment webhook",
+      error: error.message,
+    });
+  }
+};

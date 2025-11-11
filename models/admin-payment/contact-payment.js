@@ -24,14 +24,16 @@ const paymentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'completed', 'failed', 'expired'],
-    default: 'pending'
+    enum: ['initiate', 'completed', 'failed', 'expired'],
+    default: 'initiate'
   },
   paymentUrl: String,
   createdAt: {
     type: Date,
     default: Date.now
   },
+  paymentMethod: { type: String },
+
   updatedAt: {
     type: Date,
     default: Date.now
