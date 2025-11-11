@@ -44,6 +44,13 @@ server.use(fileUpload({
 }));
 // server.use(timezoneMiddleware);
 
+// Increase payload size limit (before your routes)
+server.use(express.json({ limit: '100mb' }));
+server.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+// If using multer or similar for file uploads
+server.use(express.raw({ type: 'application/octet-stream', limit: '100mb' }));
+
 server.use(cors(
   {
     origin: [process.env.ORIGIN, process.env.ADMIN_ORIGIN],
