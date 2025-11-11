@@ -1,10 +1,7 @@
 const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema({
-  userId: {
-    type: String,
-    required: true
-  },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   amount: {
     type: Number,
     required: true
@@ -24,7 +21,7 @@ const paymentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['initiate', 'completed', 'failed', 'expired'],
+    enum: ['initiate', 'successful', 'failed', 'expired'],
     default: 'initiate'
   },
   paymentUrl: String,
@@ -33,6 +30,12 @@ const paymentSchema = new mongoose.Schema({
     default: Date.now
   },
   paymentMethod: { type: String },
+  eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
+  organizerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  eventReqId: { type: mongoose.Schema.Types.ObjectId, ref: 'EventRequest' },
+  placeABidId: { type: mongoose.Schema.Types.ObjectId, ref: 'PlaceABid' },
+  bidId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bid' },
+  bidAmount: { type: Number },
 
   updatedAt: {
     type: Date,
