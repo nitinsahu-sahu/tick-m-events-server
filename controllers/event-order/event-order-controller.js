@@ -167,7 +167,7 @@ exports.createOrder = async (req, res) => {
       tickets: ticketList.tickets,
       totalAmount,
       paymentMethod,
-      transactionId,
+      transactionId:"",
       ticketCode,
       qrCode: qrImage,
       fapshiExternalId: transactionId.toString(),
