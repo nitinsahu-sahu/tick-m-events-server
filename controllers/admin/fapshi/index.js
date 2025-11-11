@@ -355,15 +355,15 @@ exports.fapshiWebhookController = async (req, res) => {
         message: "Missing transId or externalId",
       });
     }
- 
+
     console.log("Incoming Webhook:", req.body);
- 
+
     let normalizedStatus = status?.toLowerCase() || "pending";
     if (normalizedStatus === "successful") normalizedStatus = "success";
- 
+
     // 🟢 Step 1: Try to find admin payment by financialTransId or transId
     let adminPayment = null;
- 
+
     if (financialTransId) {
       adminPayment = await adminPaymentHistory.findOne({
         $or: [{ financialTransId }, { transId }, { transId: externalId }],
@@ -373,26 +373,26 @@ exports.fapshiWebhookController = async (req, res) => {
         $or: [{ transId }, { transId: externalId }],
       });
     }
- 
+
     if (adminPayment) {
       console.log("🏦 Found AdminPaymentHistory record");
- 
+
       // ✅ SAVE financialTransId to admin payment record
       if (financialTransId && !adminPayment.financialTransId) {
         adminPayment.financialTransId = financialTransId;
       }
- 
+
       adminPayment.status = normalizedStatus;
       adminPayment.paymentMethod = req.body.medium || adminPayment.paymentMethod;
       adminPayment.updatedAt = new Date();
       await adminPayment.save();
- 
+
       console.log(`✅ AdminPayment ${adminPayment._id} updated to ${normalizedStatus}, financialTransId: ${financialTransId}`);
- 
+
       // 🧩 If payment successful, update related Bid / EventRequest
       if (normalizedStatus === "success") {
         const { eventReqId, bidId, bidAmount } = adminPayment;
- 
+
         // ✅ CASE 1: Update Bid
         if (bidId) {
           try {
@@ -407,9 +407,9 @@ exports.fapshiWebhookController = async (req, res) => {
               bid.organizrAmount = bid.bidAmount;
               bid.updatedAt = new Date();
               await bid.save();
- 
+
               console.log(`✅ Bid ${bidId} updated successfully`);
- 
+
               // 🏗️ Also update linked Project if exists
               if (bid.projectId) {
                 const project = await Project.findById(bid.projectId);
@@ -429,7 +429,7 @@ exports.fapshiWebhookController = async (req, res) => {
             console.error(`❌ Error updating Bid ${bidId}:`, err.message);
           }
         }
- 
+
         // ✅ CASE 2: Update EventRequest
         if (eventReqId) {
           try {
@@ -443,7 +443,7 @@ exports.fapshiWebhookController = async (req, res) => {
               eventRequest.winningBid = bidAmount || eventRequest.winningBid;
               eventRequest.updatedAt = new Date();
               await eventRequest.save();
- 
+
               console.log(`✅ EventRequest ${eventReqId} updated successfully`);
             } else {
               console.log(`⚠️ No EventRequest found for ID: ${eventReqId}`);
@@ -453,32 +453,32 @@ exports.fapshiWebhookController = async (req, res) => {
           }
         }
       }
- 
+
       return res.status(200).json({
         success: true,
         message: "Admin payment webhook processed successfully",
       });
     }
- 
+
     // 🟣 Step 2: If not admin payment → check EventOrder
     console.log("🎟️ Processing Event Order Flow...");
     const order = await EventOrder.findOne({
       transactionId: transId,
       fapshiExternalId: fapshiExternalId,
     });
- 
+
     if (order) {
       // ✅ SAVE financialTransId to EventOrder
       if (financialTransId && !order.financialTransId) {
         order.financialTransId = financialTransId;
       }
- 
+
       // ✅ Also save transId if not already present
       if (transId && order.transactionId !== transId) {
         console.log(`🔄 Updating transactionId from ${order.transactionId} → ${transId}`);
         order.transactionId = transId; // overwrite with real Fapshi transId
       }
- 
+
       if (normalizedStatus === "success") {
         order.paymentStatus = "confirmed";
       } else if (normalizedStatus === "failed") {
@@ -488,20 +488,20 @@ exports.fapshiWebhookController = async (req, res) => {
       }
       order.updatedAt = new Date();
       order.paymentMethod = req.body.medium || order.paymentMethod;
- 
+
       // ✅ If payment is successful, also set payment date
       if (order.paymentStatus === "confirmed" && !order.paymentDate) {
         order.paymentDate = new Date();
       }
       await order.save({ validateBeforeSave: false });
- 
+
       console.log(`🎟️ EventOrder ${order._id} updated to ${normalizedStatus}, financialTransId: ${financialTransId}`);
       return res.status(200).json({
         success: true,
         message: "Event order webhook processed successfully",
       });
     }
- 
+
     console.log("⚠️ No matching record found for", { transId, externalId, financialTransId });
     return res.status(404).json({
       success: false,
