@@ -4,11 +4,14 @@ const axios = require('axios');
 // Initialize payment
 exports.initiateContactPay = async (req, res) => {
     try {
-        const { userId, amount = 200, flag } = req.body;
+        const {
+            userId, amount = 200, flag, email, eventReqId, bidAmount,
+            organizerId, eventId, placeABidId, bidId
+        } = req.body;
 
         const paymentData = {
             amount: amount,
-            email: req.body.email || 'customer@example.com',
+            email: email || 'customer@example.com',
             userId: userId,
             redirectUrl: `${process.env.ADMIN_ORIGIN}/payment-success`
         };
@@ -24,24 +27,44 @@ exports.initiateContactPay = async (req, res) => {
                 }
             }
         );
-
-        // Save payment to database
-        const payment = new Payment({
-            userId: userId,
+        // Create base payment object with common fields
+        const paymentDataToSave = {
             amount: amount,
             transactionId: response.data.transId,
             paymentUrl: response.data.link,
             status: 'initiate',
-            flag
-        });
+            flag: flag
+        };
 
+        // Add conditional fields based on flag
+        if (flag === 'contact') {
+            paymentDataToSave.userId = userId;
+
+            // Only contact fields - no additional fields needed
+        } else if (flag === 'er') {
+            // Event Request fields
+            paymentDataToSave.eventReqId = eventReqId;
+            paymentDataToSave.bidAmount = bidAmount;
+            paymentDataToSave.organizerId = organizerId;
+            paymentDataToSave.eventId = eventId;
+        } else if (flag === 'fsp') {
+            // FSP (Final Service Provider) fields
+            paymentDataToSave.bidAmount = bidAmount;
+            paymentDataToSave.organizerId = organizerId;
+            paymentDataToSave.placeABidId = placeABidId;
+            paymentDataToSave.bidId = bidId;
+            paymentDataToSave.eventId = eventId;
+        }
+
+        // Save payment to database
+        const payment = new Payment(paymentDataToSave);
         await payment.save();
 
         res.json({
             success: true,
             paymentUrl: response.data.link,
             transactionId: response.data.transId,
-            message: "Initiate successfully..."
+            message: "Payment initiated successfully..."
         });
     } catch (error) {
         console.error('Payment initiation error:', error.response?.data || error.message);
@@ -57,8 +80,6 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
     try {
         const { transactionId } = req.params;
 
-        let paymentMedium = null;
-
         const response = await axios.get(
             `${process.env.FAPSHI_BASE_URL}/payment-status/${transactionId}`,
             {
@@ -70,30 +91,44 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
             }
         );
 
-        const res = response.data;
-        // Handle if array or single object
-        if (Array.isArray(res) && res.length > 0) {
-            paymentMedium = res[0].medium || null;
-        } else if (res && typeof res === "object") {
-            paymentMedium = res.medium || null;
-        }
         // Update payment status in database
-        await Payment.findOneAndUpdate(
-            { transactionId: res.transId },
+        const updatedPayment = await Payment.findOneAndUpdate(
+            { transactionId: response.data.transId },
             {
-                status: res.status.toLowerCase(),
-                paymentMethod: paymentMedium,
+                status: response.data.status.toLowerCase(),
+                paymentMethod: response.data.medium,
 
             }
         );
 
-        res.json({
+        if (!updatedPayment) {
+            console.log(`Payment ${response.data.transId} not found in database`);
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found in database'
+            });
+        }
+            console.log('===',updatedPayment);
+
+        if (updatedPayment.flag == "er") {
+            console.log('===EventReq===');
+            console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
+        } else if (updatedPayment.flag == "fsp") {
+            console.log('===Find Service Provider===');
+            console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
+        } else {
+            console.log('===contact=====');
+            console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
+        }
+        res.status(200).json({
             success: true,
-            status: res.status.toLowerCase(),
+            status: response.data.status.toLowerCase(),
+            amount:updatedPayment.amount,
+            currency:updatedPayment.currency,
             message: "Check successfully..."
         });
     } catch (error) {
-        console.error('Payment status check error:', error.response?.data || error.message);
+        console.error('Payment status check error:', error.message);
         res.status(500).json({
             success: false,
             message: 'Failed to check payment status'
@@ -140,3 +175,4 @@ exports.getUserContactPay = async (req, res) => {
         });
     }
 };
+
