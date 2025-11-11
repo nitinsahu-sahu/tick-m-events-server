@@ -56,8 +56,8 @@ exports.initiatePaymentController = async (req, res) => {
                 status: 'initiated',
                 paymentLink: fapshiRes.data.link,
                 currency: currency,
-
                 feeAmount: amount,
+                
                 organizerId: userId,
                 placeABidId, 
                 bidId, 
@@ -346,8 +346,9 @@ async function handleFailedPayment(paymentData) {
 
 exports.fapshiWebhookController = async (req, res) => {
   try {
-    const { transId, externalId, status, financialTransId } = req.body;
- 
+    const { transId, externalId, fapshiExternalId: bodyFapshiId, status, financialTransId } = req.body;
+    const fapshiExternalId = bodyFapshiId || externalId;
+    console.log("re", req.body);
     if (!transId && !externalId) {
       return res.status(400).json({
         success: false,
@@ -380,7 +381,7 @@ exports.fapshiWebhookController = async (req, res) => {
       if (financialTransId && !adminPayment.financialTransId) {
         adminPayment.financialTransId = financialTransId;
       }
-     
+ 
       adminPayment.status = normalizedStatus;
       adminPayment.paymentMethod = req.body.medium || adminPayment.paymentMethod;
       adminPayment.updatedAt = new Date();
@@ -433,7 +434,7 @@ exports.fapshiWebhookController = async (req, res) => {
         if (eventReqId) {
           try {
             const eventRequest = await EventRequest.findById(eventReqId);
-            console.log("eventReqId",eventReqId);
+            console.log("eventReqId", eventReqId);
             if (eventRequest) {
               eventRequest.providerStatus = "accepted";
               eventRequest.orgStatus = "accepted";
@@ -462,11 +463,8 @@ exports.fapshiWebhookController = async (req, res) => {
     // 🟣 Step 2: If not admin payment → check EventOrder
     console.log("🎟️ Processing Event Order Flow...");
     const order = await EventOrder.findOne({
-      $or: [
-        { fapshiExternalId: externalId },
-        { transactionId: transId },
-        { transactionId: externalId },
-      ],
+      transactionId: transId,
+      fapshiExternalId: fapshiExternalId,
     });
  
     if (order) {
@@ -474,22 +472,28 @@ exports.fapshiWebhookController = async (req, res) => {
       if (financialTransId && !order.financialTransId) {
         order.financialTransId = financialTransId;
       }
-     
+ 
       // ✅ Also save transId if not already present
-      if (transId && !order.transId) {
-        order.transId = transId;
+      if (transId && order.transactionId !== transId) {
+        console.log(`🔄 Updating transactionId from ${order.transactionId} → ${transId}`);
+        order.transactionId = transId; // overwrite with real Fapshi transId
       }
-     
-      order.paymentStatus = normalizedStatus;
+ 
+      if (normalizedStatus === "success") {
+        order.paymentStatus = "confirmed";
+      } else if (normalizedStatus === "failed") {
+        order.paymentStatus = "denied";
+      } else {
+        order.paymentStatus = normalizedStatus;
+      }
       order.updatedAt = new Date();
       order.paymentMethod = req.body.medium || order.paymentMethod;
-     
+ 
       // ✅ If payment is successful, also set payment date
-      if (normalizedStatus === "success" && !order.paymentDate) {
+      if (order.paymentStatus === "confirmed" && !order.paymentDate) {
         order.paymentDate = new Date();
       }
-     
-      await order.save();
+      await order.save({ validateBeforeSave: false });
  
       console.log(`🎟️ EventOrder ${order._id} updated to ${normalizedStatus}, financialTransId: ${financialTransId}`);
       return res.status(200).json({
