@@ -24,7 +24,7 @@ const participantSchema = new Schema({
 const eventOrderSchema = new Schema({
     fapshiExternalId: {
         type: String,
-        required: true
+        required: false
     },
     eventId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -68,7 +68,7 @@ const eventOrderSchema = new Schema({
     },
     transactionId: {
         type: String,
-        required: true
+        required: false
     },
     verifyEntry: {
         type: Boolean,

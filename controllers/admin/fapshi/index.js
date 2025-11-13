@@ -130,7 +130,7 @@ async function storePaymentRecord(paymentData) {
 
 
 // Payment confirmation webhook handler
-exports.paymentWebhookController = async (req, res) => {
+exports.oldpaymentWebhookController = async (req, res) => {
     try {
         const { transId, status, winningBid } = req.body;
 
@@ -344,7 +344,7 @@ async function handleFailedPayment(paymentData) {
     console.log('Payment failed:', paymentData);
 }
 
-exports.fapshiWebhookController = async (req, res) => {
+exports.paymentWebhookController = async (req, res) => {
     try {
         const { transId, externalId, fapshiExternalId: bodyFapshiId, status, financialTransId } = req.body;
         const fapshiExternalId = bodyFapshiId || externalId;
