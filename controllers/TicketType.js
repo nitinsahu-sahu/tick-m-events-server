@@ -18,15 +18,15 @@ exports.fetchTicketType = async (req, res) => {
         message: "Event ID is required"
       });
     }
-    const ticketTypes = await TicketType.find({ createdBy: userId,eventId })
+    const ticketTypes = await TicketType.find({ createdBy: userId, eventId })
       .sort({ createdAt: -1 }); // Optional: sort by newest first
- 
+
     res.status(200).json({
       success: true,
       count: ticketTypes.length,
       data: ticketTypes
     });
- 
+
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -35,17 +35,17 @@ exports.fetchTicketType = async (req, res) => {
     });
   }
 };
- 
+
 exports.createTicketType = async (req, res) => {
   const { name, quantity, ticketDescription, price, validity, options, eventId } = req.body
- 
+
   try {
-        if (!eventId) {
+    if (!eventId) {
       return res.status(400).json({ message: "Event ID is required" });
     }
- 
-      const newTicket = await TicketType.create({
-       eventId,
+
+    const newTicket = await TicketType.create({
+      eventId,
       name,
       quantity: quantity === "Unlimited" ? "10000" : quantity,
       ticketDescription,
@@ -54,10 +54,10 @@ exports.createTicketType = async (req, res) => {
       options,
       createdBy: req.user._id  // Attach the user ID of the creator
     });
- 
+
     res.status(201).json({
       message: "Ticket Type created successfully",
-       ticketTypeId: newTicket._id,
+      ticketTypeId: newTicket._id,
       ticket: newTicket,
     });
   } catch (err) {
@@ -116,16 +116,46 @@ exports.updateTicketType = async (req, res) => {
     if (price !== undefined) updateFields.price = price;
     if (ticketDescription !== undefined) updateFields.ticketDescription = ticketDescription;
 
-    // Update the ticket type
-    await TicketType.findByIdAndUpdate(
+    // Update TicketType
+    const updatedTicketType = await TicketType.findByIdAndUpdate(
       id,
       { $set: updateFields },
       { new: true, runValidators: true }
     );
 
-    res.status(200).json({
+    // Update TicketConfiguration.tickets[]
+
+    const configResult = await TicketConfiguration.updateOne(
+      { "tickets.id": id },
+      {
+        $set: {
+          "tickets.$.totalTickets": quantity,
+          "tickets.$.price": price,
+          "tickets.$.description": ticketDescription,
+        },
+      }
+    );
+
+    // Check if update matched any ticket inside TicketConfiguration
+    if (configResult.matchedCount === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Ticket found but not present in TicketConfiguration",
+      });
+    }
+
+    if (configResult.modifiedCount === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No changes applied (values are already the same)",
+      });
+    }
+
+    return res.status(200).json({
       success: true,
-      message: "Applied",
+      message: "Ticket updated successfully",
+      updatedTicketType,
+      configUpdate: configResult,
     });
   } catch (error) {
     console.error("Error updating ticket type:", error);
@@ -149,7 +179,7 @@ exports.updateRefundPolicy = async (req, res) => {
       noRefundDate,
       isRefundPolicyEnabled
     } = req.body;
- 
+
     // Build refund policy object
     const refundPolicy = {
       fullRefund: fullRefund || false,
@@ -159,7 +189,7 @@ exports.updateRefundPolicy = async (req, res) => {
       noRefundAfterDate: noRefundAfterDate || false,
       noRefundDate: noRefundDate || null,
     };
- 
+
     // Update the ticket configuration for the event
     const updated = await TicketConfiguration.findOneAndUpdate(
       { eventId },
@@ -169,20 +199,20 @@ exports.updateRefundPolicy = async (req, res) => {
       },
       { new: true }
     );
- 
+
     if (!updated) {
       return res.status(404).json({
         success: false,
         message: 'Ticket configuration not found for this event.',
       });
     }
- 
+
     return res.status(200).json({
       success: true,
       message: 'Refund policy updated successfully.',
       data: updated
     });
- 
+
   } catch (err) {
     console.error("Error updating refund policy:", err.message);
     return res.status(500).json({
