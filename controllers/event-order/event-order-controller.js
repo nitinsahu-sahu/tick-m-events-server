@@ -549,11 +549,17 @@ exports.createOrder = async (req, res) => {
           errorMessage: fapshiError.response?.data?.message || "Payment gateway error"
         });
 
-        return res.status(500).json({
+        const fapshiMsg =
+          fapshiError.response?.data?.message ||
+          fapshiError.response?.data?.error?.message ||
+          fapshiError.message ||
+          "Payment gateway error";
+
+        return res.status(400).json({
           success: false,
-          message: "Payment gateway error",
-          error: fapshiError.response?.data || fapshiError.message,
-        });
+          message: fapshiMsg,
+          error: fapshiError.response?.data
+        })
       }
 
       // Send email for online payment after successful API call
