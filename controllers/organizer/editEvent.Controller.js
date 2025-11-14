@@ -4,6 +4,7 @@ const TicketConfiguration = require('../../models/event-details/Ticket');
 const Visibility = require('../../models/event-details/Visibility');
 const Organizer = require('../../models/event-details/Organizer');
 const CancelledEventMsg = require('../../models/event-details/event-cancelled');
+const TicketType=require('../../models/TicketType');
 const mongoose = require('mongoose');
 
 
@@ -170,16 +171,37 @@ exports.updateEvents = async (req, res, next) => {
         );
       }
  
-      // // Update Ticket Configuration
+    // Update Ticket Configuration + Ticket Types
+     
       let updatedTicketConfiguration;
+
       if (tickets) {
+        // 1️⃣ Update main TicketConfiguration table
         updatedTicketConfiguration = await TicketConfiguration.findOneAndUpdate(
           { eventId },
           tickets,
           { new: true, upsert: true, session }
         );
+
+        // 2️⃣ Update actual TicketType table
+        if (tickets.tickets && Array.isArray(tickets.tickets)) {
+          for (const ticket of tickets.tickets) {
+            if (!ticket.id) continue;  // Skip if no TicketType _id available
+
+            await TicketType.findOneAndUpdate(
+              { _id: ticket.id },
+              {
+                name: ticket.ticketType,
+                price: ticket.price,
+                quantity: ticket.totalTickets,
+                ticketDescription: ticket.description,
+              },
+              { new: true, session }
+            );
+          }
+        }
       }
- 
+      
       // // Update Visibility
       let updatedVisibility;
       if (visibility) {
