@@ -391,7 +391,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 }));
             });
 
-            const ticketStatistics = calculateTicketStatistics(event, tickets, ticketType, eventOrder, refundRequests, formattedTickets);
+            // REMOVED async keyword - no need to await since it's not actually async
+            const ticketStatistics = calculateTicketStatistics(tickets, ticketType, eventOrder, refundRequests, formattedTickets);
             const orderStatistics = calculateOrderStatistics(eventOrder, refundRequests);
             const paymentStatistics = calculatePaymentStatistics(eventOrder);
 
@@ -474,6 +475,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 cancelledProjects: placeABid.filter(project => project.bidStatus === 'cancelled').length
             };
 
+            console.log('ticketStatistics', ticketStatistics);
+
             return {
                 ...event,
                 eventStatus: isUpcoming ? 'upcoming' : 'past', // Add event status for frontend
@@ -534,8 +537,9 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
     }
 }
 
-// Fixed Helper function to calculate comprehensive ticket statistics
-const calculateTicketStatistics = async (event, tickets, ticketType, eventOrder, refundRequests, formattedTickets) => {
+// FIXED: Removed async keyword since this function doesn't perform any async operations
+
+const calculateTicketStatistics = (tickets, ticketType, eventOrder, refundRequests, formattedTickets) => {
     const totalTicketQuantity = ticketType.reduce((total, t) => {
         const quantity = parseInt(t.quantity) || 0;
         return total + quantity;
@@ -551,7 +555,8 @@ const calculateTicketStatistics = async (event, tickets, ticketType, eventOrder,
     const verifiedEntries = formattedTickets.length;
 
     // Calculate pending tickets (pending payments)
-    const pendingTickets = soldTickets - verifiedEntries
+    const pendingTickets = soldTickets - verifiedEntries;
+
     // Calculate available tickets (total - sold - pending)
     const availableTickets = totalTicketQuantity - soldTickets;
 
@@ -631,6 +636,12 @@ const calculateTicketStatistics = async (event, tickets, ticketType, eventOrder,
             };
         }) || []
     );
+
+    console.log('totalTicketQuantity', totalTicketQuantity);
+    console.log('soldTickets', soldTickets);
+    console.log('pendingTickets', pendingTickets);
+    console.log('availableTickets', availableTickets);
+    console.log('verifiedEntries', verifiedEntries);
 
     return {
         totalTicketQuantity,
