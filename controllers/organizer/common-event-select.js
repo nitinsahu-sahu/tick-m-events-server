@@ -322,7 +322,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
         const eventsWithDetails = await Promise.all(sortedEvents.map(async (event) => {
             const eventDateTime = new Date(`${event.date}T${event.time}`);
             const isUpcoming = eventDateTime > currentDateTime;
-            
+
             const [
                 organizer, customization, tickets, eventOrder, visibility, review, ticketConfig, photoFrame,
                 refundRequests, eventRequests, placeABid, withdrawals, ticketType, verifiedTicketsData
@@ -391,7 +391,7 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 }));
             });
 
-            const ticketStatistics = calculateTicketStatistics(tickets, ticketType, eventOrder, refundRequests, formattedTickets);
+            const ticketStatistics = calculateTicketStatistics(event, tickets, ticketType, eventOrder, refundRequests, formattedTickets);
             const orderStatistics = calculateOrderStatistics(eventOrder, refundRequests);
             const paymentStatistics = calculatePaymentStatistics(eventOrder);
 
@@ -534,12 +534,8 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
     }
 }
 
-// Helper function to calculate comprehensive ticket statistics
 // Fixed Helper function to calculate comprehensive ticket statistics
-const calculateTicketStatistics = (tickets, ticketType, eventOrder, refundRequests, formattedTickets) => {
-    // Calculate total ticket quantity available - FIXED: Parse string to number
-    console.log('ticketType', ticketType);
-
+const calculateTicketStatistics = async (event, tickets, ticketType, eventOrder, refundRequests, formattedTickets) => {
     const totalTicketQuantity = ticketType.reduce((total, t) => {
         const quantity = parseInt(t.quantity) || 0;
         return total + quantity;
@@ -1106,434 +1102,434 @@ async function updateUserGigCounts(userId, previousStatus, newStatus) {
 }
 
 exports.organizerBalance = async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const { availableBalance } = req.body;
-    if (!eventId) {
-      return res.status(400).json({ message: "Missing eventId in request params" });
+    try {
+        const { eventId } = req.params;
+        const { availableBalance } = req.body;
+        if (!eventId) {
+            return res.status(400).json({ message: "Missing eventId in request params" });
+        }
+        const updatedEvent = await Event.findByIdAndUpdate(
+            eventId,
+            { availableBalance },
+            { new: true }
+        );
+
+        if (!updatedEvent) {
+            return res.status(404).json({ message: "Event not found" });
+        }
+        res.json(updatedEvent);
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
-    const updatedEvent = await Event.findByIdAndUpdate(
-      eventId,
-      { availableBalance },
-      { new: true }
-    );
- 
-    if (!updatedEvent) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-    res.json(updatedEvent);
- 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 };
 
 // Statistics And Report 
 exports.organizerStatisticsReport = async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    const providerId = req.user._id;
+    try {
+        const { eventId } = req.params;
+        const providerId = req.user._id;
 
-    // Verify event exists and belongs to the organizer
-    const event = await Event.findOne({ 
-      _id: eventId, 
-      createdBy: providerId,
-      isDelete: false 
-    });
+        // Verify event exists and belongs to the organizer
+        const event = await Event.findOne({
+            _id: eventId,
+            createdBy: providerId,
+            isDelete: false
+        });
 
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found or access denied' });
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found or access denied' });
+        }
+
+        // Get all orders for this event
+        const orders = await EventOrders.find({ eventId })
+            .populate('userId', 'name email')
+            .sort({ createdAt: 1 });
+
+        // Get ticket types for this event
+        const ticketTypes = await TicketType.find({ eventId });
+
+        // Calculate total statistics
+        const totalTicketsSold = orders.reduce((total, order) => {
+            return total + order.participantDetails.length;
+        }, 0);
+
+        const totalRevenue = orders
+            .filter(order => order.paymentStatus === 'confirmed')
+            .reduce((total, order) => total + order.totalAmount, 0);
+
+        const totalTicketCapacity = ticketTypes.reduce((total, ticket) => {
+            return total + parseInt(ticket.quantity);
+        }, 0);
+
+        const remainingTickets = totalTicketCapacity - totalTicketsSold;
+
+        // Calculate validation statistics
+        const ticketsValidated = orders.reduce((total, order) => {
+            return total + order.participantDetails.filter(participant => participant.validation).length;
+        }, 0);
+
+        const ticketsPendingValidation = totalTicketsSold - ticketsValidated;
+        const conversionRate = totalTicketsSold > 0 ? (ticketsValidated / totalTicketsSold) * 100 : 0;
+
+        // Payment status statistics
+        const pendingPaymentOrders = orders.filter(order => order.paymentStatus === 'pending').length;
+        const confirmedPaymentOrders = orders.filter(order => order.paymentStatus === 'confirmed').length;
+
+        // Generate data for last 7 days
+        const last7Days = getLast7Days();
+
+        // Graph 1: Total Tickets Sold (Line Graph) - Last 7 days
+        const totalTicketsSoldGraph = calculateDailyTicketsSold(orders, last7Days);
+
+        // Graph 2: Revenue Generated (Line Graph) - Last 7 days
+        const revenueGeneratedGraph = calculateDailyRevenue(orders, last7Days);
+
+        // Graph 3: Tickets Pending Payment (Line Graph) - Last 7 days
+        const ticketsPendingPaymentGraph = calculateDailyPendingPayments(orders, last7Days);
+
+        // Graph 4: Remaining Tickets & Sales Trends (Bar Graph) - Last 7 days
+        const remainingTicketsSalesGraph = calculateDailyRemainingTicketsAndSales(orders, ticketTypes, last7Days);
+
+        // Graph 5: Sales Evolution (Bar Graph) - Last 7 days
+        const salesEvolutionGraph = calculateSalesEvolution(orders, last7Days);
+
+        // Peak Sales Information (Not a graph)
+        const peakSalesInfo = calculatePeakSalesInfo(orders);
+
+        // Prepare response data
+        const statistics = {
+            eventInfo: {
+                eventName: event.eventName,
+                date: event.date,
+                location: event.location,
+                totalTicketCapacity,
+                status: event.status
+            },
+            overview: {
+                totalTicketsSold,
+                totalRevenue,
+                remainingTickets,
+                conversionRate: Math.round(conversionRate * 100) / 100,
+                ticketsValidated,
+                ticketsPendingValidation,
+                pendingPaymentOrders,
+                confirmedPaymentOrders
+            },
+            graphs: {
+                // Graph 1: Total Tickets Sold (Line Graph)
+                totalTicketsSold: totalTicketsSoldGraph,
+
+                // Graph 2: Revenue Generated (Line Graph)
+                revenueGenerated: revenueGeneratedGraph,
+
+                // Graph 3: Tickets Pending Payment (Line Graph)
+                ticketsPendingPayment: ticketsPendingPaymentGraph,
+
+                // Graph 4: Remaining Tickets & Sales Trends (Bar Graph)
+                remainingTicketsSales: remainingTicketsSalesGraph,
+
+                // Graph 5: Sales Evolution (Bar Graph)
+                salesEvolution: salesEvolutionGraph
+            },
+            peakSalesInfo: peakSalesInfo,
+            ticketTypeBreakdown: ticketTypes.map(ticket => ({
+                name: ticket.name,
+                quantity: ticket.quantity,
+                sold: ticket.sold || 0,
+                price: ticket.price,
+                remaining: parseInt(ticket.quantity) - (ticket.sold || 0)
+            }))
+        };
+
+        res.status(200).json({ statistics, message: "Fetch statistics successfully..." });
+
+    } catch (error) {
+        console.error('Error in organizerStatisticsReport:', error);
+        res.status(500).json({ error: error.message });
     }
-
-    // Get all orders for this event
-    const orders = await EventOrders.find({ eventId })
-      .populate('userId', 'name email')
-      .sort({ createdAt: 1 });
-
-    // Get ticket types for this event
-    const ticketTypes = await TicketType.find({ eventId });
-
-    // Calculate total statistics
-    const totalTicketsSold = orders.reduce((total, order) => {
-      return total + order.participantDetails.length;
-    }, 0);
-
-    const totalRevenue = orders
-      .filter(order => order.paymentStatus === 'confirmed')
-      .reduce((total, order) => total + order.totalAmount, 0);
-
-    const totalTicketCapacity = ticketTypes.reduce((total, ticket) => {
-      return total + parseInt(ticket.quantity);
-    }, 0);
-
-    const remainingTickets = totalTicketCapacity - totalTicketsSold;
-
-    // Calculate validation statistics
-    const ticketsValidated = orders.reduce((total, order) => {
-      return total + order.participantDetails.filter(participant => participant.validation).length;
-    }, 0);
-
-    const ticketsPendingValidation = totalTicketsSold - ticketsValidated;
-    const conversionRate = totalTicketsSold > 0 ? (ticketsValidated / totalTicketsSold) * 100 : 0;
-
-    // Payment status statistics
-    const pendingPaymentOrders = orders.filter(order => order.paymentStatus === 'pending').length;
-    const confirmedPaymentOrders = orders.filter(order => order.paymentStatus === 'confirmed').length;
-
-    // Generate data for last 7 days
-    const last7Days = getLast7Days();
-    
-    // Graph 1: Total Tickets Sold (Line Graph) - Last 7 days
-    const totalTicketsSoldGraph = calculateDailyTicketsSold(orders, last7Days);
-    
-    // Graph 2: Revenue Generated (Line Graph) - Last 7 days
-    const revenueGeneratedGraph = calculateDailyRevenue(orders, last7Days);
-    
-    // Graph 3: Tickets Pending Payment (Line Graph) - Last 7 days
-    const ticketsPendingPaymentGraph = calculateDailyPendingPayments(orders, last7Days);
-    
-    // Graph 4: Remaining Tickets & Sales Trends (Bar Graph) - Last 7 days
-    const remainingTicketsSalesGraph = calculateDailyRemainingTicketsAndSales(orders, ticketTypes, last7Days);
-    
-    // Graph 5: Sales Evolution (Bar Graph) - Last 7 days
-    const salesEvolutionGraph = calculateSalesEvolution(orders, last7Days);
-    
-    // Peak Sales Information (Not a graph)
-    const peakSalesInfo = calculatePeakSalesInfo(orders);
-
-    // Prepare response data
-    const statistics = {
-      eventInfo: {
-        eventName: event.eventName,
-        date: event.date,
-        location: event.location,
-        totalTicketCapacity,
-        status: event.status
-      },
-      overview: {
-        totalTicketsSold,
-        totalRevenue,
-        remainingTickets,
-        conversionRate: Math.round(conversionRate * 100) / 100,
-        ticketsValidated,
-        ticketsPendingValidation,
-        pendingPaymentOrders,
-        confirmedPaymentOrders
-      },
-      graphs: {
-        // Graph 1: Total Tickets Sold (Line Graph)
-        totalTicketsSold: totalTicketsSoldGraph,
-        
-        // Graph 2: Revenue Generated (Line Graph)
-        revenueGenerated: revenueGeneratedGraph,
-        
-        // Graph 3: Tickets Pending Payment (Line Graph)
-        ticketsPendingPayment: ticketsPendingPaymentGraph,
-        
-        // Graph 4: Remaining Tickets & Sales Trends (Bar Graph)
-        remainingTicketsSales: remainingTicketsSalesGraph,
-        
-        // Graph 5: Sales Evolution (Bar Graph)
-        salesEvolution: salesEvolutionGraph
-      },
-      peakSalesInfo: peakSalesInfo,
-      ticketTypeBreakdown: ticketTypes.map(ticket => ({
-        name: ticket.name,
-        quantity: ticket.quantity,
-        sold: ticket.sold || 0,
-        price: ticket.price,
-        remaining: parseInt(ticket.quantity) - (ticket.sold || 0)
-      }))
-    };
-
-    res.status(200).json({ statistics, message: "Fetch statistics successfully..." });
-
-  } catch (error) {
-    console.error('Error in organizerStatisticsReport:', error);
-    res.status(500).json({ error: error.message });
-  }
 };
 
 // Helper function to get last 7 days dates
 const getLast7Days = () => {
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    days.push(date.toISOString().split('T')[0]);
-  }
-  return days;
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        days.push(date.toISOString().split('T')[0]);
+    }
+    return days;
 };
 
 // Graph 1: Total Tickets Sold (Line Graph)
 const calculateDailyTicketsSold = (orders, last7Days) => {
-  const dailyData = {};
-  
-  // Initialize all days with 0
-  last7Days.forEach(day => {
-    dailyData[day] = 0;
-  });
+    const dailyData = {};
 
-  // Count tickets sold per day
-  orders.forEach(order => {
-    const orderDate = order.createdAt.toISOString().split('T')[0];
-    if (dailyData.hasOwnProperty(orderDate)) {
-      dailyData[orderDate] += order.participantDetails.length;
-    }
-  });
+    // Initialize all days with 0
+    last7Days.forEach(day => {
+        dailyData[day] = 0;
+    });
 
-  // Convert to array format for frontend
-  return last7Days.map(date => ({
-    date,
-    ticketsSold: dailyData[date]
-  }));
+    // Count tickets sold per day
+    orders.forEach(order => {
+        const orderDate = order.createdAt.toISOString().split('T')[0];
+        if (dailyData.hasOwnProperty(orderDate)) {
+            dailyData[orderDate] += order.participantDetails.length;
+        }
+    });
+
+    // Convert to array format for frontend
+    return last7Days.map(date => ({
+        date,
+        ticketsSold: dailyData[date]
+    }));
 };
 
 // Graph 2: Revenue Generated (Line Graph)
 const calculateDailyRevenue = (orders, last7Days) => {
-  const dailyData = {};
-  
-  // Initialize all days with 0
-  last7Days.forEach(day => {
-    dailyData[day] = 0;
-  });
+    const dailyData = {};
 
-  // Sum revenue from confirmed payments per day
-  orders.forEach(order => {
-    if (order.paymentStatus === 'confirmed') {
-      const orderDate = order.createdAt.toISOString().split('T')[0];
-      if (dailyData.hasOwnProperty(orderDate)) {
-        dailyData[orderDate] += order.totalAmount;
-      }
-    }
-  });
+    // Initialize all days with 0
+    last7Days.forEach(day => {
+        dailyData[day] = 0;
+    });
 
-  // Convert to array format for frontend
-  return last7Days.map(date => ({
-    date,
-    revenue: dailyData[date]
-  }));
+    // Sum revenue from confirmed payments per day
+    orders.forEach(order => {
+        if (order.paymentStatus === 'confirmed') {
+            const orderDate = order.createdAt.toISOString().split('T')[0];
+            if (dailyData.hasOwnProperty(orderDate)) {
+                dailyData[orderDate] += order.totalAmount;
+            }
+        }
+    });
+
+    // Convert to array format for frontend
+    return last7Days.map(date => ({
+        date,
+        revenue: dailyData[date]
+    }));
 };
 
 // Graph 3: Tickets Pending Payment (Line Graph)
 const calculateDailyPendingPayments = (orders, last7Days) => {
-  const dailyData = {};
-  
-  // Initialize all days with 0
-  last7Days.forEach(day => {
-    dailyData[day] = 0;
-  });
+    const dailyData = {};
 
-  // Count pending payment tickets per day
-  orders.forEach(order => {
-    if (order.paymentStatus === 'pending') {
-      const orderDate = order.createdAt.toISOString().split('T')[0];
-      if (dailyData.hasOwnProperty(orderDate)) {
-        dailyData[orderDate] += order.participantDetails.length;
-      }
-    }
-  });
+    // Initialize all days with 0
+    last7Days.forEach(day => {
+        dailyData[day] = 0;
+    });
 
-  // Convert to array format for frontend
-  return last7Days.map(date => ({
-    date,
-    pendingTickets: dailyData[date]
-  }));
+    // Count pending payment tickets per day
+    orders.forEach(order => {
+        if (order.paymentStatus === 'pending') {
+            const orderDate = order.createdAt.toISOString().split('T')[0];
+            if (dailyData.hasOwnProperty(orderDate)) {
+                dailyData[orderDate] += order.participantDetails.length;
+            }
+        }
+    });
+
+    // Convert to array format for frontend
+    return last7Days.map(date => ({
+        date,
+        pendingTickets: dailyData[date]
+    }));
 };
 
 // Graph 4: Remaining Tickets & Sales Trends (Bar Graph)
 const calculateDailyRemainingTicketsAndSales = (orders, ticketTypes, last7Days) => {
-  const totalCapacity = ticketTypes.reduce((total, ticket) => total + parseInt(ticket.quantity), 0);
-  const dailyData = {};
-  
-  // Initialize all days
-  last7Days.forEach(day => {
-    dailyData[day] = {
-      date: day,
-      ticketsSold: 0,
-      remainingTickets: totalCapacity
-    };
-  });
+    const totalCapacity = ticketTypes.reduce((total, ticket) => total + parseInt(ticket.quantity), 0);
+    const dailyData = {};
 
-  // Calculate cumulative sales and remaining tickets per day
-  let cumulativeSales = 0;
-  last7Days.forEach(day => {
-    // Add today's sales
-    const dayOrders = orders.filter(order => 
-      order.createdAt.toISOString().split('T')[0] === day
-    );
-    const dayTicketsSold = dayOrders.reduce((total, order) => 
-      total + order.participantDetails.length, 0
-    );
-    
-    cumulativeSales += dayTicketsSold;
-    dailyData[day].ticketsSold = dayTicketsSold;
-    dailyData[day].remainingTickets = totalCapacity - cumulativeSales;
-  });
+    // Initialize all days
+    last7Days.forEach(day => {
+        dailyData[day] = {
+            date: day,
+            ticketsSold: 0,
+            remainingTickets: totalCapacity
+        };
+    });
 
-  return last7Days.map(date => dailyData[date]);
+    // Calculate cumulative sales and remaining tickets per day
+    let cumulativeSales = 0;
+    last7Days.forEach(day => {
+        // Add today's sales
+        const dayOrders = orders.filter(order =>
+            order.createdAt.toISOString().split('T')[0] === day
+        );
+        const dayTicketsSold = dayOrders.reduce((total, order) =>
+            total + order.participantDetails.length, 0
+        );
+
+        cumulativeSales += dayTicketsSold;
+        dailyData[day].ticketsSold = dayTicketsSold;
+        dailyData[day].remainingTickets = totalCapacity - cumulativeSales;
+    });
+
+    return last7Days.map(date => dailyData[date]);
 };
 
 // Graph 5: Sales Evolution (Bar Graph)
 const calculateSalesEvolution = (orders, last7Days) => {
-  const dailyData = {};
-  
-  // Initialize all days with 0
-  last7Days.forEach(day => {
-    dailyData[day] = {
-      date: day,
-      orders: 0,
-      tickets: 0
-    };
-  });
+    const dailyData = {};
 
-  // Count orders and tickets per day
-  orders.forEach(order => {
-    const orderDate = order.createdAt.toISOString().split('T')[0];
-    if (dailyData.hasOwnProperty(orderDate)) {
-      dailyData[orderDate].orders += 1;
-      dailyData[orderDate].tickets += order.participantDetails.length;
-    }
-  });
+    // Initialize all days with 0
+    last7Days.forEach(day => {
+        dailyData[day] = {
+            date: day,
+            orders: 0,
+            tickets: 0
+        };
+    });
 
-  return last7Days.map(date => dailyData[date]);
+    // Count orders and tickets per day
+    orders.forEach(order => {
+        const orderDate = order.createdAt.toISOString().split('T')[0];
+        if (dailyData.hasOwnProperty(orderDate)) {
+            dailyData[orderDate].orders += 1;
+            dailyData[orderDate].tickets += order.participantDetails.length;
+        }
+    });
+
+    return last7Days.map(date => dailyData[date]);
 };
 
 // Peak Sales Information (Not a graph)
 const calculatePeakSalesInfo = (orders) => {
-  if (orders.length === 0) {
+    if (orders.length === 0) {
+        return {
+            peakDay: 'No sales yet',
+            peakTime: 'No sales yet',
+            maxTicketsSold: 0
+        };
+    }
+
+    const hourlySales = {};
+    const dailySales = {};
+
+    // Analyze sales by hour and day
+    orders.forEach(order => {
+        const orderDate = new Date(order.createdAt);
+        const day = orderDate.toISOString().split('T')[0];
+        const hour = orderDate.getHours();
+        const hourKey = `${hour}:00`;
+        const tickets = order.participantDetails.length;
+
+        // Daily sales
+        if (!dailySales[day]) {
+            dailySales[day] = 0;
+        }
+        dailySales[day] += tickets;
+
+        // Hourly sales
+        if (!hourlySales[hourKey]) {
+            hourlySales[hourKey] = 0;
+        }
+        hourlySales[hourKey] += tickets;
+    });
+
+    // Find peak day
+    const peakDayEntry = Object.entries(dailySales).reduce((max, [day, sales]) =>
+        sales > max.sales ? { day, sales } : max, { day: '', sales: 0 }
+    );
+
+    // Find peak time
+    const peakTimeEntry = Object.entries(hourlySales).reduce((max, [time, sales]) =>
+        sales > max.sales ? { time, sales } : max, { time: '', sales: 0 }
+    );
+
     return {
-      peakDay: 'No sales yet',
-      peakTime: 'No sales yet',
-      maxTicketsSold: 0
+        peakDay: peakDayEntry.day || 'No sales yet',
+        peakTime: peakTimeEntry.time || 'No sales yet',
+        maxTicketsSold: peakDayEntry.sales
     };
-  }
-
-  const hourlySales = {};
-  const dailySales = {};
-
-  // Analyze sales by hour and day
-  orders.forEach(order => {
-    const orderDate = new Date(order.createdAt);
-    const day = orderDate.toISOString().split('T')[0];
-    const hour = orderDate.getHours();
-    const hourKey = `${hour}:00`;
-    const tickets = order.participantDetails.length;
-
-    // Daily sales
-    if (!dailySales[day]) {
-      dailySales[day] = 0;
-    }
-    dailySales[day] += tickets;
-
-    // Hourly sales
-    if (!hourlySales[hourKey]) {
-      hourlySales[hourKey] = 0;
-    }
-    hourlySales[hourKey] += tickets;
-  });
-
-  // Find peak day
-  const peakDayEntry = Object.entries(dailySales).reduce((max, [day, sales]) => 
-    sales > max.sales ? { day, sales } : max, { day: '', sales: 0 }
-  );
-
-  // Find peak time
-  const peakTimeEntry = Object.entries(hourlySales).reduce((max, [time, sales]) => 
-    sales > max.sales ? { time, sales } : max, { time: '', sales: 0 }
-  );
-
-  return {
-    peakDay: peakDayEntry.day || 'No sales yet',
-    peakTime: peakTimeEntry.time || 'No sales yet',
-    maxTicketsSold: peakDayEntry.sales
-  };
 };
 
 // Helper function to calculate sales trends
 const calculateSalesTrends = (orders) => {
-  const trends = {};
-  
-  orders.forEach(order => {
-    const date = order.createdAt.toISOString().split('T')[0];
-    const revenue = order.paymentStatus === 'confirmed' ? order.totalAmount : 0;
-    const tickets = order.participantDetails.length;
+    const trends = {};
 
-    if (!trends[date]) {
-      trends[date] = {
-        date,
-        revenue: 0,
-        tickets: 0,
-        orders: 0
-      };
-    }
+    orders.forEach(order => {
+        const date = order.createdAt.toISOString().split('T')[0];
+        const revenue = order.paymentStatus === 'confirmed' ? order.totalAmount : 0;
+        const tickets = order.participantDetails.length;
 
-    trends[date].revenue += revenue;
-    trends[date].tickets += tickets;
-    trends[date].orders += 1;
-  });
+        if (!trends[date]) {
+            trends[date] = {
+                date,
+                revenue: 0,
+                tickets: 0,
+                orders: 0
+            };
+        }
 
-  return Object.values(trends).sort((a, b) => new Date(a.date) - new Date(b.date));
+        trends[date].revenue += revenue;
+        trends[date].tickets += tickets;
+        trends[date].orders += 1;
+    });
+
+    return Object.values(trends).sort((a, b) => new Date(a.date) - new Date(b.date));
 };
 
 // Helper function to calculate peak sales
 const calculatePeakSales = (orders) => {
-  const hourlySales = {};
-  
-  orders.forEach(order => {
-    const hour = new Date(order.createdAt).getHours();
-    const hourKey = `${hour}:00-${hour + 1}:00`;
-    const tickets = order.participantDetails.length;
+    const hourlySales = {};
 
-    if (!hourlySales[hourKey]) {
-      hourlySales[hourKey] = {
-        time: hourKey,
-        tickets: 0,
-        orders: 0
-      };
-    }
+    orders.forEach(order => {
+        const hour = new Date(order.createdAt).getHours();
+        const hourKey = `${hour}:00-${hour + 1}:00`;
+        const tickets = order.participantDetails.length;
 
-    hourlySales[hourKey].tickets += tickets;
-    hourlySales[hourKey].orders += 1;
-  });
+        if (!hourlySales[hourKey]) {
+            hourlySales[hourKey] = {
+                time: hourKey,
+                tickets: 0,
+                orders: 0
+            };
+        }
 
-  return Object.values(hourlySales).sort((a, b) => {
-    const aHour = parseInt(a.time.split(':')[0]);
-    const bHour = parseInt(b.time.split(':')[0]);
-    return aHour - bHour;
-  });
+        hourlySales[hourKey].tickets += tickets;
+        hourlySales[hourKey].orders += 1;
+    });
+
+    return Object.values(hourlySales).sort((a, b) => {
+        const aHour = parseInt(a.time.split(':')[0]);
+        const bHour = parseInt(b.time.split(':')[0]);
+        return aHour - bHour;
+    });
 };
 
 // Helper function to calculate day-wise sales
 const calculateDayWiseSales = (orders) => {
-  const dayWise = {};
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  
-  orders.forEach(order => {
-    const day = new Date(order.createdAt).getDay();
-    const dayName = days[day];
-    const revenue = order.paymentStatus === 'confirmed' ? order.totalAmount : 0;
-    const tickets = order.participantDetails.length;
+    const dayWise = {};
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    if (!dayWise[dayName]) {
-      dayWise[dayName] = {
+    orders.forEach(order => {
+        const day = new Date(order.createdAt).getDay();
+        const dayName = days[day];
+        const revenue = order.paymentStatus === 'confirmed' ? order.totalAmount : 0;
+        const tickets = order.participantDetails.length;
+
+        if (!dayWise[dayName]) {
+            dayWise[dayName] = {
+                day: dayName,
+                revenue: 0,
+                tickets: 0,
+                orders: 0
+            };
+        }
+
+        dayWise[dayName].revenue += revenue;
+        dayWise[dayName].tickets += tickets;
+        dayWise[dayName].orders += 1;
+    });
+
+    // Ensure all days are present in response
+    return days.map(dayName => ({
         day: dayName,
-        revenue: 0,
-        tickets: 0,
-        orders: 0
-      };
-    }
-
-    dayWise[dayName].revenue += revenue;
-    dayWise[dayName].tickets += tickets;
-    dayWise[dayName].orders += 1;
-  });
-
-  // Ensure all days are present in response
-  return days.map(dayName => ({
-    day: dayName,
-    revenue: dayWise[dayName]?.revenue || 0,
-    tickets: dayWise[dayName]?.tickets || 0,
-    orders: dayWise[dayName]?.orders || 0
-  }));
+        revenue: dayWise[dayName]?.revenue || 0,
+        tickets: dayWise[dayName]?.tickets || 0,
+        orders: dayWise[dayName]?.orders || 0
+    }));
 };
