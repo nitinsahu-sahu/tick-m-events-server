@@ -1,5 +1,6 @@
 const User = require('../../models/User');
 const Event = require('../../models/event-details/Event');
+const EventOrder = require('../../models/event-order/EventOrder');
 const TicketType = require('../../models/TicketType');
 const PaymentHistory = require('../../models/admin-payment/payment-history');
 const ServiceRequest = require('../../models/service-reequest/service-request');
@@ -20,24 +21,41 @@ exports.getDashbordData = async (req, res) => {
     });
 
     // Calculate total revenue from all ticket configurations
-    const allTickets = await TicketType.find()
-      .populate('eventId', 'status') // Only populate status to check if event is approved
-      .lean();
-
-    let totalRevenue = 0;
-
-    allTickets.forEach(ticket => {
-      // Only count revenue from approved events
-      if (ticket.eventId && ticket.eventId.status === 'approved') {
-        // Extract numeric value from price string (e.g., "5000 XAF" -> 5000)
-        const priceStr = ticket.price.split(' ')[0];
-        const price = parseFloat(priceStr) || 0;
-        const soldQuantity = parseInt(ticket.sold) || 0;
-
-        // Revenue = price × quantity sold
-        totalRevenue += price * soldQuantity;
+    // Calculate total revenue from confirmed orders only
+    const confirmedOrders = await EventOrder.aggregate([
+      {
+        $match: {
+          paymentStatus: 'confirmed'
+        }
+      },
+      {
+        $lookup: {
+          from: 'events', // assuming your events collection name is 'events'
+          localField: 'eventId',
+          foreignField: '_id',
+          as: 'event'
+        }
+      },
+      {
+        $unwind: {
+          path: '$event',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $match: {
+          'event.status': 'approved'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$totalAmount' }
+        }
       }
-    });
+    ]);
+
+    let totalRevenue = confirmedOrders.length > 0 ? confirmedOrders[0].totalRevenue : 0;
 
     // Get processed transactions data
     const processedTransactions = await PaymentHistory.countDocuments({
@@ -79,7 +97,7 @@ exports.getDashbordData = async (req, res) => {
       activeProviders,
       totalRevenue: totalRevenue,
       processedTransactions: processedTransactions || 0, // or use successfulTransactions
-      successfulTransactions: successfulTransactions|| 0,
+      successfulTransactions: successfulTransactions || 0,
       transactionStats: {
         totalProcessedAmount: stats.totalProcessedAmount,
         totalFeeAmount: stats.totalFeeAmount,

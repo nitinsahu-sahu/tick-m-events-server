@@ -1,7 +1,7 @@
 const adminPaymentHistory = require("../../../models/admin-payment/payment-history");
 const Event = require("../../../models/event-details/Event");
-const TicketType = require("../../../models/TicketType");
 const RefundRequest = require("../../../models/refund-managment/RefundRequest");
+const EventOrder = require("../../../models/event-order/EventOrder");
 
 
 exports.getAllAdminTransactions = async (req, res) => {
@@ -92,25 +92,41 @@ exports.getAllAdminTransactions = async (req, res) => {
 
 exports.getFinancialStatistics = async (req, res) => {
     try {
-        // Calculate total revenue from all ticket configurations
-        const allTickets = await TicketType.find()
-            .populate('eventId', 'status') // Only populate status to check if event is approved
-            .lean();
-
-        let totalRevenue = 0;
-
-        allTickets.forEach(ticket => {
-            // Only count revenue from approved events
-            if (ticket.eventId && ticket.eventId.status === 'approved') {
-                // Extract numeric value from price string (e.g., "5000 XAF" -> 5000)
-                const priceStr = ticket.price.split(' ')[0];
-                const price = parseFloat(priceStr) || 0;
-                const soldQuantity = parseInt(ticket.sold) || 0;
-
-                // Revenue = price × quantity sold
-                totalRevenue += price * soldQuantity;
+        // Calculate total revenue from confirmed orders only
+        const confirmedOrders = await EventOrder.aggregate([
+            {
+                $match: {
+                    paymentStatus: 'confirmed'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'events', // assuming your events collection name is 'events'
+                    localField: 'eventId',
+                    foreignField: '_id',
+                    as: 'event'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$event',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $match: {
+                    'event.status': 'approved'
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalRevenue: { $sum: '$totalAmount' }
+                }
             }
-        });
+        ]);
+
+        let totalRevenue = confirmedOrders.length > 0 ? confirmedOrders[0].totalRevenue : 0;
 
         // Get refund statistics from RefundRequest table
         const refundStats = await RefundRequest.aggregate([
@@ -124,18 +140,10 @@ exports.getFinancialStatistics = async (req, res) => {
         ]);
 
         // Calculate approved refunds count and amount
-        let approvedRefundsCount = 0;
-        let approvedRefundsAmount = 0;
-        let pendingRefundsCount = 0;
         let processedRefundsCount = 0;
 
         refundStats.forEach(stat => {
-            if (stat._id === 'approved') {
-                approvedRefundsCount = stat.count;
-                approvedRefundsAmount = stat.totalAmount;
-            } else if (stat._id === 'pending') {
-                pendingRefundsCount = stat.count;
-            } else if (stat._id === 'processed' || stat._id === 'refunded') {
+            if (stat._id === 'processed' || stat._id === 'refunded') {
                 processedRefundsCount += stat.count;
             }
         });
@@ -192,14 +200,12 @@ exports.getFinancialStatistics = async (req, res) => {
 
         // Prepare response data
         const ticketTrnsSup = {
-            totalSales: `${totalRevenue.toLocaleString()} XAF`,
-            totalApprovedRefundAmount: `${totalApprovedRefundAmount.toLocaleString()} XAF`,
-            totalCommission: `${totalCommission.toLocaleString()} XAF`,
-            commitionTicketActivity: `${commitionTicketActivity.toLocaleString()} XAF`,
-            pendingPayment:`${pendingPayment.toLocaleString()} XAF`
+            totalSales: totalRevenue,
+            totalApprovedRefundAmount: totalApprovedRefundAmount,
+            totalCommission: totalCommission,
+            commitionTicketActivity: commitionTicketActivity,
+            pendingPayment: pendingPayment
         };
-
-       
 
         res.status(200).json({
             success: true,
