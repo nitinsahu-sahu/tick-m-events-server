@@ -119,14 +119,22 @@ exports.getFinancialStatistics = async (req, res) => {
                 }
             },
             {
+                $unwind: '$tickets' // Unwind the tickets array to calculate for each ticket
+            },
+            {
                 $group: {
                     _id: null,
-                    totalRevenue: { $sum: '$totalAmount' }
+                    totalRevenue: {
+                        $sum: {
+                            $multiply: ['$tickets.quantity', '$tickets.unitPrice']
+                        }
+                    }
                 }
             }
         ]);
 
         let totalRevenue = confirmedOrders.length > 0 ? confirmedOrders[0].totalRevenue : 0;
+console.log('totalRevenue',totalRevenue);
 
         // Get refund statistics from RefundRequest table
         const refundStats = await RefundRequest.aggregate([

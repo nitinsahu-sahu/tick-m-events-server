@@ -21,41 +21,47 @@ exports.getDashbordData = async (req, res) => {
     });
 
     // Calculate total revenue from all ticket configurations
-    // Calculate total revenue from confirmed orders only
     const confirmedOrders = await EventOrder.aggregate([
-      {
-        $match: {
-          paymentStatus: 'confirmed'
-        }
-      },
-      {
-        $lookup: {
-          from: 'events', // assuming your events collection name is 'events'
-          localField: 'eventId',
-          foreignField: '_id',
-          as: 'event'
-        }
-      },
-      {
-        $unwind: {
-          path: '$event',
-          preserveNullAndEmptyArrays: true
-        }
-      },
-      {
-        $match: {
-          'event.status': 'approved'
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: '$totalAmount' }
-        }
-      }
-    ]);
+            {
+                $match: {
+                    paymentStatus: 'confirmed'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'events', // assuming your events collection name is 'events'
+                    localField: 'eventId',
+                    foreignField: '_id',
+                    as: 'event'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$event',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $match: {
+                    'event.status': 'approved'
+                }
+            },
+            {
+                $unwind: '$tickets' // Unwind the tickets array to calculate for each ticket
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalRevenue: { 
+                        $sum: { 
+                            $multiply: ['$tickets.quantity', '$tickets.unitPrice'] 
+                        } 
+                    }
+                }
+            }
+        ]);
 
-    let totalRevenue = confirmedOrders.length > 0 ? confirmedOrders[0].totalRevenue : 0;
+        let totalRevenue = confirmedOrders.length > 0 ? confirmedOrders[0].totalRevenue : 0;
 
     // Get processed transactions data
     const processedTransactions = await PaymentHistory.countDocuments({
