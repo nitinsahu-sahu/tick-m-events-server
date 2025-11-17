@@ -535,8 +535,6 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
     }
 }
 
-// FIXED: Removed async keyword since this function doesn't perform any async operations
-
 const calculateTicketStatistics = (tickets, ticketType, eventOrder, refundRequests, formattedTickets) => {
     const totalTicketQuantity = ticketType.reduce((total, t) => {
         const quantity = parseInt(t.quantity) || 0;
@@ -544,10 +542,13 @@ const calculateTicketStatistics = (tickets, ticketType, eventOrder, refundReques
     }, 0);
 
     // Calculate sold tickets (confirmed payments only)
-    const soldTickets = ticketType.reduce((total, t) => {
-        const quantity = t.sold || 0;
-        return total + quantity;
-    }, 0);
+    const soldTickets = eventOrder
+        .filter(order => order.paymentStatus === 'confirmed')
+        .reduce((total, order) => {
+            return total + order.tickets.reduce((orderTotal, ticket) => {
+                return orderTotal + (ticket.quantity || 0);
+            }, 0);
+        }, 0);
 
     // Calculate verified entries
     const verifiedEntries = formattedTickets.length;
@@ -577,7 +578,6 @@ const calculateTicketStatistics = (tickets, ticketType, eventOrder, refundReques
     // Calculate verification rate
     const verificationRate = soldTickets > 0 ? (verifiedEntries / soldTickets) * 100 : 0;
 
-    // Enhanced: Calculate statistics per ticket type with proper parsing
     const byTicketType = tickets.flatMap(ticketConfig =>
         ticketConfig.tickets?.map(ticket => {
             const totalQuantity = parseInt(ticket.totalTickets) || 0;
@@ -634,12 +634,6 @@ const calculateTicketStatistics = (tickets, ticketType, eventOrder, refundReques
             };
         }) || []
     );
-
-    console.log('totalTicketQuantity', totalTicketQuantity);
-    console.log('soldTickets', soldTickets);
-    console.log('pendingTickets', pendingTickets);
-    console.log('availableTickets', availableTickets);
-    console.log('verifiedEntries', verifiedEntries);
 
     return {
         totalTicketQuantity,
@@ -1453,92 +1447,4 @@ const calculatePeakSalesInfo = (orders) => {
         peakTime: peakTimeEntry.time || 'No sales yet',
         maxTicketsSold: peakDayEntry.sales
     };
-};
-
-// Helper function to calculate sales trends
-const calculateSalesTrends = (orders) => {
-    const trends = {};
-
-    orders.forEach(order => {
-        const date = order.createdAt.toISOString().split('T')[0];
-        const revenue = order.paymentStatus === 'confirmed' ? order.totalAmount : 0;
-        const tickets = order.participantDetails.length;
-
-        if (!trends[date]) {
-            trends[date] = {
-                date,
-                revenue: 0,
-                tickets: 0,
-                orders: 0
-            };
-        }
-
-        trends[date].revenue += revenue;
-        trends[date].tickets += tickets;
-        trends[date].orders += 1;
-    });
-
-    return Object.values(trends).sort((a, b) => new Date(a.date) - new Date(b.date));
-};
-
-// Helper function to calculate peak sales
-const calculatePeakSales = (orders) => {
-    const hourlySales = {};
-
-    orders.forEach(order => {
-        const hour = new Date(order.createdAt).getHours();
-        const hourKey = `${hour}:00-${hour + 1}:00`;
-        const tickets = order.participantDetails.length;
-
-        if (!hourlySales[hourKey]) {
-            hourlySales[hourKey] = {
-                time: hourKey,
-                tickets: 0,
-                orders: 0
-            };
-        }
-
-        hourlySales[hourKey].tickets += tickets;
-        hourlySales[hourKey].orders += 1;
-    });
-
-    return Object.values(hourlySales).sort((a, b) => {
-        const aHour = parseInt(a.time.split(':')[0]);
-        const bHour = parseInt(b.time.split(':')[0]);
-        return aHour - bHour;
-    });
-};
-
-// Helper function to calculate day-wise sales
-const calculateDayWiseSales = (orders) => {
-    const dayWise = {};
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-    orders.forEach(order => {
-        const day = new Date(order.createdAt).getDay();
-        const dayName = days[day];
-        const revenue = order.paymentStatus === 'confirmed' ? order.totalAmount : 0;
-        const tickets = order.participantDetails.length;
-
-        if (!dayWise[dayName]) {
-            dayWise[dayName] = {
-                day: dayName,
-                revenue: 0,
-                tickets: 0,
-                orders: 0
-            };
-        }
-
-        dayWise[dayName].revenue += revenue;
-        dayWise[dayName].tickets += tickets;
-        dayWise[dayName].orders += 1;
-    });
-
-    // Ensure all days are present in response
-    return days.map(dayName => ({
-        day: dayName,
-        revenue: dayWise[dayName]?.revenue || 0,
-        tickets: dayWise[dayName]?.tickets || 0,
-        orders: dayWise[dayName]?.orders || 0
-    }));
 };
