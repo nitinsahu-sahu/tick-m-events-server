@@ -475,8 +475,6 @@ exports.fetchEventOrganizerSelect = async (req, res, next) => {
                 cancelledProjects: placeABid.filter(project => project.bidStatus === 'cancelled').length
             };
 
-            console.log('ticketStatistics', ticketStatistics);
-
             return {
                 ...event,
                 eventStatus: isUpcoming ? 'upcoming' : 'past', // Add event status for frontend

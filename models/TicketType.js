@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
 const ticketTypeSchema = new Schema({
-   eventId: {
+  eventId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Event",
     required: true,
@@ -18,7 +18,8 @@ const ticketTypeSchema = new Schema({
     min: [1, "Minimum quantity should be 1"]
   },
   sold: {
-    type: Number
+    type: Number,
+    default: 0,
   },
   ticketDescription: {
     type: String,
