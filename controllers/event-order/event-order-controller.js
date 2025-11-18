@@ -16,6 +16,7 @@ const axios = require("axios");
 const RewardTransaction = require("../../models/RewardTrans");
 const fs = require('fs');
 const path = require('path');
+const { log } = require('console');
 
 // Get Validated tickets
 exports.fetchUserValidatedTickets = async (req, res) => {
@@ -121,7 +122,7 @@ exports.createOrder = async (req, res) => {
       qrCode: qrImage,
       deviceUsed,
       paymentStatus: "initiated", // default until payment confirmed
-       fapshiExternalId: clientExternalId, 
+      fapshiExternalId: clientExternalId,
     });
 
     const savedOrder = await newOrder.save({ session });
@@ -176,7 +177,7 @@ exports.createOrder = async (req, res) => {
         email: userEmail,
         redirectUrl: `${process.env.FRONTEND_URL}/ticket-purchase-process?orderId=${savedOrder._id}&status=success`,
         userId: req.user._id.toString(),
-         externalId: clientExternalId,
+        externalId: clientExternalId,
         paymentType: "event",
         message: `Ticket purchase for event ${eventId}`,
       };
@@ -1165,11 +1166,13 @@ exports.updateOrderVerifyEntryStatus = async (req, res) => {
 exports.getPurchseTicketUserList = async (req, res) => {
   try {
     const organizerId = req.user._id;
+    const { eventId } = req.params;
 
     // First, find all events created by this organizer
-    const events = await mongoose.model('Event').find({
+    const events = await Event.find({
       createdBy: organizerId,
-      isDelete: false
+      isDelete: false,
+      _id: eventId
     }).select('_id eventName');
 
     if (!events.length) {
@@ -1183,8 +1186,9 @@ exports.getPurchseTicketUserList = async (req, res) => {
     const eventIds = events.map(event => event._id);
 
     // Then find all orders for these events, populating user details
-    const orders = await mongoose.model('EventOrder').find({
-      eventId: { $in: eventIds }
+    const orders = await EventOrder.find({
+      eventId: { $in: eventIds },
+      paymentStatus:"confirmed"
     })
       .populate({
         path: 'userId',
