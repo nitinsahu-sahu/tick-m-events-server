@@ -1145,7 +1145,7 @@ exports.organizerStatisticsReport = async (req, res) => {
         }
 
         // Get all orders for this event
-        const orders = await EventOrders.find({ eventId })
+        const orders = await EventOrders.find({ eventId, paymentStatus: "confirmed" })
             .populate('userId', 'name email')
             .sort({ createdAt: 1 });
 

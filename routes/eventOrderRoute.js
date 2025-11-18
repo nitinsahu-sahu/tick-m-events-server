@@ -30,6 +30,6 @@ router.patch('/verify-entry', updateOrderVerifyEntryStatus);
 
 // Get all orders (admin)
 router.get('/', getAllOrders);
-router.get('/event-ticket-purchase-user', verifyToken, getPurchseTicketUserList);
+router.get('/event-ticket-purchase-user/:eventId', verifyToken, getPurchseTicketUserList);
 
 module.exports = router;
