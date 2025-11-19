@@ -1,11 +1,12 @@
 const TicketType = require("../models/TicketType");
 const TicketConfiguration = require('../models/event-details/Ticket');
+const EventOrders = require('../models/event-order/EventOrder');
 
 exports.fetchTicketType = async (req, res) => {
   try {
-    // Assuming user ID is available in req.user._id (common with JWT/auth middleware)
     const userId = req.user._id;
     const { eventId } = req.query;
+    
     if (!userId) {
       return res.status(400).json({
         success: false,
@@ -18,13 +19,29 @@ exports.fetchTicketType = async (req, res) => {
         message: "Event ID is required"
       });
     }
-    const ticketTypes = await TicketType.find({ createdBy: userId, eventId })
-      .sort({ createdAt: -1 }); // Optional: sort by newest first
 
+    const ticketTypes = await TicketType.find({ createdBy: userId, eventId })
+      .sort({ createdAt: -1 });
+
+    // Get all orders for this event
+    const orders = await EventOrders.find({ eventId, paymentStatus: "confirmed" })
+      .populate('userId', 'name email')
+      .sort({ createdAt: 1 });
+
+    const last12Months = getLast12Months();
+    
+    // Calculate revenue data
+    const revenueGeneratedGraph = calculateMonthlyRevenue(orders, last12Months);
+    const ticketWiseRevenue = calculateTicketWiseRevenue(orders, last12Months);
+    
     res.status(200).json({
       success: true,
       count: ticketTypes.length,
-      data: ticketTypes
+      data: ticketTypes,
+      revenueData: {
+        monthlyRevenue: revenueGeneratedGraph,
+        ticketWiseRevenue: ticketWiseRevenue
+      }
     });
 
   } catch (error) {
@@ -34,6 +51,103 @@ exports.fetchTicketType = async (req, res) => {
       error: error.message
     });
   }
+};
+
+// Helper function to get last 12 months in 'YYYY-MM' format
+const getLast12Months = () => {
+  const months = [];
+  const date = new Date();
+  
+  for (let i = 11; i >= 0; i--) {
+    const tempDate = new Date();
+    tempDate.setMonth(tempDate.getMonth() - i);
+    const year = tempDate.getFullYear();
+    const month = String(tempDate.getMonth() + 1).padStart(2, '0');
+    months.push(`${year}-${month}`);
+  }
+  return months;
+};
+
+// Calculate monthly revenue
+const calculateMonthlyRevenue = (orders, last12Months) => {
+  const monthlyData = {};
+
+  // Initialize all months with 0
+  last12Months.forEach(month => {
+    monthlyData[month] = 0;
+  });
+
+  // Sum revenue from confirmed payments per month
+  orders.forEach(order => {
+    if (order.paymentStatus === 'confirmed') {
+      const orderMonth = order.createdAt.toISOString().slice(0, 7); // Gets 'YYYY-MM'
+      if (monthlyData.hasOwnProperty(orderMonth)) {
+        monthlyData[orderMonth] += order.totalAmount;
+      }
+    }
+  });
+
+  // Convert to array format for frontend
+  return last12Months.map(month => ({
+    month,
+    revenue: monthlyData[month]
+  }));
+};
+
+// Calculate ticket-wise revenue
+const calculateTicketWiseRevenue = (orders, last12Months) => {
+  const ticketData = {};
+
+  // Initialize structure for all ticket types across all months
+  orders.forEach(order => {
+    if (order.paymentStatus === 'confirmed') {
+      order.tickets.forEach(ticket => {
+        const ticketType = ticket.ticketType;
+        
+        if (!ticketData[ticketType]) {
+          ticketData[ticketType] = {
+            ticketType: ticketType,
+            monthlyRevenue: {},
+            totalRevenue: 0,
+            totalTicketsSold: 0
+          };
+          
+          // Initialize all months with 0
+          last12Months.forEach(month => {
+            ticketData[ticketType].monthlyRevenue[month] = {
+              revenue: 0,
+              ticketsSold: 0
+            };
+          });
+        }
+
+        const orderMonth = order.createdAt.toISOString().slice(0, 7);
+        const ticketRevenue = ticket.quantity * ticket.unitPrice;
+        
+        if (ticketData[ticketType].monthlyRevenue[orderMonth]) {
+          ticketData[ticketType].monthlyRevenue[orderMonth].revenue += ticketRevenue;
+          ticketData[ticketType].monthlyRevenue[orderMonth].ticketsSold += ticket.quantity;
+        }
+        
+        ticketData[ticketType].totalRevenue += ticketRevenue;
+        ticketData[ticketType].totalTicketsSold += ticket.quantity;
+      });
+    }
+  });
+
+  // Convert to frontend-friendly format
+  const result = Object.values(ticketData).map(ticket => ({
+    ticketType: ticket.ticketType,
+    totalRevenue: ticket.totalRevenue,
+    totalTicketsSold: ticket.totalTicketsSold,
+    monthlyBreakdown: last12Months.map(month => ({
+      month,
+      revenue: ticket.monthlyRevenue[month].revenue,
+      ticketsSold: ticket.monthlyRevenue[month].ticketsSold
+    }))
+  }));
+
+  return result;
 };
 
 exports.createTicketType = async (req, res) => {
