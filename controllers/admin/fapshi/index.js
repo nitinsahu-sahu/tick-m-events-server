@@ -416,7 +416,7 @@ exports.paymentWebhookController = async (req, res) => {
                 if (project) {
                   project.status = "ongoing";
                   project.bidStatus = "closed";
-                  project.isSigned = false;
+                  project.isSigned = true;
                   project.updatedAt = new Date();
                   await project.save();
                   console.log(`🏗️ Project ${bid.projectId} updated successfully`);

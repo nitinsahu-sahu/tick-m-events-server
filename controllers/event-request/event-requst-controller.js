@@ -1,4 +1,5 @@
 const EventRequest = require("../../models/event-request/event-requests.model");
+const Bid = require("../../models/event-request/bid.modal");
 const User = require("../../models/User");
 const ProviderService = require("../../models/service-reequest/service-request");
 const mongoose = require('mongoose');
@@ -20,7 +21,7 @@ exports.serviceUpdateStatus = async (req, res) => {
         // Find the event request
         const eventRequest = await EventRequest.findById(id)
             .populate('providerId', 'gigsCounts')
-        
+
         if (!eventRequest) {
             return res.status(404).json({
                 success: false,
@@ -58,9 +59,9 @@ exports.serviceUpdateStatus = async (req, res) => {
 // Helper function to update user gig counts
 async function updateUserGigCounts(userId, previousStatus, newStatus) {
     const user = await User.findById(userId);
-    
+
     if (!user) return;
-    
+
     // Initialize gigsCounts if not present
     if (!user.gigsCounts) {
         user.gigsCounts = {
@@ -70,29 +71,70 @@ async function updateUserGigCounts(userId, previousStatus, newStatus) {
             cancelled: 0
         };
     }
-    
+
     // Decrement previous status count if it's a valid status
     if (previousStatus && user.gigsCounts[previousStatus] > 0) {
         user.gigsCounts[previousStatus] -= 1;
     }
-    
+
     // Increment new status count
     user.gigsCounts[newStatus] = (user.gigsCounts[newStatus] || 0) + 1;
-    
+
     await user.save();
 }
 
 exports.getRequestsByProvider = async (req, res) => {
     try {
         const userId = req.user._id; // Assuming providerId comes from route params
-        console.log();
-
         if (!userId) {
             return res.status(400).json({
                 success: false,
                 message: 'Provider ID is required'
             });
         }
+
+        const activeEventReqProjects = await EventRequest.find({
+            providerId: userId,
+            isSigned: true,
+            projectStatus: { $ne: 'completed' }
+        })
+            .populate('eventId', 'eventName date location time description experience averageRating website certified')
+            .populate('organizerId', 'name email avatar')
+            .populate('providerId', 'name email avatar')
+            .populate('serviceRequestId', 'serviceType budget description additionalOptions')
+
+        const activeBidProjects = await Bid.find({
+            providerId: userId,
+            adminFeePaid: true,
+            winningBid: { $gt: 0 }
+        }).populate({
+            path: 'projectId',
+            populate: [
+                { path: 'eventId' },
+                { path: 'categoryId' },
+                { path: 'subcategoryId' }
+            ]
+        });
+
+        const filteredProjects = activeBidProjects.filter(bid =>
+            bid.projectId &&
+            (bid.projectId.status === 'pending' || bid.projectId.status === 'ongoing')
+        );
+
+        const allActiveProjects = [
+            ...activeEventReqProjects.map(project => ({
+                ...project.toObject(),
+                projectType: 'EventReq',
+                projectStatus: 'active'
+            })),
+            ...filteredProjects.map(project => ({
+                ...project.toObject(),
+                projectType: 'Bid',
+                projectStatus: 'active'
+            }))
+        ];
+
+
 
         // Fetch all requests for this provider
         const requests = await EventRequest.find({
@@ -130,7 +172,9 @@ exports.getRequestsByProvider = async (req, res) => {
             signedReqests,
             completedRequests,
             totalRequests: requests,
+            allActiveProjects,
             counts: {
+                active: allActiveProjects.length,
                 pending: pendingRequests.length,
                 confirmed: signedReqests.length,
                 completed: completedRequests.length,
