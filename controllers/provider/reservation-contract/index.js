@@ -3,7 +3,7 @@ const EventReq = require('../../../models/event-request/event-requests.model');
 
 exports.getReservactionContracts = async (req, res) => {
     const providerId = req.user._id;
-    
+
     try {
         // Get Active Projects from EventReq (where isSigned is true)
         const activeEventReqProjects = await EventReq.find({
@@ -32,6 +32,11 @@ exports.getReservactionContracts = async (req, res) => {
             ]
         });
 
+        const filteredProjects = activeBidProjects.filter(bid =>
+            bid.projectId &&
+            (bid.projectId.status === 'pending' || bid.projectId.status === 'ongoing')
+        );
+
         // Get Completed Projects from PlaceABid/Bid (where status in PlaceABid is completed)
         const completedBidProjects = await Bid.find({
             providerId: providerId
@@ -52,13 +57,13 @@ exports.getReservactionContracts = async (req, res) => {
                 projectType: 'EventReq',
                 projectStatus: 'active'
             })),
-            ...activeBidProjects.map(project => ({
+            ...filteredProjects.map(project => ({
                 ...project.toObject(),
                 projectType: 'Bid',
                 projectStatus: 'active'
             }))
         ];
-
+      
         // Combine all completed projects
         const allCompletedProjects = [
             ...completedEventReqProjects.map(project => ({
@@ -72,7 +77,6 @@ exports.getReservactionContracts = async (req, res) => {
                 projectStatus: 'completed'
             }))
         ];
-
         // Calculate Total Expected Payments
         const calculateTotalExpectedPayments = (projects) => {
             return projects.reduce((total, project) => {
@@ -93,7 +97,7 @@ exports.getReservactionContracts = async (req, res) => {
         // Prepare response
         const response = {
             success: true,
-            message:"Contracts fetch successfully...",
+            message: "Contracts fetch successfully...",
             contracts: {
                 activeProjects: {
                     count: allActiveProjects.length,
