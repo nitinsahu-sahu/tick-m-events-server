@@ -116,232 +116,232 @@ exports.initiatePaymentController = async (req, res) => {
 
 // Helper function to store payment record (implement according to your database)
 async function storePaymentRecord(paymentData) {
-    try {
-        // const Payment = require('../models/Payment');
-        await adminPaymentHistory.create(paymentData);
+  try {
+    // const Payment = require('../models/Payment');
+    await adminPaymentHistory.create(paymentData);
 
-        return true;
-    } catch (error) {
-        console.error('Error storing payment record:', error);
-        // Don't throw error here to not break the payment flow
-        return false;
-    }
+    return true;
+  } catch (error) {
+    console.error('Error storing payment record:', error);
+    // Don't throw error here to not break the payment flow
+    return false;
+  }
 }
 
 
 // Payment confirmation webhook handler
 exports.oldpaymentWebhookController = async (req, res) => {
-    try {
-        const { transId, status, winningBid } = req.body;
+  try {
+    const { transId, status, winningBid } = req.body;
 
-        if (!transId || !status) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing transId or status',
-            });
-        }
-        if (status.toLowerCase() !== 'successful') {
-            return res.status(200).json({
-                success: true,
-                message: `Payment status is '${status}', no further action taken.`,
-            });
-        }
-        let paymentMedium = null;
-        try {
-            const fapshiStatusRes = await axios.get(
-                `${process.env.FAPSHI_BASE_URL}/payment-status/${transId}`,
-                {
-                    headers: {
-                        "Content-Type": "application/json",
-                        apikey: process.env.FAPSHI_API_KEY,
-                        apiuser: process.env.FAPSHI_API_USER,
-                    },
-                    timeout: 10000,
-                }
-            );
-
-            const responseData = fapshiStatusRes.data;
-
-            // Handle if array or single object
-            if (Array.isArray(responseData) && responseData.length > 0) {
-                paymentMedium = responseData[0].medium || null;
-            } else if (responseData && typeof responseData === "object") {
-                paymentMedium = responseData.medium || null;
-            }
-        } catch (fetchErr) {
-            console.error('⚠️ Error fetching payment status from Fapshi:', fetchErr.message);
-        }
-
-        // ✅ Update payment record in adminPaymentHistory
-        const updatedPayment = await adminPaymentHistory.findOneAndUpdate(
-            { transId: transId },
-            {
-                status: status.toLowerCase(),
-                updatedAt: new Date(),
-                paymentMethod: paymentMedium,
-            },
-            { new: true }
-        );
-        if (!updatedPayment) {
-            return res.status(404).json({
-                success: false,
-                message: 'Payment record not found',
-            });
-        }
-
-        const eventReqId = updatedPayment.eventReqId;
-        const bidId = updatedPayment.bidId;
-        const bidAmount = updatedPayment?.bidAmount || winningBid || 0;
-
-        // ✅ CASE 1: Payment successful & eventReqId exists → Update EventRequest
-        if (status.toLowerCase() === 'successful' && eventReqId) {
-            try {
-                const eventRequest = await EventRequest.findById(eventReqId);
-
-                if (!eventRequest) {
-                    return res.status(404).json({
-                        success: false,
-                        message: `⚠️ No EventRequest found for ID: ${eventReqId}`,
-                    });
-                }
-
-                eventRequest.providerStatus = 'accepted';
-                eventRequest.orgStatus = 'accepted';
-                eventRequest.projectStatus = 'ongoing';
-                eventRequest.isSigned = true;
-                eventRequest.winningBid = bidAmount;
-                eventRequest.updatedAt = new Date();
-
-                await eventRequest.save();
-
-                return res.status(200).json({
-                    success: true,
-                    message: '✅ EventRequest updated successfully after payment success',
-                    data: eventRequest,
-                });
-            } catch (err) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error while updating EventRequest',
-                    error: err.message,
-                });
-            }
-        }
-
-        // ✅ CASE 2: Payment successful & bidId exists → Update Bid
-        else if (status.toLowerCase() === 'successful' && bidId) {
-            try {
-                const bid = await Bid.findById(bidId);
-
-                if (!bid) {
-                    return res.status(404).json({
-                        success: false,
-                        message: `⚠️ Bid not found for bidId: ${bidId}`,
-                    });
-                }
-
-                bid.isOrgnizerAccepted = true;
-                bid.isProviderAccepted = true;
-                bid.status = 'accepted';
-                bid.adminFeePaid = true;
-                bid.adminFeeAmount = updatedPayment.feeAmount || 0;
-                bid.winningBid = winningBid;
-                bid.organizrAmount = bid.bidAmount;
-                await bid.save();
-
-                if (bid.projectId) {
-                    const project = await Project.findById(bid.projectId);
-                    if (project) {
-                        project.status = 'ongoing';
-                        project.bidStatus = 'closed';
-                        project.isSigned = true;
-                        await project.save();
-                    }
-                }
-
-                return res.status(200).json({
-                    success: true,
-                    message: '✅ Bid updated successfully after admin fee payment success',
-                    data: bid,
-                });
-            } catch (err) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error while updating Bid',
-                    error: err.message,
-                });
-            }
-        }
-
-        // ❌ CASE 3: Neither eventReqId nor bidId
-        else {
-            return res.status(400).json({
-                success: false,
-                message: 'Payment not successful or missing related IDs (eventReqId/bidId)',
-            });
-        }
-    } catch (error) {
-        console.error('❌ Webhook processing error:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Webhook processing failed',
-            error: error.message,
-        });
+    if (!transId || !status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing transId or status',
+      });
     }
+    if (status.toLowerCase() !== 'successful') {
+      return res.status(200).json({
+        success: true,
+        message: `Payment status is '${status}', no further action taken.`,
+      });
+    }
+    let paymentMedium = null;
+    try {
+      const fapshiStatusRes = await axios.get(
+        `${process.env.FAPSHI_BASE_URL}/payment-status/${transId}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            apikey: process.env.FAPSHI_API_KEY,
+            apiuser: process.env.FAPSHI_API_USER,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const responseData = fapshiStatusRes.data;
+
+      // Handle if array or single object
+      if (Array.isArray(responseData) && responseData.length > 0) {
+        paymentMedium = responseData[0].medium || null;
+      } else if (responseData && typeof responseData === "object") {
+        paymentMedium = responseData.medium || null;
+      }
+    } catch (fetchErr) {
+      console.error('⚠️ Error fetching payment status from Fapshi:', fetchErr.message);
+    }
+
+    // ✅ Update payment record in adminPaymentHistory
+    const updatedPayment = await adminPaymentHistory.findOneAndUpdate(
+      { transId: transId },
+      {
+        status: status.toLowerCase(),
+        updatedAt: new Date(),
+        paymentMethod: paymentMedium,
+      },
+      { new: true }
+    );
+    if (!updatedPayment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment record not found',
+      });
+    }
+
+    const eventReqId = updatedPayment.eventReqId;
+    const bidId = updatedPayment.bidId;
+    const bidAmount = updatedPayment?.bidAmount || winningBid || 0;
+
+    // ✅ CASE 1: Payment successful & eventReqId exists → Update EventRequest
+    if (status.toLowerCase() === 'successful' && eventReqId) {
+      try {
+        const eventRequest = await EventRequest.findById(eventReqId);
+
+        if (!eventRequest) {
+          return res.status(404).json({
+            success: false,
+            message: `⚠️ No EventRequest found for ID: ${eventReqId}`,
+          });
+        }
+
+        eventRequest.providerStatus = 'accepted';
+        eventRequest.orgStatus = 'accepted';
+        eventRequest.projectStatus = 'ongoing';
+        eventRequest.isSigned = true;
+        eventRequest.winningBid = bidAmount;
+        eventRequest.updatedAt = new Date();
+
+        await eventRequest.save();
+
+        return res.status(200).json({
+          success: true,
+          message: '✅ EventRequest updated successfully after payment success',
+          data: eventRequest,
+        });
+      } catch (err) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error while updating EventRequest',
+          error: err.message,
+        });
+      }
+    }
+
+    // ✅ CASE 2: Payment successful & bidId exists → Update Bid
+    else if (status.toLowerCase() === 'successful' && bidId) {
+      try {
+        const bid = await Bid.findById(bidId);
+
+        if (!bid) {
+          return res.status(404).json({
+            success: false,
+            message: `⚠️ Bid not found for bidId: ${bidId}`,
+          });
+        }
+
+        bid.isOrgnizerAccepted = true;
+        bid.isProviderAccepted = true;
+        bid.status = 'accepted';
+        bid.adminFeePaid = true;
+        bid.adminFeeAmount = updatedPayment.feeAmount || 0;
+        bid.winningBid = winningBid;
+        bid.organizrAmount = bid.bidAmount;
+        await bid.save();
+
+        if (bid.projectId) {
+          const project = await Project.findById(bid.projectId);
+          if (project) {
+            project.status = 'ongoing';
+            project.bidStatus = 'closed';
+            project.isSigned = true;
+            await project.save();
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: '✅ Bid updated successfully after admin fee payment success',
+          data: bid,
+        });
+      } catch (err) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error while updating Bid',
+          error: err.message,
+        });
+      }
+    }
+
+    // ❌ CASE 3: Neither eventReqId nor bidId
+    else {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment not successful or missing related IDs (eventReqId/bidId)',
+      });
+    }
+  } catch (error) {
+    console.error('❌ Webhook processing error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Webhook processing failed',
+      error: error.message,
+    });
+  }
 };
 
 // Enhanced successful payment handler
 async function handleSuccessfulPayment(paymentData, context) {
-    try {
+  try {
 
-        const { bidId, projectId, type } = context;
+    const { bidId, projectId, type } = context;
 
-        if (type === 'admin_fee') {
-            // Update bid status to accepted
-            await Bid.findByIdAndUpdate(bidId, {
-                isOrgnizerAccepted: true,
-                status: 'accepted',
-                acceptedAt: new Date()
-            });
+    if (type === 'admin_fee') {
+      // Update bid status to accepted
+      await Bid.findByIdAndUpdate(bidId, {
+        isOrgnizerAccepted: true,
+        status: 'accepted',
+        acceptedAt: new Date()
+      });
 
-            // Update project status
-            await Project.findByIdAndUpdate(projectId, {
-                status: 'assigned',
-                assignedTo: paymentData.organizerId,
-                assignedAt: new Date()
-            });
+      // Update project status
+      await Project.findByIdAndUpdate(projectId, {
+        status: 'assigned',
+        assignedTo: paymentData.organizerId,
+        assignedAt: new Date()
+      });
 
-            // Send notifications (implement your notification logic)
-            await sendPaymentSuccessNotifications(paymentData, bidId, projectId);
+      // Send notifications (implement your notification logic)
+      await sendPaymentSuccessNotifications(paymentData, bidId, projectId);
 
-            console.log(`Project ${projectId} assigned to bid ${bidId} after successful admin fee payment`);
-        }
-
-        // Add other payment type handlers as needed
-
-    } catch (error) {
-        console.error('Error in handleSuccessfulPayment:', error);
-        throw error;
+      console.log(`Project ${projectId} assigned to bid ${bidId} after successful admin fee payment`);
     }
+
+    // Add other payment type handlers as needed
+
+  } catch (error) {
+    console.error('Error in handleSuccessfulPayment:', error);
+    throw error;
+  }
 }
 
 // Notification helper function
 async function sendPaymentSuccessNotifications(paymentData, bidId, projectId) {
-    // Implement your notification logic here
-    // Email notifications, in-app notifications, etc.
-    console.log('Sending payment success notifications');
+  // Implement your notification logic here
+  // Email notifications, in-app notifications, etc.
+  console.log('Sending payment success notifications');
 }
 
 // Notification helper function
 async function sendPaymentSuccessNotifications(paymentData, bidId, projectId) {
-    // Implement your notification logic here
-    // Email notifications, in-app notifications, etc.
-    console.log('Sending payment success notifications');
+  // Implement your notification logic here
+  // Email notifications, in-app notifications, etc.
+  console.log('Sending payment success notifications');
 }
 
 async function handleFailedPayment(paymentData) {
-    // Implement failed payment logic
-    console.log('Payment failed:', paymentData);
+  // Implement failed payment logic
+  console.log('Payment failed:', paymentData);
 }
 
 exports.paymentWebhookController = async (req, res) => {
@@ -506,106 +506,86 @@ exports.paymentWebhookController = async (req, res) => {
       // --------------------------
       try {
         if (order.paymentStatus === "confirmed") {
-          // Avoid double-crediting: check if we've already created a reward transaction for this order
-          const existingReward = await RewardTransaction.findOne({
-            reference: order._id,
-            reason: "Ticket Purchase",
-            type: "credit"
-          });
-
-          if (!existingReward) {
-            // Calculate points from paid amount (same formula as you used before)
-            const points = Math.floor((Number(order.totalAmount) || 0) / 100);
-
-            if (points > 0) {
-              // Create reward transaction and increment user's rewardPoints
-              await RewardTransaction.create([{
-                userId: order.userId,
-                points,
-                type: "credit",
-                reason: "Ticket Purchase",
-                reference: order._id,
-                referenceModel: "Order",
-              }]);
-
-              await User.findByIdAndUpdate(order.userId, {
-                $inc: { rewardPoints: points }
-              });
-              console.log(`🏅 Credited ${points} points to user ${order.userId} for order ${order._id}`);
-            }
-
-            // Handle referral bonus: only if this is the user's first confirmed order
-            // Count confirmed orders for this user (including the one just confirmed)
-            const confirmedCount = await EventOrder.countDocuments({
-              userId: order.userId,
-              paymentStatus: "confirmed"
+          try {
+            // Check if any reward already exists for this order
+            const existingReward = await RewardTransaction.findOne({
+              reference: order._id,
+              reason: "Ticket Purchase",
+              type: "credit"
             });
 
-            if (confirmedCount === 1) {
-              // this is the first confirmed purchase for user
-              const user = await User.findById(order.userId).select('referredBy');
-              if (user && user.referredBy) {
-                // prevent double referral-credit by checking for a referral RewardTransaction for this order
-                const existingRefReward = await RewardTransaction.findOne({
-                  userId: user.referredBy,
-                  reason: "Referral Bonus",
-                  reference: order._id
+            if (!existingReward) {
+              // Check if this is the first confirmed order for the user
+              const orderCount = await EventOrder.countDocuments({
+                userId: order.userId,
+                paymentStatus: "confirmed"
+              });
+
+              if (orderCount === 1) {
+                // First purchase logic
+                const firstPurchasePoints = 100;
+
+                // Credit points to buyer
+                await RewardTransaction.create({
+                  userId: order.userId,
+                  points: firstPurchasePoints,
+                  type: "credit",
+                  reason: "First Purchase Bonus",
+                  reference: order._id,
+                  referenceModel: "Order"
                 });
-                if (!existingRefReward) {
-                  const referralPoints = 100;
-                  await RewardTransaction.create([{
+
+                await User.findByIdAndUpdate(order.userId, {
+                  $inc: { rewardPoints: firstPurchasePoints }
+                });
+
+                // Credit points to referrer if exists
+                const user = await User.findById(order.userId).select('referredBy');
+                if (user && user.referredBy) {
+                  await RewardTransaction.create({
                     userId: user.referredBy,
-                    points: referralPoints,
+                    points: firstPurchasePoints,
                     type: "credit",
                     reason: "Referral Bonus",
                     reference: order._id,
-                    referenceModel: "Order",
-                  }]);
+                    referenceModel: "Order"
+                  });
 
                   await User.findByIdAndUpdate(user.referredBy, {
-                    $inc: { rewardPoints: referralPoints, referralCount: 1 }
+                    $inc: { rewardPoints: firstPurchasePoints }
                   });
-                  console.log(`🎁 Credited ${referralPoints} referral points to ${user.referredBy} for referral of ${order.userId}`);
+                }
+
+                console.log(`🎉 First purchase bonus awarded for order ${order._id}`);
+              } else {
+                // Not first purchase, normal reward points
+                const points = Math.floor((Number(order.totalAmount) || 0) / 100);
+
+                if (points > 0) {
+                  await RewardTransaction.create({
+                    userId: order.userId,
+                    points,
+                    type: "credit",
+                    reason: "Ticket Purchase",
+                    reference: order._id,
+                    referenceModel: "Order"
+                  });
+
+                  await User.findByIdAndUpdate(order.userId, {
+                    $inc: { rewardPoints: points }
+                  });
+
+                  console.log(`🏅 Credited ${points} points for order ${order._id}`);
                 }
               }
+            } else {
+              console.log(`⚠️ Reward already exists for order ${order._id}, skipping.`);
             }
-          } else {
-            console.log(`⚠️ Reward already exists for order ${order._id}, skipping points awarding.`);
+          } catch (err) {
+            console.error("❌ Error awarding rewards for order", order._id, err);
           }
-          // Prevent double-update
-          if (!order.ticketsUpdated) {
-
-            // 1. Update TicketConfiguration
-            const ticketConfig = await TicketConfiguration.findOne({ eventId: order.eventId });
-            if (ticketConfig) {
-              for (const orderedTicket of order.tickets) {
-                const configTicket = ticketConfig.tickets.find(
-                  t => t.id.toString() === orderedTicket.ticketId.toString()
-                );
-
-                if (configTicket) {
-                  configTicket.totalTickets = (
-                    Number(configTicket.totalTickets) - Number(orderedTicket.quantity)
-                  ).toString();
-                }
-              }
-              await ticketConfig.save();
-            }
-
-            // 2. Update TicketType sold count
-            for (const orderedTicket of order.tickets) {
-              await TicketType.findByIdAndUpdate(
-                orderedTicket.ticketId,
-                { $inc: { sold: Number(orderedTicket.quantity) } }
-              );
-            }
-
-            // Mark as processed
-            order.ticketsUpdated = true;
-            await order.save({ validateBeforeSave: false });
-          }
-
         }
+
       } catch (rewardErr) {
         // don't crash webhook on reward issues — log for later
         console.error("❌ Error while awarding rewards for order", order._id, rewardErr);

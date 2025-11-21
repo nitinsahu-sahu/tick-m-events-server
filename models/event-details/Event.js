@@ -28,6 +28,7 @@ const eventSchema = new Schema({
   eventType: {
     type: String,
     required: true,
+    
   },
   validationOptions: {
     selectedView: {
