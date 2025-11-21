@@ -108,10 +108,10 @@ exports.signup = async (req, res) => {
         const newUser = await User.create(userData);
 
         // Process referral reward if applicable
-        // if (referrer) {
-        //     await User.processReferral(referralCode, newUser.name);
+        if (referrer) {
+            await User.processReferral(referralCode, newUser.name);
 
-        // }
+        }
 
         // Omit sensitive data in response
         const userResponse = {

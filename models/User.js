@@ -347,10 +347,6 @@ userSchema.statics.processReferral = async function (referralCode, userName) {
             return { success: false, message: 'Invalid referral code' };
         }
 
-        // Add reward points to referrer
-        const rewardPoints = 100; // Adjust as needed
-        await referrer.addRewardPoints(rewardPoints, `Referral bonus for ${userName}`);
-
         // Increment referral count
         referrer.referralCount += 1;
         await referrer.save();
