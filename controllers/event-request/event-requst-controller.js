@@ -112,7 +112,9 @@ exports.getRequestsByProvider = async (req, res) => {
             populate: [
                 { path: 'eventId' },
                 { path: 'categoryId' },
-                { path: 'subcategoryId' }
+                { path: 'subcategoryId' },
+                { path: 'createdBy', select: 'name email avatar' },  
+ 
             ]
         });
 

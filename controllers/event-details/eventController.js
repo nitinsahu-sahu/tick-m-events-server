@@ -354,7 +354,7 @@ exports.getEvent = async (req, res, next) => {
     const event = await Event.findOne({
       _id: eventId,
       isDelete: { $ne: true },
-      step:4,
+      step: 4,
     }).select('-createdBy -createdAt -updatedAt -isDelete -__v').lean();
 
     if (!event) {
@@ -561,6 +561,8 @@ exports.getAllCategories = async (req, res) => {
       const events = await Event.find({
         category: { $in: categoryNames },
         status: 'approved',
+        eventType: 'Public',
+        step: 4,
         isDelete: false // assuming you don't want deleted events
       });
 
@@ -630,6 +632,7 @@ exports.getCategoryById = async (req, res) => {
       isDelete: { $ne: true },
       step: 4,
       status: "approved",
+      eventType: 'Public',
       $or: [
         {
           date: { $gt: currentDateTime.toISOString().split('T')[0] }
@@ -930,7 +933,7 @@ exports.getTodayEvents = async (req, res, next) => {
     // Get all events that aren't deleted and are today
     const events = await Event.find({
       isDelete: { $ne: true },
-      step:4,
+      step: 4,
       $expr: {
         $and: [
           {
@@ -1095,7 +1098,7 @@ exports.getEventPageCustomization = async (req, res) => {
       });
     }
 
-    
+
     // Check if event exists
     const eventData = await Event.findById(id);
     if (!eventData) {

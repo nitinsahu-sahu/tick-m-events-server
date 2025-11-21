@@ -15,7 +15,7 @@ const addressSchema = new Schema({
 
 const participantSchema = new Schema({
     name: { type: String, required: true },
-    age: { type: String, required: true },
+    age: { type: String },
     gender: { type: String, required: true },
     validation: { type: Boolean, required: false, default: false },
     entryTime: { type: Date },
