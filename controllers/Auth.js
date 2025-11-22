@@ -610,7 +610,7 @@ exports.forgotPassword = async (req, res) => {
 
         We received a request to reset the password for your MERN-AUTH-REDUX-TOOLKIT account. If you initiated this request, please use the following link to reset your password:</p>
         
-        <p><a href=${process.env.ORIGIN}/reset-password/${isExistingUser._id}/${passwordResetToken} target="_blank">Reset Password</a></p>
+        <p><a href=${process.env.ADMIN_ORIGIN}/reset-password/${isExistingUser._id}/${passwordResetToken} target="_blank">Reset Password</a></p>
         
         <p>This link is valid for a limited time. If you did not request a password reset, please ignore this email. Your account security is important to us.
         
