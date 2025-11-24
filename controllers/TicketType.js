@@ -183,7 +183,6 @@ exports.createTicketType = async (req, res) => {
 };
 
 exports.updateTicketType = async (req, res) => {
-  console.log(req.body, req.params, req.user._id);
 
   try {
     const { id } = req.params;

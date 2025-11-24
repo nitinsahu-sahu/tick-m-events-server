@@ -380,7 +380,6 @@ exports.deleteLogo = async (req, res) => {
 
   try {
     const logo = await Logo.findById(req.params.id);
-    console.log('Delete logo error:', logo);
 
     if (!logo) {
       return res.status(404).json({
@@ -409,7 +408,6 @@ exports.deleteLogo = async (req, res) => {
     });
 
   } catch (error) {
-    console.log('Delete logo error:', error);
 
     if (error.name === 'CastError') {
       return res.status(400).json({

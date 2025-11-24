@@ -708,7 +708,6 @@ exports.downloadInvoice = async (req, res) => {
     const order = await EventOrder.findById(orderId)
       .populate('userId', 'name email number gender')
       .exec();
-    console.log("Fetched order:", order);
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
@@ -716,7 +715,6 @@ exports.downloadInvoice = async (req, res) => {
 
     const event = await Event.findById(order.eventId)
       .select('eventName _id date time category location description formate');
-    console.log("Fetched event:", event);
 
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
@@ -724,12 +722,10 @@ exports.downloadInvoice = async (req, res) => {
 
     // Add a basic test if the function exists
     if (typeof generateInvoicePDF !== "function") {
-      console.error("generateInvoicePDF is not defined or not a function");
       return res.status(500).json({ message: 'Invoice generator not found' });
     }
 
     const pdfBytes = await generateInvoicePDF({ order, event });
-    console.log("PDF generated successfully");
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
@@ -739,7 +735,6 @@ exports.downloadInvoice = async (req, res) => {
 
     res.send(Buffer.from(pdfBytes));
   } catch (error) {
-    console.error('Download Invoice Error:', error);
     res.status(500).json({
       message: 'Error generating invoice',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
@@ -951,30 +946,6 @@ exports.getAdminForwardedRefunds = async (req, res) => {
       message: 'Internal server error while fetching refund requests',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
-  }
-};
-
-
-// Notification helper function
-const sendRefundNotification = async (refundRequest, action) => {
-  try {
-    // Implement your notification logic here
-    // This could be email, push notification, in-app notification, etc.
-
-    const user = refundRequest.userId;
-    const event = refundRequest.eventId;
-
-    const message = action === 'approved'
-      ? `Your refund request for "${event.title}" has been approved. Amount: ${refundRequest.refundAmount}`
-      : `Your refund request for "${event.title}" has been denied.`;
-
-    console.log(`Notification sent to ${user.email}: ${message}`);
-
-    // Example email sending (pseudo-code)
-    // await emailService.sendRefundNotification(user.email, message, action);
-
-  } catch (error) {
-    console.error('Error sending refund notification:', error);
   }
 };
 

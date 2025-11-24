@@ -16,7 +16,6 @@ const axios = require("axios");
 const RewardTransaction = require("../../models/RewardTrans");
 const fs = require('fs');
 const path = require('path');
-const { log } = require('console');
 
 // Get Validated tickets
 exports.fetchUserValidatedTickets = async (req, res) => {
@@ -421,8 +420,6 @@ exports.fapshiWebhook = async (req, res) => {
 
     await order.save();
 
-    console.log(`Order ${order._id} updated to ${order.paymentStatus}`);
-
     // Reward logic with better logging
     if (status === "SUCCESSFUL") {
       const userId = order.userId;
@@ -452,7 +449,6 @@ exports.fapshiWebhook = async (req, res) => {
             });
 
             await rewardTx.save();
-            console.log(`🎉 100 reward points credited to user ${userId} for first purchase.`);
           } else {
             console.log(`ℹ️ User ${userId} already has ${previousOrders.length} previous confirmed orders, no bonus awarded.`);
           }

@@ -55,7 +55,6 @@ const archiveAndResetStats = async () => {
             ]
         );
 
-        console.log(`Monthly stats reset completed for ${currentMonth}`);
     } catch (error) {
         console.error('Error in monthly stats reset:', error);
     }

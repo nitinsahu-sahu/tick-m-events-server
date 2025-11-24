@@ -270,7 +270,6 @@ function initReminderScheduler() {
      await cleanupOldSocialPosts();
   });
  
-  console.log('🟢 Reminder scheduler initialized');
 }
 
 module.exports = initReminderScheduler;

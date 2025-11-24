@@ -1,5 +1,4 @@
 const SalesPoint = require('../../models/event-details/SalesPoint');
-const ErrorResponse = require('../../utils/errorHandler');
 
 
 // Create Sales Points
@@ -7,7 +6,7 @@ exports.createSalesPoints = async (req, res, next) => {
   try {
     // Add eventId to req.body
     req.body.eventId = req.params.eventId;
-    
+
     const salesPoints = await SalesPoint.create(req.body);
 
     res.status(201).json({
@@ -25,7 +24,10 @@ exports.getSalesPoints = async (req, res, next) => {
     const salesPoints = await SalesPoint.findOne({ eventId: req.params.eventId });
 
     if (!salesPoints) {
-      return next(new ErrorResponse(`Sales points not found for event ${req.params.eventId}`, 404));
+      res.status(404).json({
+        success: false,
+        error: `Sales points not found for event ${req.params.eventId}`
+      });
     }
 
     res.status(200).json({
@@ -43,12 +45,15 @@ exports.updateSalesPoints = async (req, res, next) => {
     let salesPoints = await SalesPoint.findOne({ eventId: req.params.eventId });
 
     if (!salesPoints) {
-      return next(new ErrorResponse(`Sales points not found for event ${req.params.eventId}`, 404));
+       res.status(404).json({
+        success: false,
+        error: `Sales points not found for event ${req.params.eventId}`
+      });
     }
 
     salesPoints = await SalesPoint.findOneAndUpdate(
-      { eventId: req.params.eventId }, 
-      req.body, 
+      { eventId: req.params.eventId },
+      req.body,
       { new: true, runValidators: true }
     );
 
@@ -67,7 +72,10 @@ exports.deleteSalesPoints = async (req, res, next) => {
     const salesPoints = await SalesPoint.findOne({ eventId: req.params.eventId });
 
     if (!salesPoints) {
-      return next(new ErrorResponse(`Sales points not found for event ${req.params.eventId}`, 404));
+       res.status(404).json({
+        success: false,
+        error: `Sales points not found for event ${req.params.eventId}`
+      });
     }
 
     await salesPoints.remove();

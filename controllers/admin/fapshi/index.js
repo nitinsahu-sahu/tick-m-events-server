@@ -134,15 +134,12 @@ exports.paymentWebhookController = async (req, res) => {
   try {
     const { transId, externalId, fapshiExternalId: bodyFapshiId, status, financialTransId } = req.body;
     const fapshiExternalId = bodyFapshiId || externalId;
-    console.log("re", req.body);
     if (!transId && !externalId) {
       return res.status(400).json({
         success: false,
         message: "Missing transId or externalId",
       });
     }
-
-    console.log("Incoming Webhook:", req.body);
 
     let normalizedStatus = status?.toLowerCase() || "pending";
     if (normalizedStatus === "successful") normalizedStatus = "success";
@@ -161,8 +158,6 @@ exports.paymentWebhookController = async (req, res) => {
     }
 
     if (adminPayment) {
-      console.log("🏦 Found AdminPaymentHistory record");
-
       // ✅ SAVE financialTransId to admin payment record
       if (financialTransId && !adminPayment.financialTransId) {
         adminPayment.financialTransId = financialTransId;
@@ -172,8 +167,6 @@ exports.paymentWebhookController = async (req, res) => {
       adminPayment.paymentMethod = req.body.medium || adminPayment.paymentMethod;
       adminPayment.updatedAt = new Date();
       await adminPayment.save();
-
-      console.log(`✅ AdminPayment ${adminPayment._id} updated to ${normalizedStatus}, financialTransId: ${financialTransId}`);
 
       // 🧩 If payment successful, update related Bid / EventRequest
       if (normalizedStatus === "success") {
@@ -194,8 +187,6 @@ exports.paymentWebhookController = async (req, res) => {
               bid.updatedAt = new Date();
               await bid.save();
 
-              console.log(`✅ Bid ${bidId} updated successfully`);
-
               // 🏗️ Also update linked Project if exists
               if (bid.projectId) {
                 const project = await Project.findById(bid.projectId);
@@ -205,11 +196,13 @@ exports.paymentWebhookController = async (req, res) => {
                   project.isSigned = true;
                   project.updatedAt = new Date();
                   await project.save();
-                  console.log(`🏗️ Project ${bid.projectId} updated successfully`);
                 }
               }
             } else {
-              console.log(`⚠️ No Bid found for ID: ${bidId}`);
+              return res.status(400).json({
+                success: false,
+                message: `⚠️ No Bid found for ID: ${bidId}`,
+              });
             }
           } catch (err) {
             console.error(`❌ Error updating Bid ${bidId}:`, err.message);
@@ -220,7 +213,6 @@ exports.paymentWebhookController = async (req, res) => {
         if (eventReqId) {
           try {
             const eventRequest = await EventRequest.findById(eventReqId);
-            console.log("eventReqId", eventReqId);
             if (eventRequest) {
               eventRequest.providerStatus = "accepted";
               eventRequest.orgStatus = "accepted";
@@ -229,10 +221,11 @@ exports.paymentWebhookController = async (req, res) => {
               eventRequest.winningBid = bidAmount || eventRequest.winningBid;
               eventRequest.updatedAt = new Date();
               await eventRequest.save();
-
-              console.log(`✅ EventRequest ${eventReqId} updated successfully`);
             } else {
-              console.log(`⚠️ No EventRequest found for ID: ${eventReqId}`);
+              return res.status(400).json({
+                success: false,
+                message: `⚠️ No EventRequest found for ID: ${eventReqId}`,
+              });
             }
           } catch (err) {
             console.error(`❌ Error updating EventRequest ${eventReqId}:`, err.message);
@@ -247,7 +240,7 @@ exports.paymentWebhookController = async (req, res) => {
     }
 
     // 🟣 Step 2: If not admin payment → check EventOrder
-    console.log("🎟️ Processing Event Order Flow...");
+
     const order = await EventOrder.findOne({
       $or: [
         { transactionId: transId },
@@ -265,7 +258,6 @@ exports.paymentWebhookController = async (req, res) => {
 
       // ✅ Also save transId if not already present
       if (transId && order.transactionId !== transId) {
-        console.log(`🔄 Updating transactionId from ${order.transactionId} → ${transId}`);
         order.transactionId = transId; // overwrite with real Fapshi transId
       }
 
@@ -284,8 +276,6 @@ exports.paymentWebhookController = async (req, res) => {
         order.paymentDate = new Date();
       }
       await order.save({ validateBeforeSave: false });
-
-      console.log(`🎟️ EventOrder ${order._id} updated to ${normalizedStatus}, financialTransId: ${financialTransId}`);
 
       // --------------------------
       // Reward points logic (idempotent)
@@ -342,7 +332,6 @@ exports.paymentWebhookController = async (req, res) => {
                   });
                 }
 
-                console.log(`🎉 First purchase bonus awarded for order ${order._id}`);
               } else {
                 // Not first purchase, normal reward points
                 const points = Math.floor((Number(order.totalAmount) || 0) / 100);
@@ -361,20 +350,29 @@ exports.paymentWebhookController = async (req, res) => {
                     $inc: { rewardPoints: points }
                   });
 
-                  console.log(`🏅 Credited ${points} points for order ${order._id}`);
                 }
               }
             } else {
-              console.log(`⚠️ Reward already exists for order ${order._id}, skipping.`);
+              return res.status(400).json({
+                success: false,
+                message: `⚠️ Reward already exists for order ${order._id}, skipping.`,
+              });
             }
-          } catch (err) {
-            console.error("❌ Error awarding rewards for order", order._id, err);
+          } catch (error) {
+            return res.status(500).json({
+              success: false,
+              message: "Error awarding rewards for order",
+              error: error.message,
+            });
           }
         }
 
-      } catch (rewardErr) {
-        // don't crash webhook on reward issues — log for later
-        console.error("❌ Error while awarding rewards for order", order._id, rewardErr);
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          message: "Error while awarding rewards for order",
+          error: error.message,
+        });
       }
       // ----------------------------------------------
       // UPDATE EVENT SOLD TICKETS ONLY ON CONFIRMED PAYMENT
@@ -399,13 +397,19 @@ exports.paymentWebhookController = async (req, res) => {
             order.soldTicketUpdated = true;
             await order.save({ validateBeforeSave: false });
 
-            console.log(`🎫 Updated Event soldTicket for event ${order.eventId}`);
           } else {
-            console.log(`⚠️ soldTicket already updated for order ${order._id}, skipping`);
+            return res.status(400).json({
+              success: false,
+              message: `⚠️ soldTicket already updated for order ${order._id}, skipping`,
+            });
           }
         }
-      } catch (err) {
-        console.error("❌ Error updating event soldTicket:", err);
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          message: "Error updating event soldTicket:",
+          error: error.message,
+        });
       }
 
       return res.status(200).json({
@@ -414,13 +418,11 @@ exports.paymentWebhookController = async (req, res) => {
       });
     }
 
-    console.log("⚠️ No matching record found for", { transId, externalId, financialTransId });
     return res.status(404).json({
       success: false,
       message: "No matching record found",
     });
   } catch (error) {
-    console.error("❌ Webhook Error:", error);
     return res.status(500).json({
       success: false,
       message: "Server error in payment webhook",

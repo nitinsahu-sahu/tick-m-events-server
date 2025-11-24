@@ -5,7 +5,6 @@ const mongoose = require("mongoose");
 
 // Create or update reminder
 exports.setRemindersForEvent = async (req, res) => {
-  console.log("✅ PUT /event-reminder/:eventId hit");
   try {
     const { eventId } = req.params;
     const { reminders } = req.body;
@@ -121,7 +120,6 @@ exports.markAllNotificationsAsRead = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error while marking notifications as read' });
   }
 };
-
 
 // Get reminders for a specific event
 exports.getRemindersForEvent = async (req, res) => {

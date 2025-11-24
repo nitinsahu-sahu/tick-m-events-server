@@ -288,11 +288,6 @@ exports.providerRespondOnReq = async (req, res) => {
             { status: req.body.status, providerResponse: req.body.message },
             { new: true }
         );
-        console.log(request);
-
-        // Notify organizer
-        // io.to(organizerSocketId).emit('requestUpdated', request);
-
         res.json(request);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -544,8 +539,6 @@ exports.serviceAwarded = async (req, res) => {
     }
 };
 
-
-
 exports.updateProviderStatus = async (req, res) => {
     try {
         const { id } = req.params; // EventRequest ID
@@ -743,7 +736,6 @@ exports.getActiveContractsByProvider = async (req, res) => {
             contractStatus: { $in: ['signed', 'ongoing', 'completed'] }
         };
 
-        console.log("Query being used:", query);
 
         const requests = await EventRequest.find(query)
             .populate('eventId', 'eventName date location time description experience averageRating website certified')
@@ -751,9 +743,6 @@ exports.getActiveContractsByProvider = async (req, res) => {
             .populate('serviceRequestId', 'serviceType budget description additionalOptions')
             .sort({ createdAt: -1 })
             .lean();
-
-        console.log("Found requests:", requests.length);
-
         res.status(200).json({
             success: true,
             count: requests.length,
