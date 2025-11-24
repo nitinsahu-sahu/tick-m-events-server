@@ -1,4 +1,3 @@
-const ErrorResponse = require('../../utils/errorHandler');
 const cloudinary = require('cloudinary').v2;
 const Event = require('../../models/event-details/Event');
 const Category = require('../../models/event-details/Category');
@@ -451,12 +450,18 @@ exports.deleteEvent = async (req, res, next) => {
     const event = await Event.findById(req.params.id);
 
     if (!event) {
-      return next(new ErrorResponse(`Event not found with id of ${req.params.id}`, 404));
+      res.status(404).json({
+        success: false,
+        error: `Event not found.`
+      });
     }
 
     // Check if user is event owner
     if (event.createdBy.toString() !== req.user.id) {
-      return next(new ErrorResponse(`User ${req.user.id} is not authorized to delete this event`, 401));
+      res.status(401).json({
+        success: false,
+        error: `User ${req.user.id} is not authorized to delete this event`
+      });
     }
 
     // Delete image from cloudinary

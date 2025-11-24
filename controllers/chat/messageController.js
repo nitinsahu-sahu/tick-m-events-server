@@ -158,19 +158,7 @@ exports.sendMessage = async (req, res) => {
     }
 };
 
-// Helper function to determine file type from Cloudinary resource_type
-function determineFileType(resourceType) {
-    switch (resourceType) {
-        case 'image': return 'image';
-        case 'video': return 'video';
-        case 'raw': return 'document';
-        default: return 'document';
-    }
-}
-
 exports.uploadsFile = async (req, res) => {
-  console.log('Upload request files:', req.files);
-
   try {
     const files = req.files?.file;
 
@@ -183,8 +171,6 @@ exports.uploadsFile = async (req, res) => {
 
     // Determine file type
     const fileType = files.mimetype.split('/')[0]; // 'image', 'video', 'application', etc.
-    console.log('Detected file type:', fileType);
-
     let uploadOptions = {
       folder: 'msg_Files',
     };
@@ -202,15 +188,10 @@ exports.uploadsFile = async (req, res) => {
       uploadOptions.resource_type = 'raw';
     }
 
-    console.log('Upload options:', uploadOptions);
-
     // Upload to Cloudinary
     const result = await cloudinary.uploader.upload(files.tempFilePath, uploadOptions);
-    console.log('Upload result:', result);
-
     res.status(200).send(result);
   } catch (error) {
-    console.error('Upload error:', error);
     res.status(400).send({ 
       success: false,
       error: error.message 

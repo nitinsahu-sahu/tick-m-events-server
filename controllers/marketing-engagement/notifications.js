@@ -27,7 +27,6 @@ exports.saveNotification = async (req, res) => {
   } = req.body;
  
   if (!emails || emails.length === 0) {
-    console.error('[❌ Error] Recipient list is empty', req.body);
     return res.status(400).json({ error: 'Recipient list is empty' });
   }
  
@@ -35,7 +34,6 @@ exports.saveNotification = async (req, res) => {
  
   if (notificationType === 'web-push') {
     if (!emails || emails.length === 0) {
-      console.error('[❌ Error] Recipient list is empty', req.body);
       return res.status(400).json({ error: 'Recipient list is empty' });
     }
  
@@ -84,8 +82,6 @@ exports.saveNotification = async (req, res) => {
       });
  
       if (response.failureCount > 0) {
-        console.warn('[⚠️ FCM Failures]', response.responses.filter((r) => !r.success));
- 
         // Optional cleanup
         const failedTokens = [];
         response.responses.forEach((r, i) => {
@@ -95,13 +91,11 @@ exports.saveNotification = async (req, res) => {
         });
         if (failedTokens.length) {
           await UserFcmToken.deleteMany({ fcmToken: { $in: failedTokens } });
-          console.log(`[🧹 Removed ${failedTokens.length} invalid tokens]`);
         }
       }
  
       return res.status(200).json({ success: true });
     } catch (pushErr) {
-      console.error('[❌ Web Push Error]', pushErr);
       return res
         .status(500)
         .json({ error: 'Failed to send Web Push notification', details: pushErr.message });
@@ -111,7 +105,6 @@ exports.saveNotification = async (req, res) => {
   // 📆 Scheduled or Immediate Email/SMS
   try {
     if (isScheduled && scheduledAt) {
-      console.log('[⏰ Scheduling Notification]');
       const task = await NotificationTask.create({
         eventId,
         emails: emails,
@@ -123,29 +116,23 @@ exports.saveNotification = async (req, res) => {
         eventDetails,
         status: 'pending',
       });
-      console.log('[📌 Notification Scheduled]', task);
       return res.status(200).json({ success: true, scheduled: true, task });
     } else {
       if (notificationType === 'email') {
-        console.log('[📧 Sending Email Notifications]');
         const templateType = group === 'Interested participants (Waitlist but no purchase yet)'
           ? 'interested-participants'
           : 'default';
  
         await sendBulkEmails(emails, subject, message, { text: cta, url: ctalink }, eventDetails, templateType);
-        console.log('[✅ Emails sent successfully]');
       } else if (notificationType === 'sms') {
-        console.log('[📱 Sending SMS]');
         for (const user of emails) {
           if (user.phone) {
             try {
-              console.log(`[📨 Sending SMS to ${user.phone}]`);
               await client.messages.create({
                 body: `Event: ${eventDetails?.name || 'No Event Name'}\n${message}\n${cta}`,
                 from: process.env.TWILIO_PHONE_NUMBER,
                 to: user.phone,
               });
-              console.log(`[✅ SMS sent to ${user.phone}]`);
             } catch (smsErr) {
               console.error(`[❌ SMS Error for ${user.phone}]`, smsErr.message);
             }

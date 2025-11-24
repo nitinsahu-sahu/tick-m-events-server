@@ -1,7 +1,3 @@
-const User = require('../../models/User');
-const Event = require('../../models/event-details/Event');
-const EventReq = require('../../models/event-request/event-requests.model');
-const PlaceABid = require('../../models/event-request/placeBid.modal');
 const PaymentHistory = require('../../models/admin-payment/payment-history');
 const Bid = require('../../models/event-request/bid.modal');
 const axios = require('axios');

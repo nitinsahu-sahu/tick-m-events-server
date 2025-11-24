@@ -43,7 +43,6 @@ exports.sendRefundEmail = async (user, refundRequest, refundStatus, refundTransa
   }
  
   await transporter.sendMail(mailOptions);
-  console.log("✅ Refund email sent to:", user.email);
 };
 
 exports.createBidStatusEmailTemplate = async (projectDetails, bidDetails, status, reason = null, acceptedAmount = null) => {

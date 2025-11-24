@@ -1,4 +1,3 @@
-
 const Activity = require('../../models/activity/activity.modal');
 const Event = require('../../models/event-details/Event');
 const { paginate } = require('../../utils/pagination');

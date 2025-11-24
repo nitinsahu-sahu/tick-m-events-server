@@ -57,8 +57,6 @@ exports.createSignedContract = async (req, res) => {
       data: signedContract
     });
   } catch (error) {
-    console.log(error.message);
-
     res.status(500).json({
       message: 'Error creating signed contract',
       error: error.message

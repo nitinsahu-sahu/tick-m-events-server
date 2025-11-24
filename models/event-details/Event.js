@@ -150,7 +150,6 @@ eventSchema.pre('save', async function (next) {
         );
       }
 
-      console.log(`🔔 Notification sent: ${notificationMessage}`);
     }
   } catch (err) {
     console.error("Error in event pre-save hook:", err);

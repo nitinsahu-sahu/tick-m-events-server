@@ -45,7 +45,6 @@ exports.approveReview = async (req, res) => {
     }
 };
 
-
 // Get all reviews for an event
 exports.getReviewsByEvent = async (req, res) => {
     try {

@@ -134,7 +134,6 @@ exports.getFinancialStatistics = async (req, res) => {
         ]);
 
         let totalRevenue = confirmedOrders.length > 0 ? confirmedOrders[0].totalRevenue : 0;
-console.log('totalRevenue',totalRevenue);
 
         // Get refund statistics from RefundRequest table
         const refundStats = await RefundRequest.aggregate([

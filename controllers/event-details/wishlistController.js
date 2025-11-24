@@ -43,8 +43,6 @@ exports.getWishlist = async (req, res) => {
   }
 };
 
-// const wishlist = await Wishlist.find({ userId: req.user._id }).populate('event', 'eventName date time coverImage');
-
 // Remove from wishlist
 exports.removeFromWishlist = async (req, res) => {
   try {

@@ -1,5 +1,4 @@
 const Visibility = require('../../models/event-details/Visibility');
-const ErrorResponse = require('../../utils/errorHandler');
 const Event = require('../../models/event-details/Event');
 const Activity = require('../../models/activity/activity.modal');
 
@@ -66,7 +65,10 @@ exports.getVisibility = async (req, res, next) => {
     const visibility = await Visibility.findOne({ eventId: req.params.eventId });
 
     if (!visibility) {
-      return next(new ErrorResponse(`Visibility options not found for event ${req.params.eventId}`, 404));
+      res.status(404).json({
+        success: false,
+        error: `Visibility options not found for event ${req.params.eventId}`
+      });
     }
 
     res.status(200).json({
@@ -84,7 +86,10 @@ exports.updateVisibility = async (req, res, next) => {
     let visibility = await Visibility.findOne({ eventId: req.params.eventId });
 
     if (!visibility) {
-      return next(new ErrorResponse(`Visibility options not found for event ${req.params.eventId}`, 404));
+      res.status(404).json({
+        success: false,
+        error: `Visibility options not found for event ${req.params.eventId}`
+      });
     }
 
     visibility = await Visibility.findOneAndUpdate(
@@ -108,7 +113,10 @@ exports.deleteVisibility = async (req, res, next) => {
     const visibility = await Visibility.findOne({ eventId: req.params.eventId });
 
     if (!visibility) {
-      return next(new ErrorResponse(`Visibility options not found for event ${req.params.eventId}`, 404));
+      res.status(404).json({
+        success: false,
+        error: `Visibility options not found for event ${req.params.eventId}`
+      });
     }
 
     await visibility.remove();

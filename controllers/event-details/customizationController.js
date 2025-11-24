@@ -1,7 +1,6 @@
 const Event = require('../../models/event-details/Event');
 const Customization = require('../../models/event-details/Customization');
 const cloudinary = require('cloudinary').v2;
-const ErrorResponse = require('../../utils/errorHandler');
 
 // Create Customization
 exports.createEventCustomization = async (req, res, next) => {
@@ -54,7 +53,10 @@ exports.getCustomization = async (req, res, next) => {
     const customization = await Customization.findOne({ eventId: req.params.eventId });
 
     if (!customization) {
-      return next(new ErrorResponse(`Customization not found for event ${req.params.eventId}`, 404));
+      res.status(404).json({
+        success: false,
+        error: `Customization not found for event ${req.params.eventId}`
+      });
     }
 
     res.status(200).json({
@@ -72,7 +74,10 @@ exports.updateCustomization = async (req, res, next) => {
     let customization = await Customization.findOne({ eventId: req.params.eventId });
 
     if (!customization) {
-      return next(new ErrorResponse(`Customization not found for event ${req.params.eventId}`, 404));
+      res.status(404).json({
+        success: false,
+        error: `Customization not found for event ${req.params.eventId}`
+      });
     }
 
     // If logo is being updated
@@ -114,7 +119,10 @@ exports.deleteCustomization = async (req, res, next) => {
     const customization = await Customization.findOne({ eventId: req.params.eventId });
 
     if (!customization) {
-      return next(new ErrorResponse(`Customization not found for event ${req.params.eventId}`, 404));
+       res.status(404).json({
+        success: false,
+        error: `Customization not found for event ${req.params.eventId}`
+      });
     }
 
     // Delete logo from cloudinary

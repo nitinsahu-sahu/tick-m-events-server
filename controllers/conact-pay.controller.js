@@ -54,6 +54,10 @@ exports.initiateContactPay = async (req, res) => {
             paymentDataToSave.placeABidId = placeABidId;
             paymentDataToSave.bidId = bidId;
             paymentDataToSave.eventId = eventId;
+        } else if (flag === 'ptp') {
+            // PTP (Participant Ticket Purchase) fields
+            paymentDataToSave.userId = userId;
+            paymentDataToSave.eventId = eventId;
         }
 
         // Save payment to database
@@ -102,23 +106,16 @@ exports.initiateContactPay = async (req, res) => {
 //         );
 
 //         if (!updatedPayment) {
-//             console.log(`Payment ${response.data.transId} not found in database`);
 //             return res.status(404).json({
 //                 success: false,
 //                 message: 'Payment not found in database'
 //             });
 //         }
-//             console.log('===',updatedPayment);
 
 //         if (updatedPayment.flag == "er") {
-//             console.log('===EventReq===');
-//             console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
 //         } else if (updatedPayment.flag == "fsp") {
-//             console.log('===Find Service Provider===');
-//             console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
+//            
 //         } else {
-//             console.log('===contact=====');
-//             console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
 //         }
 //         res.status(200).json({
 //             success: true,
@@ -151,8 +148,6 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
                 }
             }
         );
-
-        console.log('===>>>', response.data);
 
         res.status(200).json({
             success: true,

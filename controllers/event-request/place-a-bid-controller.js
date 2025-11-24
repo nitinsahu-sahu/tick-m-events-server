@@ -459,9 +459,6 @@ exports.placeBid = async (req, res, next) => {
   }
 };
 
-// @desc    Get all bids for a project
-// @route   GET /api/projects/:projectId/bids
-// @access  Private (Project owner only)
 exports.getProjectBids = async (req, res, next) => {
   try {
     const { projectId } = req.params;
