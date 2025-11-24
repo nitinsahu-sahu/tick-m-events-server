@@ -77,38 +77,38 @@ exports.fetchUserValidatedTickets = async (req, res) => {
 
 exports.createOrder = async (req, res) => {
   const session = await mongoose.startSession();
- 
+
   try {
     const { eventId, orderAddress, tickets, totalAmount, paymentMethod, participantDetails, deviceUsed } = req.body;
- 
+
     // Validation
     if (!eventId || !orderAddress || totalAmount === undefined || totalAmount === null) {
       return res.status(400).json({ message: "Missing required fields" });
     }
- 
+
     if (Number(totalAmount) > 0 && !paymentMethod) {
       return res.status(400).json({ message: "Payment method is required for paid events" });
     }
- 
+
     // Parse inputs
     const ticketList = JSON.parse(tickets);
     const parsedOrderAddress = typeof orderAddress === "string" ? JSON.parse(orderAddress) : orderAddress;
     const parsedParticipants = typeof participantDetails === "string" ? JSON.parse(participantDetails) : participantDetails;
     const userEmail = parsedOrderAddress.email;
- 
+
     if (!Array.isArray(ticketList?.tickets) || ticketList.tickets.length === 0) {
       return res.status(400).json({ message: 'At least one ticket is required' });
     }
- 
+
     // Generate unique IDs
     const uuidToNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 10), 10);
     const uuidToSixNumeric = (uuid) => parseInt(uuid.replace(/\D/g, '').slice(0, 6), 10);
     let clientExternalId = uuidToNumeric(uuidv4());
     const ticketCode = uuidToSixNumeric(uuidv4());
     const qrImage = await QRCode.toDataURL(`${process.env.ADMIN_ORIGIN}/ticket-purchase-process/${ticketCode}`);
- 
+
     session.startTransaction();
- 
+
     // 4. Create the order
     const newOrder = new EventOrder({
       eventId,
@@ -124,9 +124,9 @@ exports.createOrder = async (req, res) => {
       paymentStatus: "initiated", // default until payment confirmed
       fapshiExternalId: clientExternalId,
     });
- 
+
     const savedOrder = await newOrder.save({ session });
- 
+
     // 5. Send confirmation email (non-critical, don't fail transaction)
     const sendEmailAsync = async () => {
       try {
@@ -137,15 +137,15 @@ exports.createOrder = async (req, res) => {
         console.error('Email sending failed:', emailError);
       }
     };
- 
+
     // 6. Handle payment methods
     let paymentUrl = null;
- 
+
     if (Number(totalAmount) === 0) {
- 
+
       // ---------- UPDATE TICKET STOCKS ----------
       const orderTickets = ticketList.tickets;
- 
+
       // Update TicketConfiguration
       const ticketConfig = await TicketConfiguration.findOne({ eventId });
       if (ticketConfig) {
@@ -157,7 +157,7 @@ exports.createOrder = async (req, res) => {
         });
         await ticketConfig.save({ session });
       }
- 
+
       // Update TicketType sold
       for (const t of orderTickets) {
         await TicketType.findByIdAndUpdate(
@@ -166,7 +166,7 @@ exports.createOrder = async (req, res) => {
           { session }
         );
       }
- 
+
       // Update Event soldTicket
       const totalSoldQty = orderTickets.reduce((a, b) => a + Number(b.quantity), 0);
       await Event.findByIdAndUpdate(
@@ -174,7 +174,7 @@ exports.createOrder = async (req, res) => {
         { $inc: { soldTicket: totalSoldQty } },
         { session }
       );
- 
+
       // Update order flags + paymentDate
       await EventOrder.findByIdAndUpdate(
         savedOrder._id,
@@ -186,10 +186,10 @@ exports.createOrder = async (req, res) => {
         },
         { session }
       );
- 
+
       await session.commitTransaction();
       sendEmailAsync();
- 
+
       return res.status(201).json({
         success: true,
         savedOrder: {
@@ -200,10 +200,10 @@ exports.createOrder = async (req, res) => {
       });
     }
     if (paymentMethod === "cash") {
- 
+
       // ---------- UPDATE TICKET STOCKS ----------
       const orderTickets = ticketList.tickets;
- 
+
       // Update TicketConfiguration
       const ticketConfig = await TicketConfiguration.findOne({ eventId });
       if (ticketConfig) {
@@ -215,7 +215,7 @@ exports.createOrder = async (req, res) => {
         });
         await ticketConfig.save({ session });
       }
- 
+
       // Update TicketType sold
       for (const t of orderTickets) {
         await TicketType.findByIdAndUpdate(
@@ -224,7 +224,7 @@ exports.createOrder = async (req, res) => {
           { session }
         );
       }
- 
+
       // Update Event soldTicket
       const totalSoldQty = orderTickets.reduce((a, b) => a + Number(b.quantity), 0);
       await Event.findByIdAndUpdate(
@@ -232,7 +232,7 @@ exports.createOrder = async (req, res) => {
         { $inc: { soldTicket: totalSoldQty } },
         { session }
       );
- 
+
       // Update order flags + paymentDate
       await EventOrder.findByIdAndUpdate(
         savedOrder._id,
@@ -244,10 +244,10 @@ exports.createOrder = async (req, res) => {
         },
         { session }
       );
- 
+
       await session.commitTransaction();
       sendEmailAsync();
- 
+
       return res.status(201).json({
         success: true,
         savedOrder: {
@@ -257,23 +257,24 @@ exports.createOrder = async (req, res) => {
         message: "Cash order created successfully",
       });
     }
- 
- 
+
+
     else {
       // Online payment - prepare Fapshi payload but don't call API within transaction
       const fapshiPayload = {
         amount: Number(totalAmount),
         email: userEmail,
-        redirectUrl: `${process.env.FRONTEND_URL}/ticket-purchase-process?orderId=${savedOrder._id}&status=success`,
+        redirectUrl: `${process.env.ADMIN_ORIGIN}/payment-success`,
+        // redirectUrl: `${process.env.FRONTEND_URL}/ticket-purchase-process?orderId=${savedOrder._id}&status=success`,
         userId: req.user._id.toString(),
         externalId: clientExternalId,
         paymentType: "event",
         message: `Ticket purchase for event ${eventId}`,
       };
- 
+
       // Commit transaction first before external API call
       await session.commitTransaction();
- 
+
       // Then call Fapshi API
       try {
         const fapshiResponse = await axios.post(
@@ -288,7 +289,7 @@ exports.createOrder = async (req, res) => {
             timeout: 10000, // 10 second timeout
           }
         );
- 
+
         const fapshiTransId = fapshiResponse.data?.transId;
         const fapshiExternalId = fapshiResponse.data?.externalId;
         paymentUrl = fapshiResponse.data?.link;
@@ -301,39 +302,39 @@ exports.createOrder = async (req, res) => {
           { new: true }
         );
         sendEmailAsync();
- 
+
         return res.status(201).json({
           success: true,
           savedOrder,
           paymentUrl,
           message: "Order created successfully. Redirect to payment.",
         });
- 
+
       } catch (fapshiError) {
         console.error("Fapshi API error:", fapshiError.message);
- 
+
         // Update order status to failed for online payment
         await EventOrder.findByIdAndUpdate(savedOrder._id, {
           paymentStatus: "failed",
           errorMessage: fapshiError.response?.data?.message || "Payment gateway error"
         });
- 
+
         const fapshiMsg =
           fapshiError.response?.data?.message ||
           fapshiError.response?.data?.error?.message ||
           fapshiError.message ||
           "Payment gateway error";
- 
+
         return res.status(400).json({
           success: false,
           message: fapshiMsg,
           error: fapshiError.response?.data
         })
       }
- 
+
       // Send email for online payment after successful API call
       sendEmailAsync();
- 
+
       return res.status(201).json({
         success: true,
         savedOrder,
@@ -341,16 +342,16 @@ exports.createOrder = async (req, res) => {
         message: "Order created successfully. Redirect to payment.",
       });
     }
- 
+
   } catch (error) {
     // Transaction error handling
     if (session.inTransaction()) {
       await session.abortTransaction();
     }
- 
+
     console.error("Error in createOrder:", error);
     console.error("❌ Stack:", error.stack);
- 
+
     return res.status(500).json({
       success: false,
       message: "Error creating order",
@@ -364,7 +365,7 @@ exports.createOrder = async (req, res) => {
         error: error.message,
       });
     }
- 
+
     if (error.message.includes('not enough tickets')) {
       return res.status(400).json({
         success: false,
@@ -372,7 +373,7 @@ exports.createOrder = async (req, res) => {
         error: error.message,
       });
     }
- 
+
     res.status(500).json({
       success: false,
       message: "Error creating order",
@@ -1277,7 +1278,7 @@ exports.getPurchseTicketUserList = async (req, res) => {
     // Then find all orders for these events, populating user details
     const orders = await EventOrder.find({
       eventId: { $in: eventIds },
-      paymentStatus:"confirmed"
+      paymentStatus: "confirmed"
     })
       .populate({
         path: 'userId',
