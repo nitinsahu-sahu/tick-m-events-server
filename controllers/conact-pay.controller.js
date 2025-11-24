@@ -169,8 +169,7 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
 exports.webhookContactPay = async (req, res) => {
     try {
         const { transId, status } = req.body;
-        // Update payment status
-        const updatedPayment = await Payment.findOneAndUpdate(
+        await Payment.findOneAndUpdate(
             { transactionId: transId },
             {
                 status: status.toLowerCase(),
