@@ -7,13 +7,14 @@ const EventOrder = require('../../../models/event-order/EventOrder');
 const RewardTransaction = require("../../../models/RewardTrans");
 const User = require("../../../models/User");
 const Event = require('../../../models/event-details/Event');
-const TicketType = require("../../../models/TicketType");
-const TicketConfiguration = require('../../../models/event-details/Ticket');
 
 exports.initiatePaymentController = async (req, res) => {
   try {
     // Validate request body
-    const { amount, email, userId, bidAmount, currency = 'XAF', redirectUrl, placeABidId, eventReqId, bidId, eventId } = req.body;
+    const {
+      amount, email, userId, bidAmount, currency = 'XAF',
+      redirectUrl, placeABidId, eventReqId, bidId, eventId
+    } = req.body;
 
     if (!amount || !email || !userId) {
       return res.status(400).json({
@@ -35,7 +36,8 @@ exports.initiatePaymentController = async (req, res) => {
       email: email,
       userId: userId,
       currency: currency,
-      redirectUrl: process.env.FAPSHI_REDIRECT_URL || redirectUrl
+      // redirectUrl: process.env.FAPSHI_REDIRECT_URL || redirectUrl
+      redirectUrl: `${process.env.ADMIN_ORIGIN}/payment-success`
     };
 
     // Make request to Fapshi API
@@ -126,222 +128,6 @@ async function storePaymentRecord(paymentData) {
     // Don't throw error here to not break the payment flow
     return false;
   }
-}
-
-
-// Payment confirmation webhook handler
-exports.oldpaymentWebhookController = async (req, res) => {
-  try {
-    const { transId, status, winningBid } = req.body;
-
-    if (!transId || !status) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing transId or status',
-      });
-    }
-    if (status.toLowerCase() !== 'successful') {
-      return res.status(200).json({
-        success: true,
-        message: `Payment status is '${status}', no further action taken.`,
-      });
-    }
-    let paymentMedium = null;
-    try {
-      const fapshiStatusRes = await axios.get(
-        `${process.env.FAPSHI_BASE_URL}/payment-status/${transId}`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            apikey: process.env.FAPSHI_API_KEY,
-            apiuser: process.env.FAPSHI_API_USER,
-          },
-          timeout: 10000,
-        }
-      );
-
-      const responseData = fapshiStatusRes.data;
-
-      // Handle if array or single object
-      if (Array.isArray(responseData) && responseData.length > 0) {
-        paymentMedium = responseData[0].medium || null;
-      } else if (responseData && typeof responseData === "object") {
-        paymentMedium = responseData.medium || null;
-      }
-    } catch (fetchErr) {
-      console.error('⚠️ Error fetching payment status from Fapshi:', fetchErr.message);
-    }
-
-    // ✅ Update payment record in adminPaymentHistory
-    const updatedPayment = await adminPaymentHistory.findOneAndUpdate(
-      { transId: transId },
-      {
-        status: status.toLowerCase(),
-        updatedAt: new Date(),
-        paymentMethod: paymentMedium,
-      },
-      { new: true }
-    );
-    if (!updatedPayment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Payment record not found',
-      });
-    }
-
-    const eventReqId = updatedPayment.eventReqId;
-    const bidId = updatedPayment.bidId;
-    const bidAmount = updatedPayment?.bidAmount || winningBid || 0;
-
-    // ✅ CASE 1: Payment successful & eventReqId exists → Update EventRequest
-    if (status.toLowerCase() === 'successful' && eventReqId) {
-      try {
-        const eventRequest = await EventRequest.findById(eventReqId);
-
-        if (!eventRequest) {
-          return res.status(404).json({
-            success: false,
-            message: `⚠️ No EventRequest found for ID: ${eventReqId}`,
-          });
-        }
-
-        eventRequest.providerStatus = 'accepted';
-        eventRequest.orgStatus = 'accepted';
-        eventRequest.projectStatus = 'ongoing';
-        eventRequest.isSigned = true;
-        eventRequest.winningBid = bidAmount;
-        eventRequest.updatedAt = new Date();
-
-        await eventRequest.save();
-
-        return res.status(200).json({
-          success: true,
-          message: '✅ EventRequest updated successfully after payment success',
-          data: eventRequest,
-        });
-      } catch (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Error while updating EventRequest',
-          error: err.message,
-        });
-      }
-    }
-
-    // ✅ CASE 2: Payment successful & bidId exists → Update Bid
-    else if (status.toLowerCase() === 'successful' && bidId) {
-      try {
-        const bid = await Bid.findById(bidId);
-
-        if (!bid) {
-          return res.status(404).json({
-            success: false,
-            message: `⚠️ Bid not found for bidId: ${bidId}`,
-          });
-        }
-
-        bid.isOrgnizerAccepted = true;
-        bid.isProviderAccepted = true;
-        bid.status = 'accepted';
-        bid.adminFeePaid = true;
-        bid.adminFeeAmount = updatedPayment.feeAmount || 0;
-        bid.winningBid = winningBid;
-        bid.organizrAmount = bid.bidAmount;
-        await bid.save();
-
-        if (bid.projectId) {
-          const project = await Project.findById(bid.projectId);
-          if (project) {
-            project.status = 'ongoing';
-            project.bidStatus = 'closed';
-            project.isSigned = true;
-            await project.save();
-          }
-        }
-
-        return res.status(200).json({
-          success: true,
-          message: '✅ Bid updated successfully after admin fee payment success',
-          data: bid,
-        });
-      } catch (err) {
-        return res.status(500).json({
-          success: false,
-          message: 'Error while updating Bid',
-          error: err.message,
-        });
-      }
-    }
-
-    // ❌ CASE 3: Neither eventReqId nor bidId
-    else {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment not successful or missing related IDs (eventReqId/bidId)',
-      });
-    }
-  } catch (error) {
-    console.error('❌ Webhook processing error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Webhook processing failed',
-      error: error.message,
-    });
-  }
-};
-
-// Enhanced successful payment handler
-async function handleSuccessfulPayment(paymentData, context) {
-  try {
-
-    const { bidId, projectId, type } = context;
-
-    if (type === 'admin_fee') {
-      // Update bid status to accepted
-      await Bid.findByIdAndUpdate(bidId, {
-        isOrgnizerAccepted: true,
-        status: 'accepted',
-        acceptedAt: new Date()
-      });
-
-      // Update project status
-      await Project.findByIdAndUpdate(projectId, {
-        status: 'assigned',
-        assignedTo: paymentData.organizerId,
-        assignedAt: new Date()
-      });
-
-      // Send notifications (implement your notification logic)
-      await sendPaymentSuccessNotifications(paymentData, bidId, projectId);
-
-      console.log(`Project ${projectId} assigned to bid ${bidId} after successful admin fee payment`);
-    }
-
-    // Add other payment type handlers as needed
-
-  } catch (error) {
-    console.error('Error in handleSuccessfulPayment:', error);
-    throw error;
-  }
-}
-
-// Notification helper function
-async function sendPaymentSuccessNotifications(paymentData, bidId, projectId) {
-  // Implement your notification logic here
-  // Email notifications, in-app notifications, etc.
-  console.log('Sending payment success notifications');
-}
-
-// Notification helper function
-async function sendPaymentSuccessNotifications(paymentData, bidId, projectId) {
-  // Implement your notification logic here
-  // Email notifications, in-app notifications, etc.
-  console.log('Sending payment success notifications');
-}
-
-async function handleFailedPayment(paymentData) {
-  // Implement failed payment logic
-  console.log('Payment failed:', paymentData);
 }
 
 exports.paymentWebhookController = async (req, res) => {
