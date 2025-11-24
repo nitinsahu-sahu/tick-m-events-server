@@ -791,7 +791,6 @@ exports.updateAvatar = async (req, res) => {
 
         // Check image dimensions before uploading
         const imageInfo = await sharp(avatar.tempFilePath).metadata();
-        console.log(imageInfo);
 
         // if (imageInfo.width !== 192 || imageInfo.height !== 192) {
         //     return res.status(400).json({

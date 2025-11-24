@@ -1,7 +1,6 @@
 const User = require('../../models/User');
 const Event = require('../../models/event-details/Event');
 const EventOrder = require('../../models/event-order/EventOrder');
-const TicketType = require('../../models/TicketType');
 const PaymentHistory = require('../../models/admin-payment/payment-history');
 const ServiceRequest = require('../../models/service-reequest/service-request');
 const mongoose = require('mongoose');

@@ -9,10 +9,7 @@ const cloudinary = require('cloudinary').v2;
 const bodyParser = require('body-parser');
 const fileUpload = require('express-fileupload');
 const User = require('./models/User');
-const errorHandler  = require('./utils/errorHandler');
 const initReminderScheduler = require("./schedulers/reminderScheduler")
-const timezoneMiddleware = require('./middleware/timezoneMiddleware');
-// const cron = require("./schedulers/reminderScheduler");
 const port = process.env.PORT || 3000;
 const SOCKET_PORT = process.env.SOCKET_PORT || 8000;
 
@@ -30,7 +27,6 @@ cloudinary.config({
 
 // server init
 const server = express()
-server.use(errorHandler)
 // database connection
 connectToDB()
 // server.use(cron)
@@ -99,8 +95,6 @@ io.on('connection', socket => {
         profile: user.avatar
       }
     };
-    console.log(messageData);
-    
     // Always emit to sender
     if (sender) {
       io.to(sender.socketId).emit('getMessage', messageData);

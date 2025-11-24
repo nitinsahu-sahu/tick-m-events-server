@@ -197,19 +197,13 @@ exports.getAllWithdrawals = async (req, res) => {
 exports.processPayout = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`[DEBUG] processPayout called with id: ${id}`);
-
     // 1. Fetch withdrawal from DB
     const withdrawal = await Withdrawal.findById(id);
-    console.log('[DEBUG] Withdrawal fetched from DB:', withdrawal);
-
     if (!withdrawal) {
-      console.warn('[DEBUG] Withdrawal not found for id:', id);
       return res.status(404).json({ success: false, message: 'Withdrawal not found' });
     }
 
     if (withdrawal.status !== 'pending') {
-      console.warn('[DEBUG] Withdrawal is not pending. Current status:', withdrawal.status);
       return res.status(400).json({ success: false, message: 'Withdrawal is not pending' });
     }
 
@@ -241,17 +235,6 @@ exports.processPayout = async (req, res) => {
     const medium = mapMedium(withdrawal.payment?.paymentMethod);
 
     // 2. Send payout request to Fapshi
-    console.log('[DEBUG] Sending payout request to Fapshi with data:', {
-      amount: withdrawal.amount,
-      phone: mobileNumber,
-      medium,
-      name: userName,
-      email: userEmail,
-      userId: withdrawal.userId,
-      externalId: withdrawal.withdrawalId.replace(/[^a-zA-Z0-9]/g, ''), // removes #
-      message: 'User Withdrawal Payout'
-    });
-
     const response = await axios.post(`${process.env.FAPSHI_BASE_URL}/payout`, {
       amount: withdrawal.amount,
       phone: mobileNumber,
@@ -269,14 +252,12 @@ exports.processPayout = async (req, res) => {
       }
     });
 
-    console.log('[DEBUG] Fapshi API Response:', response.data);
     const { transId, dateInitiated } = response.data;
     // 3. If successful, update withdrawal status
     withdrawal.status = 'approved';
     withdrawal.transId = transId;
     withdrawal.dateInitiated = new Date(dateInitiated);
     await withdrawal.save();
-    console.log('[DEBUG] Withdrawal updated to approved in DB.');
 
     res.status(200).json({
       success: true,
@@ -285,23 +266,14 @@ exports.processPayout = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Fapshi Payout Error:', error.message);
-
     let fapshiErrorMessage = 'Payout failed';
 
     if (error.response) {
-      console.error('[DEBUG] Fapshi Error Response:', {
-        status: error.response.status,
-        data: error.response.data,
-        headers: error.response.headers
-      });
-
       // Try to extract the Fapshi message
       fapshiErrorMessage = error.response.data?.message ||
         error.response.data?.data?.message || // Some APIs wrap error in data.message
         'Payout failed';
     } else if (error.request) {
-      console.error('[DEBUG] No response received from Fapshi:', error.request);
       fapshiErrorMessage = 'No response received from payout provider.';
     } else {
       console.error('[DEBUG] Error setting up Fapshi request:', error.message);

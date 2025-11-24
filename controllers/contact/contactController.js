@@ -3,7 +3,6 @@ const { sendMail } = require("../../utils/Emails");
 const { createUserConfirmationTemplate,
 createAdminNotificationTemplate } = require('../../utils/Emails-template');
 
-
 exports.submitContactForm = async (req, res) => {
   try {
     const { name, email, message } = req.body;
@@ -63,7 +62,5 @@ exports.submitContactForm = async (req, res) => {
     });
   }
 };
-
-// Email template functions
 
 

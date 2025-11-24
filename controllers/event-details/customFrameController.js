@@ -1,4 +1,3 @@
-
 const CustomPhotoFrame = require('../../models/event-details/CustomPhotoFrame');
 const cloudinary = require('cloudinary').v2;
 
@@ -82,7 +81,6 @@ exports.saveEventFrame = async (req, res) => {
     });
   }
 };
-
 
 exports.getFramesByEvent = async (req, res) => {
   try {
