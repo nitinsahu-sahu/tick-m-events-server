@@ -75,7 +75,68 @@ exports.initiateContactPay = async (req, res) => {
     }
 };
 
-// Check payment status
+// Check contact payment status
+// exports.checkPaymentStatusContactPay = async (req, res) => {
+//     try {
+//         const { transactionId } = req.params;
+
+//         const response = await axios.get(
+//             `${process.env.FAPSHI_BASE_URL}/payment-status/${transactionId}`,
+//             {
+//                 headers: {
+//                     'Content-Type': 'application/json',
+//                     'apikey': process.env.FAPSHI_API_KEY,
+//                     'apiuser': process.env.FAPSHI_API_USER,
+//                 }
+//             }
+//         );
+
+//         // Update payment status in database
+//         const updatedPayment = await Payment.findOneAndUpdate(
+//             { transactionId: response.data.transId },
+//             {
+//                 status: response.data.status.toLowerCase(),
+//                 paymentMethod: response.data.medium,
+
+//             }
+//         );
+
+//         if (!updatedPayment) {
+//             console.log(`Payment ${response.data.transId} not found in database`);
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Payment not found in database'
+//             });
+//         }
+//             console.log('===',updatedPayment);
+
+//         if (updatedPayment.flag == "er") {
+//             console.log('===EventReq===');
+//             console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
+//         } else if (updatedPayment.flag == "fsp") {
+//             console.log('===Find Service Provider===');
+//             console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
+//         } else {
+//             console.log('===contact=====');
+//             console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
+//         }
+//         res.status(200).json({
+//             success: true,
+//             status: response.data.status.toLowerCase(),
+//             amount:updatedPayment.amount,
+//             currency:updatedPayment.currency,
+//             message: "Check successfully..."
+//         });
+//     } catch (error) {
+//         console.error('Payment status check error:', error.message);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Failed to check payment status'
+//         });
+//     }
+// };
+
+// Check pulkit payment status
 exports.checkPaymentStatusContactPay = async (req, res) => {
     try {
         const { transactionId } = req.params;
@@ -91,40 +152,13 @@ exports.checkPaymentStatusContactPay = async (req, res) => {
             }
         );
 
-        // Update payment status in database
-        const updatedPayment = await Payment.findOneAndUpdate(
-            { transactionId: response.data.transId },
-            {
-                status: response.data.status.toLowerCase(),
-                paymentMethod: response.data.medium,
+        console.log('===>>>', response.data);
 
-            }
-        );
-
-        if (!updatedPayment) {
-            console.log(`Payment ${response.data.transId} not found in database`);
-            return res.status(404).json({
-                success: false,
-                message: 'Payment not found in database'
-            });
-        }
-            console.log('===',updatedPayment);
-
-        if (updatedPayment.flag == "er") {
-            console.log('===EventReq===');
-            console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
-        } else if (updatedPayment.flag == "fsp") {
-            console.log('===Find Service Provider===');
-            console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
-        } else {
-            console.log('===contact=====');
-            console.log(`Payment ${updatedPayment.transactionId} successfully updated to: ${updatedPayment.status}`);
-        }
         res.status(200).json({
             success: true,
             status: response.data.status.toLowerCase(),
-            amount:updatedPayment.amount,
-            currency:updatedPayment.currency,
+            amount: response.data.amount,
+            currency: 'XAF',
             message: "Check successfully..."
         });
     } catch (error) {
