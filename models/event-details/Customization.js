@@ -20,7 +20,8 @@ const customizationSchema = new Schema({
   },
   frame: {
     type: String,
-    enum: ['circle', 'square', 'rounded', 'triangle']
+    enum: ['circle', 'square', 'rounded', 'triangle'],
+    default:"circle"
   }
 }, { timestamps: true });
 
