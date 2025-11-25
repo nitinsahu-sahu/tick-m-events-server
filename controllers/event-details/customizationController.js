@@ -6,10 +6,8 @@ const mongoose = require('mongoose');
 
 // Create Customization
 exports.createEventCustomization = async (req, res, next) => {
-  console.log('Creating event customization...');
-  
   try {
-    const { frame, themeColor, customColor } = req.body;
+    const { frame = "circle", themeColor, customColor } = req.body;
     const { eventId, ticketCustomId } = req.params;
 
     // Validation: Check if required fields are present
@@ -90,9 +88,6 @@ exports.createEventCustomization = async (req, res, next) => {
       });
     }
 
-    console.log('Uploading to Cloudinary...');
-    
-    // Upload to Cloudinary with error handling
     let cloudinaryResult;
     try {
       cloudinaryResult = await cloudinary.uploader.upload(eventLogo.tempFilePath, {
@@ -111,9 +106,6 @@ exports.createEventCustomization = async (req, res, next) => {
       });
     }
 
-    console.log('Updating event step...');
-    
-    // Update event step with error handling
     try {
       await Event.findByIdAndUpdate(
         { _id: eventId },
@@ -125,9 +117,6 @@ exports.createEventCustomization = async (req, res, next) => {
       // Don't return here, we can still try to create the customization
     }
 
-    console.log('Creating customization...');
-    
-    // Create the customization
     const eventCustomization = await Customization.create({
       frame,
       eventId,
@@ -140,8 +129,6 @@ exports.createEventCustomization = async (req, res, next) => {
       }
     });
 
-    console.log('Customization created successfully');
-
     res.status(201).json({
       success: true,
       message: "Event customization created successfully",
@@ -150,8 +137,6 @@ exports.createEventCustomization = async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error('Error in createEventCustomization:', error);
-    
     // Handle specific MongoDB errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
@@ -250,7 +235,7 @@ exports.deleteCustomization = async (req, res, next) => {
     const customization = await Customization.findOne({ eventId: req.params.eventId });
 
     if (!customization) {
-       res.status(404).json({
+      res.status(404).json({
         success: false,
         error: `Customization not found for event ${req.params.eventId}`
       });
