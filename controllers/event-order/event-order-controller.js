@@ -1451,28 +1451,28 @@ exports.transferTicket = async (req, res) => {
   try {
     const { orderId, beneficiaryId } = req.body;
     const loggedInUserId = req.user._id;
-
+ 
     if (!orderId || !beneficiaryId) {
       return res.status(400).json({
         success: false,
         message: "Order ID and Beneficiary ID are required",
       });
     }
-
+ 
     // 0️⃣ Check if a refund already exists for this order
     const existingRefund = await RefundRequest.findOne({
       orderId,
       userId: loggedInUserId,
       refundStatus: { $in: ["pending", "approved"] }, // pending or approved
     });
-
+ 
     if (existingRefund) {
       return res.status(400).json({
         success: false,
         message: "⚠️ You have already requested a refund for this ticket. Please cancel the refund before sharing the ticket.",
       });
     }
-
+ 
     // 1️⃣ Check beneficiary exists
     const beneficiary = await User.findOne({ __id: beneficiaryId, role: "participant" });
     if (!beneficiary) {
@@ -1481,31 +1481,40 @@ exports.transferTicket = async (req, res) => {
         message: "Beneficiary not found or not a participant",
       });
     }
-
+ 
     // 2️⃣ Find sender order
     const senderOrder = await EventOrder.findOne({
       _id: orderId,
       userId: loggedInUserId,
     });
-
+ 
     if (!senderOrder) {
       return res.status(404).json({
         success: false,
         message: "Order not found for this user",
       });
     }
-
+ 
     // 3️⃣ Transfer entire order to beneficiary
     senderOrder.userId = beneficiary._id;
     senderOrder.updatedAt = new Date();
+    // Normalize payment method
+if (senderOrder.paymentMethod === "orange money" || senderOrder.paymentMethod === "orange-money") {
+    senderOrder.paymentMethod = "orange_money";
+}
+ 
+if (senderOrder.paymentMethod === "mobile money" || senderOrder.paymentMethod === "mobile-money" || senderOrder.paymentMethod === "mtn momo") {
+    senderOrder.paymentMethod = "mobile_money";
+}
+ 
     await senderOrder.save();
-
+ 
     return res.status(200).json({
       success: true,
       message: "Tickets transferred successfully",
       updatedOrder: senderOrder,
     });
-
+ 
   } catch (error) {
     console.error(error);
     res.status(500).json({
