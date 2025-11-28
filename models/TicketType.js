@@ -13,7 +13,7 @@ const ticketTypeSchema = new Schema({
     trim: true,
   },
   quantity: {
-    type: String,
+    type: Number,
     required: [true, "Available Quantity is required"],
     min: [1, "Minimum quantity should be 1"]
   },
@@ -26,10 +26,7 @@ const ticketTypeSchema = new Schema({
     trim: true,
     required: [true, "Ticket Description is required"],
   },
-  price: {
-    type: String,
-    required: [true, "Price is required"],
-  },
+  price: { type: Number, default: 0,required: [true, "Price is required"] },
   validity: {
     type: Date,
     // required: [true, "Validity date is required"],

@@ -38,8 +38,8 @@ const TicketTypeSchema = new mongoose.Schema({
     ref: "TicketType",                      
     required: true
   },
-  price: { type: String, default: "0 XAF" },
-  totalTickets: { type: String },
+  price: { type: Number, default: 0 },
+  totalTickets: { type: Number,required: true },
   description: { type: String ,required: true},
   isLimitedSeat: { type: Boolean, default: true },
   isLinkPramotion: { type: Boolean, default: false },
