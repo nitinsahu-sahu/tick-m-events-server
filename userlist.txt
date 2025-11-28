@@ -18,7 +18,7 @@ Participants
 "email":"laura21@gmail.com",
 "password":"Laura@333"
 Provider
-"email": "provider.watson13@gmail.com",
+"email": "nitinsahu911111@gmail.com",
 "password": "Watson@123",
 
 Admin
