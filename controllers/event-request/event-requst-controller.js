@@ -317,7 +317,7 @@ exports.sendProposal = async (req, res) => {
 
         await eventRequest.save();
 
-        res.status(200).json({ message: "Proposal sent successfully", eventRequest });
+        res.status(200).json({ message: "Proposal sent successfully...", eventRequest });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Server error" });
