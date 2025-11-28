@@ -18,6 +18,7 @@ exports.createTicketConfiguration = async (req, res) => {
     partialRefundPercent,
     noRefundDate
   } = req.body;
+console.log(tickets);
 
   try {
     const { eventId } = req.params;
@@ -44,26 +45,25 @@ exports.createTicketConfiguration = async (req, res) => {
     };
 
     const ticketQuantity = formattedTickets.reduce((sum, ticket) => {
-      const ticketCount = parseInt(ticket.totalTickets.replace(/,/g, ''), 10);
-      return sum + (isNaN(ticketCount) ? 0 : ticketCount);
+      return sum + (Number(ticket.totalTickets) || 0);
     }, 0);
 
     await Event.findByIdAndUpdate(
       { _id: eventId },
-      { ticketQuantity, payStatus,step:2 },
+      { ticketQuantity, payStatus, step: 2 },
       { new: true }
     );
 
     const newConfig = new TicketConfiguration({
       eventId,
-      tickets: formattedTickets, // 👈 now valid for TicketTypeSchema
+      tickets: formattedTickets,
       purchaseDeadlineDate,
       isPurchaseDeadlineEnabled,
       paymentMethods,
       refundPolicy,
       isRefundPolicyEnabled,
       payStatus,
-      createdBy: req.user._id, // ensure auth middleware is used
+      createdBy: req.user._id,
     });
 
     await newConfig.save();
