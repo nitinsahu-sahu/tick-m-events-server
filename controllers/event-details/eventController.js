@@ -557,6 +557,7 @@ exports.getAllCategories = async (req, res) => {
 
     // Create an array to hold categories with their events
     const categoriesWithEvents = [];
+    const currentDateTime = new Date();
 
     // For each category, find matching events
     for (const category of categories) {
@@ -568,7 +569,20 @@ exports.getAllCategories = async (req, res) => {
         status: 'approved',
         eventType: 'Public',
         step: 4,
-        isDelete: false // assuming you don't want deleted events
+        isDelete: false,
+        $or: [
+          {
+            date: { $gt: currentDateTime.toISOString().split('T')[0] }
+          },
+          {
+            date: currentDateTime.toISOString().split('T')[0],
+            time: {
+              $gt: currentDateTime.toLocaleTimeString('en-US',
+                { hour12: false }
+              )
+            }
+          }
+        ]
       });
 
       // Add category with its events to the result array

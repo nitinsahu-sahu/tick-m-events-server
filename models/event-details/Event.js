@@ -59,7 +59,7 @@ const eventSchema = new Schema({
     url: { type: String }
   },
   location: { type: String, required: true },
-  ticketQuantity: { type: String },
+  ticketQuantity: { type: Number },
   soldTicket: { type: Number },
   format: {
     type: String,
