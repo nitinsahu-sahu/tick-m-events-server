@@ -19,7 +19,7 @@ Participants
 "password":"Laura@333"
 Provider
 "email": "nitinsahu911111@gmail.com",
-"password": "Watson@123",
+"password": "Watson@1234",
 
 Admin
 "email": "admin.jofra1@gmail.com",
