@@ -4,10 +4,9 @@ const cloudinary = require('cloudinary').v2;
 const crypto = require('crypto');
 const { createEmailVerificationTemplate } = require('../../utils/Emails-template');
 const { sendMail } = require('../../utils/Emails');
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const client = require('twilio')(accountSid, authToken);
+const client = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const mongoose = require("mongoose")
+const axios = require("axios");
 
 exports.sendEmailOtp = async (req, res) => {
     try {
@@ -120,44 +119,61 @@ exports.getVerificationStatus = async (req, res) => {
     }
 };
 
+
 exports.sendWhatsAppOTP = async (req, res) => {
     try {
         const { phoneNumber } = req.body;
         const userId = req.user._id;
-        // Validate phone number
-        if (!phoneNumber.match(/^\+\d{10,15}$/)) {
+        // Validate input
+        if (!phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                message: 'Phone number is required'
+            });
+        }
+
+        // Basic phone number validation
+        const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+        if (!phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid phone number format. Use +1234567890'
             });
         }
 
+
         // Generate OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpires = Date.now() + 10 * 60 * 1000;
 
-        // Save OTP to DB
-        await Verification.findOneAndUpdate(
-            { userId },
-            { whatsappOtp: otp, whatsappOtpExpires: otpExpires, whatsappNumber: phoneNumber },
-            { upsert: true, new: true }
-        );
-
-        const otpWhatsapp = await client.messages
+        client.messages
             .create({
-                from: `whatsapp:+14155238886`,
+                from: 'whatsapp:+14155238886',
                 contentSid: process.env.TWILIO_CONTENT_SID,
                 contentVariables: JSON.stringify({ "1": otp }),
                 to: `whatsapp:${phoneNumber}`
-            })
+            }).then(message => {
+                Verification.findOneAndUpdate(
+                    { userId },
+                    { whatsappOtp: otp, whatsappOtpExpires: otpExpires, whatsappNumber: phoneNumber },
+                    { upsert: true, new: true }
+                );
+                res.status(200).json({
+                    success: true,
+                    message: 'OTP sent to WhatsApp'
+                });
 
-        res.status(200).json({
-            success: true,
-            message: 'OTP sent to WhatsApp'
-        });
+            })
+            .catch(error => {
+                res.status(400).json({
+                    success: false,
+                    message: 'Failed to send OTP.',
+                    error: error
+                });
+            });
 
     } catch (error) {
-        console.error('Twilio Error:', error.message);
+        console.error('Twilio Error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to send OTP. Ensure your Twilio WhatsApp number is configured correctly.',

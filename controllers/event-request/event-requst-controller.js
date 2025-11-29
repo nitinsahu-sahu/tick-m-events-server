@@ -99,8 +99,8 @@ exports.getRequestsByProvider = async (req, res) => {
             projectStatus: { $ne: 'completed' }
         })
             .populate('eventId', 'eventName date location time description experience averageRating website certified')
-            .populate('organizerId', 'name email avatar')
-            .populate('providerId', 'name email avatar')
+            .populate('organizerId', 'name email avatar username')
+            .populate('providerId', 'name email avatar username')
             .populate('serviceRequestId', 'serviceType budget description additionalOptions')
 
         const activeBidProjects = await Bid.find({
@@ -113,7 +113,7 @@ exports.getRequestsByProvider = async (req, res) => {
                 { path: 'eventId' },
                 { path: 'categoryId' },
                 { path: 'subcategoryId' },
-                { path: 'createdBy', select: 'name email avatar' },  
+                { path: 'createdBy', select: 'name email avatar username' },  
  
             ]
         });
@@ -146,8 +146,8 @@ exports.getRequestsByProvider = async (req, res) => {
             ]
         })
             .populate('eventId', 'eventName date location time description experience averageRating website certified')
-            .populate('organizerId', 'name email avatar')
-            .populate('providerId', 'name email avatar')
+            .populate('organizerId', 'name email avatar username')
+            .populate('providerId', 'name email avatar username')
             .populate('serviceRequestId', 'serviceType budget description additionalOptions')
             .lean()
 
