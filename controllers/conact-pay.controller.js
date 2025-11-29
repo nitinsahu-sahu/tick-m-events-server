@@ -204,3 +204,97 @@ exports.getUserContactPay = async (req, res) => {
     }
 };
 
+// exports.whatsappSendMessage = async (req, res) => {
+//     try {
+//         // Replace with your actual token and phone number ID
+//         const token = "EAAQkUMZCDbhEBQMz6cOmSEfiSWGM1TUiDrJOIaouZBIg5ktla9OlwLHYufPqXNZCAcnzHoQtLShzBMHAwzcV2Km9iuJWyirHfXSgfkuGM7vG6wbGFScIIZCDB9KTgZACqtTHlL4TTcdozslscNZBZBgybYq3ORFTuY1LVZC2NrDzGYO1e2DECjaiEeKU5aTBIebp5LuMLBWoLPOdjdZBMSJXIvtsLFb7LPZBtSU9QirlxZBtZCyxAVncSWwIbJrePVsZAjfxEJWZCryY2xBo8oc9VThdSzVDGB";
+//         const phoneNumberId = "942747208911780";
+        
+//         const requestData = {
+//             messaging_product: "whatsapp",
+//             to: "+919111118326", // receiver's phone number
+//             type: "text",
+//             text: { 
+//                 body: "This is a text message." 
+//             },
+//         };
+
+//         const whatsAppRes = await axios.post(
+//             `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
+//             requestData,
+//             {
+//                 headers: { 
+//                     Authorization: `Bearer ${token}`,
+//                     'Content-Type': 'application/json'
+//                 }
+//             }
+//         );
+
+//         console.log('WhatsApp API Response:', whatsAppRes.data);
+
+//         res.json({
+//             success: true,
+//             data: whatsAppRes.data,
+//             message: "Message sent successfully"
+//         });
+
+//     } catch (error) {
+//         console.log('WhatsApp Send Message Error:', error.response?.data || error.message);
+        
+//         // Detailed error handling
+//         if (error.response) {
+//             // The request was made and the server responded with a status code
+//             // that falls out of the range of 2xx
+//             const status = error.response.status;
+//             const errorData = error.response.data;
+            
+//             let errorMessage = 'Failed to send WhatsApp message';
+            
+//             switch (status) {
+//                 case 400:
+//                     errorMessage = 'Bad Request - Check your request parameters';
+//                     break;
+//                 case 401:
+//                     errorMessage = 'Unauthorized - Invalid or expired access token';
+//                     break;
+//                 case 403:
+//                     errorMessage = 'Forbidden - Permission denied';
+//                     break;
+//                 case 404:
+//                     errorMessage = 'Not Found - Invalid phone number ID';
+//                     break;
+//                 case 429:
+//                     errorMessage = 'Rate Limit Exceeded - Too many requests';
+//                     break;
+//                 case 500:
+//                     errorMessage = 'Internal Server Error - Facebook API issue';
+//                     break;
+//                 default:
+//                     errorMessage = `HTTP Error: ${status}`;
+//             }
+            
+//             res.status(status).json({
+//                 success: false,
+//                 message: errorMessage,
+//                 error: errorData,
+//                 statusCode: status
+//             });
+//         } else if (error.request) {
+//             // The request was made but no response was received
+//             res.status(503).json({
+//                 success: false,
+//                 message: 'No response received from WhatsApp API',
+//                 error: error.message
+//             });
+//         } else {
+//             // Something happened in setting up the request that triggered an Error
+//             res.status(500).json({
+//                 success: false,
+//                 message: 'Request setup error',
+//                 error: error.message
+//             });
+//         }
+//     }
+// };
+
+
