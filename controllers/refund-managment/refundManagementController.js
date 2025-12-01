@@ -5,8 +5,9 @@ const Event = require('../../models/event-details/Event');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const path = require("path");
 const fs = require("fs");
-const fontkit = require('@pdf-lib/fontkit'); // Required for proper font handling
-
+const fontkit = require('@pdf-lib/fontkit');
+const TicketConfiguration = require('../../models/event-details/Ticket');
+const TicketType = require("../../models/TicketType");
 const { sendRefundEmail } = require("../../utils/Emails-template");
 
 
@@ -1090,6 +1091,58 @@ exports.updateRefundRequest = async (req, res) => {
     if (refundTransactionId) refundRequest.refundTransactionId = refundTransactionId;
     refundRequest.updatedAt = new Date();
     await refundRequest.save();
+
+    // -----------------------------------------
+    // Refund Adjustments (Event, TicketConfig, TicketType)
+    // -----------------------------------------
+
+    if (refundStatus === "refunded") {
+      const order = refundRequest.orderId;
+      if (order) {
+
+        // -----------------------------------
+        // Step A: Update Event soldTicket
+        // -----------------------------------
+        const event = await Event.findById(order.eventId);
+        if (event) {
+          const refundedTickets = order.tickets?.reduce(
+            (sum, t) => sum + (t.quantity || 0),
+            0
+          ) || order.totalTickets || 0;
+
+          event.soldTicket = Math.max(0, (event.soldTicket || 0) - refundedTickets);
+          await event.save();
+        }
+
+        // -----------------------------------
+        // Step B: Update TicketConfiguration
+        // -----------------------------------
+        const ticketConfig = await TicketConfiguration.findOne({ eventId: order.eventId });
+        if (ticketConfig) {
+          for (const purchasedTicket of order.tickets) {
+            const ticketIndex = ticketConfig.tickets.findIndex(
+              t => String(t.id) === String(purchasedTicket.ticketId)
+            );
+            if (ticketIndex !== -1) {
+              ticketConfig.tickets[ticketIndex].totalTickets += purchasedTicket.quantity;
+            }
+          }
+          await ticketConfig.save();
+        }
+
+        // -----------------------------------
+        // Step C: Update TicketType
+        // -----------------------------------
+        for (const purchasedTicket of order.tickets) {
+          const ticketType = await TicketType.findById(purchasedTicket.ticketId);
+          if (ticketType) {
+            ticketType.quantity += purchasedTicket.quantity;
+            ticketType.sold = Math.max(0, ticketType.sold - purchasedTicket.quantity);
+            await ticketType.save();
+          }
+        }
+      }
+    }
 
     let attachmentPath = null;
     if (refundStatus === "refunded") {
