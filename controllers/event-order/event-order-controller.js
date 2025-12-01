@@ -260,8 +260,8 @@ exports.createOrder = async (req, res) => {
       const fapshiPayload = {
         amount: Number(totalAmount),
         email: userEmail,
-        // redirectUrl: `${process.env.ADMIN_ORIGIN}/payment-success`,
-        redirectUrl: `${process.env.FRONTEND_URL}/ticket-purchase-process?orderId=${savedOrder._id}&status=success`,
+        redirectUrl: `${process.env.ADMIN_ORIGIN}/payment-success`,
+        // redirectUrl: `${process.env.FRONTEND_URL}/ticket-purchase-process?orderId=${savedOrder._id}&status=success`,
         userId: req.user._id.toString(),
         externalId: clientExternalId,
         paymentType: "event",

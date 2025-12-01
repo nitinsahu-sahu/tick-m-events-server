@@ -1080,95 +1080,181 @@ const generateRefundInvoice = async (refundRequest, user, order, refundTransacti
 
 exports.updateRefundRequest = async (req, res) => {
   try {
+
+    console.log("🟢 updateRefundRequest called with:", { id: req.params.id, refundStatus: req.body.refundStatus });
+
     const { id } = req.params;
     const { refundStatus, adminNotes, refundTransactionId } = req.body;
- 
-    const refundRequest = await RefundRequest.findById(id).populate("userId").populate("orderId");
-    if (!refundRequest) return res.status(404).json({ message: "Refund request not found" });
- 
+
+    const refundRequest = await RefundRequest.findById(id)
+      .populate("userId")
+      .populate("orderId");
+
+    if (!refundRequest) {
+      console.log("❌ Refund request not found with ID:", id);
+      return res.status(404).json({ message: "Refund request not found" });
+    }
+
+    console.log("📋 Current refund request:", {
+      refundStatus: refundRequest.refundStatus,
+      orderId: refundRequest.orderId?._id,
+      orderPaymentStatus: refundRequest.orderId?.paymentStatus
+    });
+
     if (refundStatus) refundRequest.refundStatus = refundStatus;
     if (adminNotes !== undefined) refundRequest.adminNotes = adminNotes;
     if (refundTransactionId) refundRequest.refundTransactionId = refundTransactionId;
     refundRequest.updatedAt = new Date();
+
+    console.log("💾 Saving refund request with new status:", refundStatus);
     await refundRequest.save();
- 
+    console.log("✅ Refund request saved successfully");
+
     // -----------------------------------------
     // Refund Adjustments (Event, TicketConfig, TicketType)
     // -----------------------------------------
- 
+
     if (refundStatus === "refunded") {
       const order = refundRequest.orderId;
-      if (order) {
- 
+      console.log("🔍 DEBUG - Order object from refundRequest:");
+      console.log("Order:", order);
+      console.log("Order type:", typeof order);
+      console.log("Order _id:", order?._id);
+      console.log("Order ID (string):", order?._id?.toString());
+      console.log("Order paymentStatus:", order?.paymentStatus);
+      console.log("Order refundStatus:", order?.refundStatus);
+
+      if (order && order._id) {
+        console.log("🔄 Processing refund adjustments for order:", order._id);
+
+        // -----------------------------------
+        // NEW: Update EventOrder paymentStatus to "refunded"
+        // -----------------------------------
+        try {
+          console.log(`🔄 Attempting to update EventOrder ${order._id}`);
+          console.log(`   Current paymentStatus: ${order.paymentStatus}`);
+          console.log(`   Current refundStatus: ${order.refundStatus}`);
+
+          // Check if EventOrder model is available
+          if (!EventOrder) {
+            console.log("❌ EventOrder model is not imported!");
+          }
+
+          const updatedOrder = await EventOrder.findByIdAndUpdate(
+            order._id,
+            {
+              paymentStatus: "refunded",
+              updatedAt: new Date()
+            },
+            { new: true, runValidators: true }
+          );
+
+          if (updatedOrder) {
+            console.log(`✅ EventOrder ${order._id} updated successfully`);
+            console.log(`   New paymentStatus: ${updatedOrder.paymentStatus}`);
+            console.log(`   New refundStatus: ${updatedOrder.refundStatus}`);
+
+            // Verify the update by fetching the order again
+            const verifyOrder = await EventOrder.findById(order._id);
+            console.log(`🔍 Verification fetch - paymentStatus: ${verifyOrder?.paymentStatus}`);
+          } else {
+            console.log(`❌ EventOrder ${order._id} not found or not updated`);
+          }
+        } catch (orderUpdateError) {
+          console.error("❌ Error updating EventOrder:", orderUpdateError.message);
+          console.error("Stack trace:", orderUpdateError.stack);
+        }
+
         // -----------------------------------
         // Step A: Update Event soldTicket
         // -----------------------------------
-        const event = await Event.findById(order.eventId);
-        if (event) {
-          const refundedTickets = order.tickets?.reduce(
-            (sum, t) => sum + (t.quantity || 0),
-            0
-          ) || order.totalTickets || 0;
- 
-          event.soldTicket = Math.max(0, (event.soldTicket || 0) - refundedTickets);
-          await event.save();
+        try {
+          const event = await Event.findById(order.eventId);
+          if (event) {
+            const refundedTickets = order.tickets?.reduce(
+              (sum, t) => sum + (t.quantity || 0),
+              0
+            ) || order.totalTickets || 0;
+
+            event.soldTicket = Math.max(0, (event.soldTicket || 0) - refundedTickets);
+            await event.save();
+            console.log(`✅ Event ${event._id} soldTicket updated`);
+          } else {
+            console.log(`⚠️ Event ${order.eventId} not found`);
+          }
+        } catch (eventError) {
+          console.error("❌ Error updating Event:", eventError.message);
         }
- 
+
         // -----------------------------------
         // Step B: Update TicketConfiguration
         // -----------------------------------
-        const ticketConfig = await TicketConfiguration.findOne({ eventId: order.eventId });
-        if (ticketConfig) {
-          for (const purchasedTicket of order.tickets) {
-            const ticketIndex = ticketConfig.tickets.findIndex(
-              t => String(t.id) === String(purchasedTicket.ticketId)
-            );
-            if (ticketIndex !== -1) {
-              ticketConfig.tickets[ticketIndex].totalTickets += purchasedTicket.quantity;
+        try {
+          const ticketConfig = await TicketConfiguration.findOne({ eventId: order.eventId });
+          if (ticketConfig) {
+            for (const purchasedTicket of order.tickets) {
+              const ticketIndex = ticketConfig.tickets.findIndex(
+                t => String(t.id) === String(purchasedTicket.ticketId)
+              );
+              if (ticketIndex !== -1) {
+                ticketConfig.tickets[ticketIndex].totalTickets += purchasedTicket.quantity;
+              }
             }
+            await ticketConfig.save();
+            console.log(`✅ TicketConfiguration updated`);
+          } else {
+            console.log(`⚠️ TicketConfiguration for event ${order.eventId} not found`);
           }
-          await ticketConfig.save();
+        } catch (configError) {
+          console.error("❌ Error updating TicketConfiguration:", configError.message);
         }
- 
+
         // -----------------------------------
         // Step C: Update TicketType
         // -----------------------------------
-        for (const purchasedTicket of order.tickets) {
-          // Use atomic update to reduce race conditions
-          const updated = await TicketType.findByIdAndUpdate(
-            purchasedTicket.ticketId,
-            { $inc: { sold: -purchasedTicket.quantity } },
-            { new: true }
-          );
- 
-          // Safety: ensure sold does not go negative
-          if (updated && updated.sold < 0) {
-            updated.sold = 0;
-            await updated.save();
+        try {
+          for (const purchasedTicket of order.tickets) {
+            const updated = await TicketType.findByIdAndUpdate(
+              purchasedTicket.ticketId,
+              { $inc: { sold: -purchasedTicket.quantity } },
+              { new: true }
+            );
+
+            if (updated && updated.sold < 0) {
+              updated.sold = 0;
+              await updated.save();
+            }
+            console.log(`✅ TicketType ${purchasedTicket.ticketId} updated`);
           }
+        } catch (ticketTypeError) {
+          console.error("❌ Error updating TicketType:", ticketTypeError.message);
         }
- 
-          order.paymentStatus = "refunded";
-        await order.save({ validateModifiedOnly: true });
+
+      } else {
+        console.log("⚠️ No valid order object or order._id found for refund adjustments");
       }
     }
- 
+
     let attachmentPath = null;
     if (refundStatus === "refunded") {
+      console.log("📄 Generating refund invoice...");
       attachmentPath = await generateRefundInvoice(refundRequest, refundRequest.userId, refundRequest.orderId, refundTransactionId);
     }
- 
+
     if (refundStatus === "refunded" || refundStatus === "rejected") {
- 
+      console.log("📧 Sending refund email...");
       await sendRefundEmail(refundRequest.userId, refundRequest, refundStatus, refundTransactionId, attachmentPath);
     }
- 
+
+    console.log("✅ updateRefundRequest completed successfully");
     return res.status(200).json({
       message: "Refund request updated successfully",
       refundRequest,
     });
   } catch (err) {
-    console.error("Error updating refund:", err);
+    console.error("❌ Error in updateRefundRequest:", err);
+    console.error("Error details:", err.message);
+    console.error("Error stack:", err.stack);
     return res.status(500).json({ message: "Internal server error", error: err.message });
   }
 };
