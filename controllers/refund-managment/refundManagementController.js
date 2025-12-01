@@ -1082,24 +1082,24 @@ exports.updateRefundRequest = async (req, res) => {
   try {
     const { id } = req.params;
     const { refundStatus, adminNotes, refundTransactionId } = req.body;
-
+ 
     const refundRequest = await RefundRequest.findById(id).populate("userId").populate("orderId");
     if (!refundRequest) return res.status(404).json({ message: "Refund request not found" });
-
+ 
     if (refundStatus) refundRequest.refundStatus = refundStatus;
     if (adminNotes !== undefined) refundRequest.adminNotes = adminNotes;
     if (refundTransactionId) refundRequest.refundTransactionId = refundTransactionId;
     refundRequest.updatedAt = new Date();
     await refundRequest.save();
-
+ 
     // -----------------------------------------
     // Refund Adjustments (Event, TicketConfig, TicketType)
     // -----------------------------------------
-
+ 
     if (refundStatus === "refunded") {
       const order = refundRequest.orderId;
       if (order) {
-
+ 
         // -----------------------------------
         // Step A: Update Event soldTicket
         // -----------------------------------
@@ -1109,11 +1109,11 @@ exports.updateRefundRequest = async (req, res) => {
             (sum, t) => sum + (t.quantity || 0),
             0
           ) || order.totalTickets || 0;
-
+ 
           event.soldTicket = Math.max(0, (event.soldTicket || 0) - refundedTickets);
           await event.save();
         }
-
+ 
         // -----------------------------------
         // Step B: Update TicketConfiguration
         // -----------------------------------
@@ -1129,31 +1129,40 @@ exports.updateRefundRequest = async (req, res) => {
           }
           await ticketConfig.save();
         }
-
+ 
         // -----------------------------------
         // Step C: Update TicketType
         // -----------------------------------
         for (const purchasedTicket of order.tickets) {
-          const ticketType = await TicketType.findById(purchasedTicket.ticketId);
-          if (ticketType) {
-            ticketType.quantity += purchasedTicket.quantity;
-            ticketType.sold = Math.max(0, ticketType.sold - purchasedTicket.quantity);
-            await ticketType.save();
+          // Use atomic update to reduce race conditions
+          const updated = await TicketType.findByIdAndUpdate(
+            purchasedTicket.ticketId,
+            { $inc: { sold: -purchasedTicket.quantity } },
+            { new: true }
+          );
+ 
+          // Safety: ensure sold does not go negative
+          if (updated && updated.sold < 0) {
+            updated.sold = 0;
+            await updated.save();
           }
         }
+ 
+          order.paymentStatus = "refunded";
+        await order.save({ validateModifiedOnly: true });
       }
     }
-
+ 
     let attachmentPath = null;
     if (refundStatus === "refunded") {
       attachmentPath = await generateRefundInvoice(refundRequest, refundRequest.userId, refundRequest.orderId, refundTransactionId);
     }
-
+ 
     if (refundStatus === "refunded" || refundStatus === "rejected") {
-
+ 
       await sendRefundEmail(refundRequest.userId, refundRequest, refundStatus, refundTransactionId, attachmentPath);
     }
-
+ 
     return res.status(200).json({
       message: "Refund request updated successfully",
       refundRequest,
