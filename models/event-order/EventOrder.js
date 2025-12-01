@@ -51,9 +51,9 @@ const eventOrderSchema = new Schema({
         type: Number,
         required: true
     },
-    paymentStatus: {
+     paymentStatus: {
         type: String,
-        enum: ['pending', 'confirmed', 'denied','initiated'],
+        enum: ['pending', 'confirmed', 'denied','initiated','refunded'],
         default: 'pending'
     },
     paymentMethod: {
