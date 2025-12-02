@@ -347,14 +347,21 @@ exports.getEvents = async (req, res, next) => {
 // Get single event
 exports.getEvent = async (req, res, next) => {
   try {
-    const eventId = req.params.id; // Extract event ID from URL params
+    const identifier = req.params.id;
+    const isObjectId = mongoose.Types.ObjectId.isValid(identifier);
+    // Build query based on identifier type
+    const query = isObjectId
+      ? { _id: identifier }
+      : { urlSlug: identifier };
 
-    // Get the event (if not deleted)
-    const event = await Event.findOne({
-      _id: eventId,
+    Object.assign(query, {
       isDelete: { $ne: true },
       step: 4,
-    }).select('-createdBy -createdAt -updatedAt -isDelete -__v').lean();
+    });
+
+    const event = await Event.findOne(query)
+      .select('-createdBy -createdAt -updatedAt -isDelete -__v')
+      .lean();
 
     if (!event) {
       return res.status(404).json({
@@ -362,7 +369,7 @@ exports.getEvent = async (req, res, next) => {
         message: "Event not found or deleted."
       });
     }
-
+    const eventId = event._id
     // Fetch all related data in parallel
     const [organizer, customization, tickets, visibility, review, rating] = await Promise.all([
       Organizer.findOne({ eventId }).select('-createdAt -updatedAt -isDelete -__v').lean(),

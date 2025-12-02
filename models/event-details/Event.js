@@ -3,7 +3,6 @@ const { Schema } = mongoose;
 const User = require("../User");
 const Order = require("../event-order/EventOrder");
 
-
 const eventSchema = new Schema({
   eventName: {
     type: String,
@@ -28,7 +27,6 @@ const eventSchema = new Schema({
   eventType: {
     type: String,
     required: true,
-    
   },
   validationOptions: {
     selectedView: {
@@ -92,16 +90,75 @@ const eventSchema = new Schema({
     type: Number,
     default: 0,
   },
+  urlSlug: {
+    type: String,
+    unique: true,
+    sparse: true,
+    lowercase: true,
+    trim: true
+  },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+// Generate unique URL slug before saving
+eventSchema.pre('save', async function(next) {
+  try {
+    // Only generate slug if eventName is modified or slug doesn't exist
+    if (this.isModified('eventName') || !this.urlSlug) {
+      const baseSlug = this.generateBaseSlug(this.eventName);
+      this.urlSlug = await this.generateUniqueSlug(baseSlug);
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Generate base slug from event name
+eventSchema.methods.generateBaseSlug = function(eventName) {
+  return eventName
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/--+/g, '-') // Replace multiple hyphens with single
+    .trim();
+};
+
+// Generate unique slug with incremental suffix if needed
+eventSchema.methods.generateUniqueSlug = async function(baseSlug) {
+  let slug = baseSlug;
+  let counter = 1;
+  let isUnique = false;
+
+  while (!isUnique) {
+    // Check if slug exists for non-deleted events (excluding current document if updating)
+    const existingEvent = await this.constructor.findOne({
+      urlSlug: slug,
+      isDelete: { $ne: true },
+      _id: { $ne: this._id } // Exclude current event when updating
+    });
+
+    if (!existingEvent) {
+      isUnique = true;
+    } else {
+      // Add incremental suffix
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+  }
+
+  return slug;
+};
+
+// Keep your existing notification logic (modify slightly to ensure proper hook ordering)
 eventSchema.pre('save', async function (next) {
   try {
+    // Skip if it's a new document (we'll handle notifications only for updates)
     if (this.isNew) return next();
 
     const dateChanged = this.isModified('date');
     const locationChanged = this.isModified('location');
-    const timeChanged = this.isModified('time'); // 👈 Added
+    const timeChanged = this.isModified('time');
 
     let notificationMessage = null;
 
@@ -127,7 +184,7 @@ eventSchema.pre('save', async function (next) {
       for (const order of orders) {
         if (!order.userId) continue;
 
-        // 🚨 Prevent duplicate notifications (same eventId + same message)
+        // Prevent duplicate notifications
         await User.updateOne(
           {
             _id: order.userId._id,
@@ -149,13 +206,13 @@ eventSchema.pre('save', async function (next) {
           }
         );
       }
-
     }
+    next();
   } catch (err) {
     console.error("Error in event pre-save hook:", err);
+    next(err);
   }
-
-  next();
 });
 
+eventSchema.index({ urlSlug: 1 });
 module.exports = mongoose.model('Event', eventSchema);
