@@ -3,7 +3,8 @@ const router = express.Router();
 const { createEvent, getEvents, getEvent, updateEvent, getAllCategories, updateCategory,
   deleteCategory, deleteEvent, addCategory, getCategoryById, updateEventPageCostomization,
   getTodayEvents, getAllServiceCategories, validateViewUpdate, getEventPageCustomization,
-  updateEventStatus
+  updateEventStatus,
+  getUncompletedEvent
 } = require('../controllers/event-details/eventController');
 const { verifyToken, verifyAdmin } = require('../middleware/VerifyToken');
 const { createTicketConfiguration } = require('../controllers/event-details/ticketController');
@@ -29,7 +30,7 @@ router.route('/category/:id').put(updateCategory);
 router.route('/category/:id').delete(deleteCategory);
 
 router.route('/rating').post(submitRating);
-
+router.route('/uncompleted/:id').get(getUncompletedEvent)
 router.route('/:id')
   .get(getEvent)
   .patch(updateEvent)
