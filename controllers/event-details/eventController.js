@@ -637,7 +637,16 @@ function getAllCategoryIds(category) {
 
 exports.getCategoryById = async (req, res) => {
   try {
-    const category = await Category.findById(req.params.id);
+    const identifier = req.params.id;
+    const isObjectId = mongoose.Types.ObjectId.isValid(identifier);
+    // Build query based on identifier type
+    const query = isObjectId
+      ? { _id: identifier }
+      : { urlSlug: identifier };
+
+    Object.assign(query);
+
+    const category = await Category.findOne(query);
 
     if (!category) {
       return res.status(404).json({
