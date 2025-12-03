@@ -406,6 +406,34 @@ exports.getEvent = async (req, res, next) => {
   }
 };
 
+exports.getUncompletedEvent = async (req, res, next) => {
+  try {
+    const event = await Event.findById(req.params.id)
+      .select('-createdBy -createdAt -updatedAt -isDelete -__v')
+      .lean();
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: "Event not found or deleted."
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Uncompleted event fetched successfully.",
+      event
+    });
+
+  } catch (error) {
+    console.error('Error fetching event:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Server Error'
+    });
+  }
+};
+
 // Update event
 exports.updateEvent = async (req, res, next) => {
   try {
